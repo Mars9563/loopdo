@@ -106,4 +106,15 @@ class TodayModelTest {
     fun streakLineCountsActiveDays() {
         assertEquals(1, build().streaks.active) // ticked today
     }
+
+    @Test
+    fun journalTodayFollowsJournalDays() {
+        fun with(days: Set<LocalDate>) = buildToday(
+            now = now, dateAt = istAt, dayEndAt = dayEndInstant(d(14), ist), since = since,
+            habits = habits, schedules = schedules, logs = logs, tasks = tasks, lists = lists,
+            journalDays = days, activeDays = emptySet(),
+        )
+        assertTrue(with(setOf(d(14))).journalToday)
+        assertTrue(!with(setOf(d(13))).journalToday)
+    }
 }

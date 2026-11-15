@@ -38,7 +38,7 @@ class ActionsTest {
     private lateinit var db: PowerSyncDatabase
     private lateinit var actions: Actions
     private val user = UUID.fromString("0b5c4f0e-6d1a-4c55-9d8e-3f0a1b2c3d4e")
-    private val now = Instant.parse("2026-11-14T19:12:00Z") // 00:42 Sun IST = LoopDo sat 14 nov
+    private var now = Instant.parse("2026-11-14T19:12:00Z") // 00:42 Sun IST = LoopDo sat 14 nov
     private val today = LocalDate.of(2026, 11, 14)
     private val ist = DaySettings(ZoneId.of("Asia/Kolkata"), LocalTime.of(4, 0))
 
@@ -65,9 +65,14 @@ class ActionsTest {
     @After
     fun close() = runBlocking { db.close() }
 
-    private suspend fun habit(kind: String, target: Int): UUID {
+    /** A habit due every day since 1 nov (or only on [weekdays], ISO numbers, e.g. "[1]" = mondays). */
+    private suspend fun habit(kind: String, target: Int, weekdays: String? = null): UUID {
         val id = UUID.randomUUID()
         db.execute("INSERT INTO habits (id, title, kind, target, sort_order) VALUES (?, ?, ?, ?, 0)", listOf(id.toString(), "h", kind, target))
+        db.execute(
+            "INSERT INTO habit_schedules (id, habit_id, valid_from, recurrence, weekdays) VALUES (?, ?, '2026-11-01', ?, ?)",
+            listOf(UUID.randomUUID().toString(), id.toString(), if (weekdays == null) "daily" else "weekdays", weekdays),
+        )
         return id
     }
 
@@ -135,5 +140,33 @@ class ActionsTest {
         assertNull("no evidence on reopening an undated task", reopen.opData?.get("evidence"))
         val complete = ops().filter { it.table == "tasks" }[1]
         assertTrue("completing carries evidence", complete.opData!!["evidence"] != null)
+    }
+
+    @Test
+    fun staleShownDateIsRefused() = runBlocking {
+        val h = habit("yes_no", 1)
+        val e = runCatching { actions.tickHabit(h, shownDate = LocalDate.of(2026, 11, 13)) }.exceptionOrNull()
+        assertTrue("expected StaleDayException, got $e", e is StaleDayException)
+        assertEquals(today, (e as StaleDayException).today)
+        assertEquals(0L, db.get("SELECT count(*) FROM habit_logs") { it.getLong(0)!! })
+    }
+
+    @Test
+    fun notDueHabitIsNotTicked() = runBlocking {
+        val mondaysOnly = habit("yes_no", 1, weekdays = "[1]") // today is a saturday
+        assertNull(actions.tickHabit(mondaysOnly, shownDate = today))
+        assertEquals(0L, db.get("SELECT count(*) FROM habit_logs") { it.getLong(0)!! })
+    }
+
+    @Test
+    fun saveJournalWritesTheShownDate() = runBlocking {
+        now = Instant.parse("2026-11-15T04:30:00Z") // 10:00 sun IST: the pop-up was opened on sat 14
+        actions.saveJournal(LocalDate.of(2026, 11, 14), "late night", 4)
+        val id = uuidV5(user, "journal:2026-11-14").toString()
+        val (text, mood) = db.get("SELECT text, mood FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0) to it.getLong(1) }
+        assertEquals("late night", text)
+        assertEquals(4L, mood)
+        val future = runCatching { actions.saveJournal(LocalDate.of(2026, 11, 16), "x", null) }.exceptionOrNull()
+        assertTrue("a day that hasn't started is refused, got $future", future is IllegalArgumentException)
     }
 }

@@ -43,6 +43,8 @@ data class TodayModel(
     val dueToday: List<TaskItem>,
     val inbox: List<TaskItem>,
     val lists: List<ListGroup>,
+    /** Today already has a journal day (text or photo): the widget shows [✓ journal]. */
+    val journalToday: Boolean = false,
 )
 
 /**
@@ -108,5 +110,6 @@ fun buildToday(
         lists = lists.sortedBy { it.sortOrder }.map { l ->
             ListGroup(l.id, l.name, ordered.filter { it.listId == l.id && it.dueDate == null && it.completedOn == null }.map(::item))
         },
+        journalToday = today in journalDays,
     )
 }

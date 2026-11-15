@@ -43,11 +43,19 @@ private fun SqlCursor.date(i: Int) = getString(i)?.let { LocalDate.parse(it.take
 private fun SqlCursor.time(i: Int) = getString(i)?.let(LocalTime::parse)
 private fun SqlCursor.int(i: Int) = getLong(i)?.toInt() ?: 0
 
+data class JournalEntry(val text: String, val mood: Int?)
+
 class TodayData(private val db: PowerSyncDatabase) {
     private val versionsSql = "SELECT effective_at, time_zone, day_end, floor_date FROM day_settings_versions"
     private fun version(c: SqlCursor) = DaySettingsVersion(
         parseInstant(c.str(0)!!), DaySettings(ZoneId.of(c.str(1)!!), LocalTime.parse(c.str(2)!!)), c.date(3),
     )
+
+    /** [date]'s journal entry, or null if none was written. */
+    suspend fun journalOn(date: LocalDate): JournalEntry? =
+        db.getOptional("SELECT text, mood FROM journal_entries WHERE loopdo_date = ?", listOf(date.toString())) {
+            JournalEntry(it.getString(0).orEmpty(), it.getLong(1)?.toInt())
+        }
 
     /** For the actions: the settings history right now (not a watched copy). */
     suspend fun versionsNow(): List<DaySettingsVersion> = db.getAll(versionsSql) { version(it) }

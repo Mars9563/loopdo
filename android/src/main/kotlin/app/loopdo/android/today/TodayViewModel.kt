@@ -87,6 +87,9 @@ class TodayViewModel(
         s.undo?.let { u -> run { u() } }
     }
 
+    /** The day this screen shows (null before the first build): ticks for an ended day are refused. */
+    private fun shownDate(): LocalDate? = state.value?.date
+
     /** A plain message in the snackbar (e.g. sign-out refused offline). */
     fun showMessage(text: String) { _snack.value = Snack(text, null) }
 
@@ -97,6 +100,8 @@ class TodayViewModel(
     private suspend fun attempt(block: suspend () -> Unit) {
         try {
             block()
+        } catch (e: StaleDayException) {
+            _snack.value = Snack("the day just ended, so that wasn't ticked. this is the new day.", null)
         } catch (e: IllegalArgumentException) {
             _snack.value = Snack(e.message ?: "that didn't work.", null)
         } catch (e: Exception) {
@@ -108,21 +113,21 @@ class TodayViewModel(
     /** Tap on an open habit (or [+1]). */
     override fun tick(h: HabitItem) = run {
         val id = UUID.fromString(h.id)
-        if (actions.tickHabit(id) != null) {
-            _snack.value = Snack("ticked", undo = { if (h.kind == HabitKind.COUNT) actions.decrementHabit(id) else actions.untickHabit(id) })
+        if (actions.tickHabit(id, shownDate()) != null) {
+            _snack.value = Snack("ticked", undo = { if (h.kind == HabitKind.COUNT) actions.decrementHabit(id, shownDate()) else actions.untickHabit(id, shownDate()) })
         }
     }
 
     /** Tap on a done yes/no habit. */
     override fun untick(h: HabitItem) = run {
         val id = UUID.fromString(h.id)
-        if (actions.untickHabit(id) != null) _snack.value = Snack("unticked", undo = { actions.tickHabit(id) })
+        if (actions.untickHabit(id, shownDate()) != null) _snack.value = Snack("unticked", undo = { actions.tickHabit(id, shownDate()) })
     }
 
     /** Long-press on a count habit: the same-day −1 correction. */
     override fun decrement(h: HabitItem) = run {
         val id = UUID.fromString(h.id)
-        if (actions.decrementHabit(id) != null) _snack.value = Snack("−1", undo = { actions.tickHabit(id) })
+        if (actions.decrementHabit(id, shownDate()) != null) _snack.value = Snack("−1", undo = { actions.tickHabit(id, shownDate()) })
     }
 
     override fun toggleTask(t: TaskItem) = run {
@@ -151,7 +156,7 @@ class TodayViewModel(
 
     override fun debugForgedTick() = run {
         val h = state.value?.habitsOpen?.firstOrNull() ?: return@run
-        if (actions.debugForgedTick(UUID.fromString(h.id)) != null) _snack.value = Snack("debug: forged tick sent", null)
+        if (actions.debugForgedTick(UUID.fromString(h.id), shownDate()) != null) _snack.value = Snack("debug: forged tick sent", null)
     }
 
     override fun appendJournal(text: String, onSaved: () -> Unit) = run {

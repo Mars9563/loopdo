@@ -3,6 +3,9 @@ package app.loopdo.android.today
 import app.loopdo.android.time.EvidenceFactory
 import app.loopdo.android.time.TrustedClock
 import app.loopdo.android.time.TrustedNow
+import app.loopdo.shared.habit.HabitSchedule
+import app.loopdo.shared.habit.Recurrence
+import app.loopdo.shared.habit.isDue
 import app.loopdo.shared.task.instanceId
 import app.loopdo.shared.task.uuidV5
 import com.powersync.PowerSyncDatabase
@@ -18,16 +21,25 @@ import java.util.UUID
  * uploader sends it as one batch and a 422 undoes exactly it (API contract). "Today" is
  * judged on the trusted clock, never the phone's adjustable wall clock.
  */
-/** What the today view model asks of the database (a fake in JVM tests). */
+/** A tap from a screen still showing a day that has ended ([today] is the real LoopDo date). */
+class StaleDayException(val today: LocalDate) : Exception("the day has ended.")
+
+/**
+ * What the today screen and the widget ask of the database (a fake in JVM tests).
+ * Habit changes take the date the surface is showing: if that day has ended they throw
+ * [StaleDayException] and write nothing, so a stale screen can never tick the wrong day.
+ */
 interface TodayActions {
-    suspend fun tickHabit(habitId: UUID): Pair<Int, Int>?
-    suspend fun untickHabit(habitId: UUID): Pair<Int, Int>?
-    suspend fun decrementHabit(habitId: UUID): Pair<Int, Int>?
-    suspend fun debugForgedTick(habitId: UUID): Pair<Int, Int>?
+    suspend fun tickHabit(habitId: UUID, shownDate: LocalDate? = null): Pair<Int, Int>?
+    suspend fun untickHabit(habitId: UUID, shownDate: LocalDate? = null): Pair<Int, Int>?
+    suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate? = null): Pair<Int, Int>?
+    suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate? = null): Pair<Int, Int>?
     suspend fun completeTask(taskId: UUID): Boolean
     suspend fun reopenTask(taskId: UUID): Boolean
     suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID
     suspend fun appendJournalLine(text: String)
+    /** Replaces the text and mood of [date]'s entry (past entries stay editable; future days can't be written). */
+    suspend fun saveJournal(date: LocalDate, text: String, mood: Int?)
 }
 
 class Actions(
@@ -59,13 +71,13 @@ class Actions(
     }
 
     /** Yes/no: done. Count: +1 (no cap). Returns (before, after), or null if nothing changed. */
-    override suspend fun tickHabit(habitId: UUID) = changeCount(habitId) { kind, c -> if (kind == COUNT) c + 1 else 1 }
+    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?) = changeCount(habitId, shownDate) { kind, c -> if (kind == COUNT) c + 1 else 1 }
 
     /** Yes/no only: back to not done (same day). */
-    override suspend fun untickHabit(habitId: UUID) = changeCount(habitId) { kind, c -> if (kind == COUNT) c else 0 }
+    override suspend fun untickHabit(habitId: UUID, shownDate: LocalDate?) = changeCount(habitId, shownDate) { kind, c -> if (kind == COUNT) c else 0 }
 
     /** Count only: the same-day −1 correction (spec 6.3), never below 0. */
-    override suspend fun decrementHabit(habitId: UUID) = changeCount(habitId) { kind, c -> if (kind == COUNT) maxOf(0, c - 1) else c }
+    override suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate?) = changeCount(habitId, shownDate) { kind, c -> if (kind == COUNT) maxOf(0, c - 1) else c }
 
     /*
      * PowerSync's PATCH carries only the columns whose value changed, and the server refuses a
@@ -76,17 +88,28 @@ class Actions(
      * DEBUG BUILDS ONLY (exit check 5): a +1 tick whose anchor signature is forged, so the
      * server must answer 422 INVALID_EVIDENCE and the phone must undo exactly this tick.
      */
-    override suspend fun debugForgedTick(habitId: UUID): Pair<Int, Int>? {
+    override suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? {
         check(app.loopdo.android.BuildConfig.DEBUG) { "debug only" }
-        return changeCount(habitId, forge = true) { kind, c -> if (kind == COUNT) c + 1 else 1 }
+        return changeCount(habitId, shownDate, forge = true) { kind, c -> if (kind == COUNT) c + 1 else 1 }
     }
 
-    private suspend fun changeCount(habitId: UUID, forge: Boolean = false, next: (String, Int) -> Int): Pair<Int, Int>? {
+    private suspend fun changeCount(habitId: UUID, shownDate: LocalDate?, forge: Boolean = false, next: (String, Int) -> Int): Pair<Int, Int>? {
         val m = moment().let { if (forge) it.forged() else it }
+        if (shownDate != null && shownDate != m.today) throw StaleDayException(m.today)
         val id = instanceId(habitId, m.today).toString()
         return db.writeTransaction { tx ->
-            val kind = tx.getOptional("SELECT kind FROM habits WHERE id = ?", listOf(habitId.toString())) { it.getString(0)!! }
-                ?: return@writeTransaction null
+            val (kind, archivedOn) = tx.getOptional("SELECT kind, archived_on FROM habits WHERE id = ?", listOf(habitId.toString())) {
+                it.getString(0)!! to it.getString(1)?.let { d -> LocalDate.parse(d.take(10)) }
+            } ?: return@writeTransaction null
+            // Only today's copy of a habit that is due today (shared rule), never an archived one.
+            val schedules = tx.getAll("SELECT valid_from, recurrence, weekdays FROM habit_schedules WHERE habit_id = ?", listOf(habitId.toString())) {
+                HabitSchedule(
+                    LocalDate.parse(it.getString(0)!!.take(10)),
+                    if (it.getString(1) == "weekdays") Recurrence.WEEKDAYS else Recurrence.DAILY,
+                    parseWeekdays(it.getString(2)),
+                )
+            }
+            if ((archivedOn != null && m.today >= archivedOn) || !isDue(schedules, m.today)) return@writeTransaction null
             val old = tx.getOptional("SELECT count FROM habit_logs WHERE id = ?", listOf(id)) { it.getLong(0)?.toInt() ?: 0 }
             val new = next(kind, old ?: 0)
             if (new == (old ?: 0)) return@writeTransaction null
@@ -174,6 +197,26 @@ class Actions(
                 )
             } else {
                 tx.execute("UPDATE journal_entries SET text = ? WHERE id = ?", listOf(new, id))
+            }
+        }
+    }
+
+    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?) {
+        val user = userId() ?: throw IllegalStateException("not signed in")
+        val today = dateAt(clock.now().instant)
+        require(date <= today) { "that day hasn't started yet." }
+        require(mood == null || mood in app.loopdo.shared.Limits.MOOD_RANGE) { "pick one of the five moods." }
+        require(text.length <= MAX_JOURNAL) { "today's entry is full ($MAX_JOURNAL characters)." }
+        val id = uuidV5(user, "journal:$date").toString()
+        db.writeTransaction { tx ->
+            val exists = tx.getOptional("SELECT 1 FROM journal_entries WHERE id = ?", listOf(id)) { 1 } != null
+            if (exists) {
+                tx.execute("UPDATE journal_entries SET text = ?, mood = ? WHERE id = ?", listOf(text, mood, id))
+            } else {
+                tx.execute(
+                    "INSERT INTO journal_entries (id, user_id, loopdo_date, text, mood) VALUES (?, ?, ?, ?, ?)",
+                    listOf(id, user.toString(), date.toString(), text, mood),
+                )
             }
         }
     }

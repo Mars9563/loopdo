@@ -20,11 +20,16 @@ import kotlin.test.assertEquals
 
 private class FakeActions : TodayActions {
     var fail: String? = null
+    var staleTicks = false
     private fun maybeFail() { fail?.let { throw IllegalArgumentException(it) } }
-    override suspend fun tickHabit(habitId: UUID) = 0 to 1
-    override suspend fun untickHabit(habitId: UUID) = 1 to 0
-    override suspend fun decrementHabit(habitId: UUID) = 1 to 0
-    override suspend fun debugForgedTick(habitId: UUID) = 0 to 1
+    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? {
+        if (staleTicks) throw StaleDayException(LocalDate.of(2026, 11, 15))
+        return 0 to 1
+    }
+    override suspend fun untickHabit(habitId: UUID, shownDate: LocalDate?) = 1 to 0
+    override suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate?) = 1 to 0
+    override suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate?) = 0 to 1
+    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?) = maybeFail()
     override suspend fun completeTask(taskId: UUID) = true
     override suspend fun reopenTask(taskId: UUID) = true
     override suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID { maybeFail(); return UUID.randomUUID() }
@@ -60,5 +65,13 @@ class TodayViewModelTest {
         val vm = TodayViewModel(emptyFlow(), FakeActions(), notices) { Instant.EPOCH }
         assertEquals("the server couldn't confirm when that tick happened, so it was undone.", vm.snack.value?.text)
         assertEquals(emptyList(), notices.pending.value)
+    }
+
+    @Test
+    fun staleTapShowsTheNewDay() = runTest {
+        val actions = FakeActions().apply { staleTicks = true }
+        val vm = TodayViewModel(emptyFlow(), actions, SetAsideNotices()) { Instant.EPOCH }
+        vm.tick(HabitItem(UUID.randomUUID().toString(), "gym", app.loopdo.shared.habit.HabitKind.YES_NO, 0, 1, 0, null))
+        assertEquals("the day just ended, so that wasn't ticked. this is the new day.", vm.snack.value?.text)
     }
 }
