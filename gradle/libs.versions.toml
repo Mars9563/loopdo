@@ -10,6 +10,7 @@ agp = "9.3.1"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
 lifecycle = "2.11.0"
+glance = "1.2.0"
 junit4 = "4.13.2"
 coroutines = "1.11.0"
 serialization = "1.11.0"
@@ -36,6 +37,7 @@ logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
 awssdk-s3 = { module = "software.amazon.awssdk:s3", version.ref = "awssdk" }
 
+androidx-glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }

@@ -7,6 +7,9 @@ import app.loopdo.android.today.compact
 import app.loopdo.android.today.countdown
 import app.loopdo.android.today.short
 import app.loopdo.shared.habit.HabitKind
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import java.time.Instant
 import java.time.LocalDate
 
@@ -60,3 +63,11 @@ fun widgetState(start: StartState, today: TodayModel?, dayEndAt: Instant?): Widg
     StartState.Ready -> if (today != null && dayEndAt != null) WidgetState.Ready(widgetModel(today, dayEndAt)) else WidgetState.Restoring
     else -> WidgetState.Restoring
 }
+
+/**
+ * The widget's state for a live Glance session: built once at the start and again after every
+ * [changes] signal (database change or an explicit redraw). Glance keeps a session open and
+ * only recomposes on update, so state read once at session start would go stale.
+ */
+fun widgetStates(changes: kotlinx.coroutines.flow.Flow<Unit>, snapshot: suspend () -> WidgetState): kotlinx.coroutines.flow.Flow<WidgetState> =
+    changes.onStart { emit(Unit) }.conflate().map { snapshot() }

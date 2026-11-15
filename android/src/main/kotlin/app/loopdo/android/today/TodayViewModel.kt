@@ -4,7 +4,6 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.loopdo.android.sync.message
-import app.loopdo.shared.day.dateResolver
 import app.loopdo.shared.day.dayEndAt
 import app.loopdo.shared.habit.HabitKind
 import kotlinx.coroutines.Dispatchers
@@ -54,16 +53,7 @@ class TodayViewModel(
     /** Rebuilt whenever the data changes, every minute, and exactly at day end (the ticker). */
     val state: StateFlow<TodayModel?> = rows.flatMapLatest { rows ->
         if (rows.versions.isEmpty()) return@flatMapLatest flowOf(null)
-        val dateAt = dateResolver(rows.versions)
-        ticker(now) { dayEndAt(rows.versions, now()) }.map { t ->
-            val today = dateAt(t)
-            buildToday(
-                now = t, dateAt = dateAt, dayEndAt = dayEndAt(rows.versions, t),
-                since = rows.onboardedAt?.let(dateAt)?.coerceAtMost(today) ?: today,
-                habits = rows.habits, schedules = rows.schedules, logs = rows.logs, tasks = rows.tasks, lists = rows.lists,
-                journalDays = rows.journalDays, activeDays = rows.activeDays,
-            )
-        }
+        ticker(now) { dayEndAt(rows.versions, now()) }.map { t -> rows.toModel(t)?.first }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _snack = MutableStateFlow<Snack?>(null)

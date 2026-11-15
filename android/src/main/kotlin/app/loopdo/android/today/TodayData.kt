@@ -107,3 +107,20 @@ class TodayData(private val db: PowerSyncDatabase) {
         }
     }
 }
+
+/**
+ * The today model at [now] and when that day ends, or null before the day settings have
+ * synced. The today screen and the widget both build "today" through this one function.
+ */
+fun TodayRows.toModel(now: Instant): Pair<TodayModel, Instant>? {
+    if (versions.isEmpty()) return null
+    val dateAt = app.loopdo.shared.day.dateResolver(versions)
+    val today = dateAt(now)
+    val end = app.loopdo.shared.day.dayEndAt(versions, now)
+    return buildToday(
+        now = now, dateAt = dateAt, dayEndAt = end,
+        since = onboardedAt?.let(dateAt)?.coerceAtMost(today) ?: today,
+        habits = habits, schedules = schedules, logs = logs, tasks = tasks, lists = lists,
+        journalDays = journalDays, activeDays = activeDays,
+    ) to end
+}

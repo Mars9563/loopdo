@@ -10,6 +10,12 @@ import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import androidx.glance.appwidget.updateAll
+import app.loopdo.android.onboarding.hasDaySettings
+import app.loopdo.android.onboarding.isOnboarded
+import app.loopdo.android.today.toModel
 
 /** Manual dependency graph: one of each, alive for the app's lifetime. */
 class AppGraph(context: android.content.Context) {
@@ -44,6 +50,37 @@ class AppGraph(context: android.content.Context) {
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
         userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
     )
+    private val appContext = context.applicationContext
+
+    /** Widget taps: the same actions as the app, then a redraw (Task 5 adds the refresh schedule). */
+    private val widgetRefresh = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Rebuilds an open widget session now and makes sure a closed one is started (Task 5 adds the schedule). */
+    suspend fun redrawWidget() {
+        widgetRefresh.tryEmit(Unit)
+        app.loopdo.android.widget.LoopDoWidget().updateAll(appContext)
+    }
+
+    /** Live widget state: the database's changes plus explicit redraws. */
+    fun widgetStates() = app.loopdo.android.widget.widgetStates(
+        kotlinx.coroutines.flow.merge(todayData.rows().map { }, widgetRefresh),
+    ) { widgetSnapshot() }
+
+    val widgetCommands by lazy { app.loopdo.android.widget.WidgetCommands(actions) { redrawWidget() } }
+
+    /** What the widget shows right now: nothing tickable until the app is ready (M3 start rules). */
+    suspend fun widgetSnapshot(): app.loopdo.android.widget.WidgetState {
+        if (sync.blocked.value != null) return app.loopdo.android.widget.WidgetState.SignedOut // another account's data: show none of it
+        val session = kotlinx.coroutines.withTimeoutOrNull(3_000) {
+            auth.session.first { it !is app.loopdo.android.auth.AuthState.Loading }
+        } ?: auth.session.value
+        val start = app.loopdo.android.onboarding.startState(
+            session, sync.db.currentStatus.hasSynced, sync.db.hasDaySettings().first(), sync.db.isOnboarded().first(),
+        )
+        val built = if (start == app.loopdo.android.onboarding.StartState.Ready) todayData.rows().first().toModel(trustedClock.now().instant) else null
+        return app.loopdo.android.widget.widgetState(start, built?.first, built?.second)
+    }
+
     fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
 }
 

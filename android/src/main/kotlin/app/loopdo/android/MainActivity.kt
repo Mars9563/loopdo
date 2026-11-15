@@ -53,6 +53,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val graph = (application as LoopDoApp).graph
         val demo = BuildConfig.DEBUG && intent.getBooleanExtra("demo", false)
+        // Debug builds only: `am start ... --ez pinWidget true` asks the launcher to add the widget (the owner confirms).
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("pinWidget", false)) {
+            getSystemService(android.appwidget.AppWidgetManager::class.java).requestPinAppWidget(
+                android.content.ComponentName(this, app.loopdo.android.widget.LoopDoWidgetReceiver::class.java), null, null,
+            )
+        }
         setContent {
             LoopDoTheme {
                 val session by graph.auth.session.collectAsStateWithLifecycle()
