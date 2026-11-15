@@ -1,6 +1,7 @@
 package app.loopdo.server
 
 import app.loopdo.server.routes.timeRoutes
+import app.loopdo.server.routes.uploadRoutes
 import com.auth0.jwk.JwkProviderBuilder
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -53,6 +54,7 @@ fun Application.loopdoModule(deps: Deps) {
             install(serverTimeHeader(deps.clock))
             authenticate(AUTH) {
                 timeRoutes(deps)
+                uploadRoutes(deps)
             }
         }
     }

@@ -56,11 +56,23 @@ object TestDb {
             insert into public.habits (id, user_id, title, kind, target) values
               ('$habitA', '$userA', 'meditate', 'yes_no', 1),
               ('$habitB', '$userB', 'gym', 'yes_no', 1);
+            -- A: India, day end 04:00 since forever. B: India, then New York from Sat 14 Nov 22:30 UTC.
+            insert into public.day_settings_versions (user_id, effective_at, time_zone, day_end, floor_date) values
+              ('$userA', 'epoch', 'Asia/Kolkata', '04:00', null),
+              ('$userB', 'epoch', 'Asia/Kolkata', '04:00', null),
+              ('$userB', '2026-11-14T22:30:00Z', 'America/New_York', '04:00', '2026-11-14');
         """.trimIndent())
     }
 
     /** Run SQL as the database superuser (fixtures only). */
     fun admin(sql: String) = psql(container, "supabase_admin", sql)
+
+    /** One value from a query run as the superuser (assertions only). */
+    fun scalar(sql: String): String {
+        val r = container.execInContainer("psql", "-X", "-q", "-tA", "-U", "supabase_admin", "-d", "postgres", "-c", sql)
+        check(r.exitCode == 0) { "query failed: ${r.stderr}" }
+        return r.stdout.trim()
+    }
 
     fun jdbcUrl(): String = "jdbc:postgresql://${container.host}:${container.getMappedPort(5432)}/postgres"
 
