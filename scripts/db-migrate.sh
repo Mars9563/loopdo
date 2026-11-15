@@ -17,10 +17,12 @@ DB_URL=$(value "$cfg/supabase.env" SUPABASE_DB_URL)
 roles="$cfg/roles.env"
 umask 077
 touch "$roles"
+new_keys=()
 for k in LOOPDO_API_PASSWORD POWERSYNC_PASSWORD LOOPDO_BACKUP_PASSWORD; do
   if ! grep -q "^$k=" "$roles"; then
     echo "$k=$(openssl rand -hex 24)" >> "$roles"
     echo "generated $k in $roles"
+    new_keys+=("$k")
   fi
 done
 
@@ -46,13 +48,18 @@ for f in "$root"/supabase/migrations/*.sql; do
   echo "applied $name"
 done
 
-# Role passwords (idempotent; via stdin so they never show in process lists).
-api_pw=$(value "$roles" LOOPDO_API_PASSWORD)
-ps_pw=$(value "$roles" POWERSYNC_PASSWORD)
-backup_pw=$(value "$roles" LOOPDO_BACKUP_PASSWORD)
-run <<SQL
-alter role loopdo_api password '$api_pw';
-alter role powersync_role password '$ps_pw';
-alter role loopdo_backup password '$backup_pw';
+# Role passwords: set only when just generated. Re-setting an unchanged password makes a
+# new SCRAM hash, and Supabase's pooler keeps the old one cached for minutes, so logins
+# (the API's new connections, the nightly backup) fail in between. Seen 2026-11-15.
+declare -A role_for=([LOOPDO_API_PASSWORD]=loopdo_api [POWERSYNC_PASSWORD]=powersync_role [LOOPDO_BACKUP_PASSWORD]=loopdo_backup)
+if [ ${#new_keys[@]} -eq 0 ]; then
+  echo "role passwords unchanged"
+else
+  for k in "${new_keys[@]}"; do
+    pw=$(value "$roles" "$k")
+    run <<SQL
+alter role ${role_for[$k]} password '$pw';
 SQL
-echo "role passwords set"
+    echo "password set for ${role_for[$k]}"
+  done
+fi

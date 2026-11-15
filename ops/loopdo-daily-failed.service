@@ -1,0 +1,6 @@
+[Unit]
+Description=Alert: loopdo-daily did not finish (timed out or crashed)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/server-notify health failure "LoopDo: daily job did not finish" "loopdo-daily.service timed out (30 min) or crashed, so keep-alive and backup may not have run. Check: journalctl -u loopdo-daily --since today; /var/log/loopdo-daily.log"

@@ -12,6 +12,8 @@ data class Config(
     val dbUser: String,
     val dbPassword: String,
     val anchorSecret: ByteArray,
+    /** Optional: the secret before the last rotation, still accepted for queued anchors. */
+    val previousAnchorSecret: ByteArray?,
     val r2: R2Config,
     val port: Int,
 ) {
@@ -31,6 +33,7 @@ data class Config(
                 dbUser = req("LOOPDO_DB_USER"),
                 dbPassword = req("LOOPDO_DB_PASSWORD"),
                 anchorSecret = anchor.toByteArray(),
+                previousAnchorSecret = env("LOOPDO_ANCHOR_SECRET_PREVIOUS")?.takeIf { it.isNotBlank() }?.toByteArray(),
                 r2 = R2Config(req("R2_ACCOUNT_ID"), req("R2_BUCKET"), req("R2_ACCESS_KEY_ID"), req("R2_SECRET_ACCESS_KEY")),
                 port = env("PORT")?.toIntOrNull() ?: 8080,
             )

@@ -176,16 +176,77 @@ class UploadTest {
         assertEquals("f", TestDb.scalar("select verified from public.habit_logs where id = '$l'"))
     }
 
+    private fun sched(h: UUID, from: String) = buildJsonObject {
+        put("habit_id", h.toString()); put("valid_from", from); put("recurrence", "daily")
+    }
+
     @Test
-    fun pastScheduleCannotChange() = app { // today = Sun 15 Nov
+    fun scheduleVersionsNeverRewriteThePast() = app { // today = Sun 15 Nov
+        val h = UUID.randomUUID(); val first = UUID.randomUUID(); val second = UUID.randomUUID()
+        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "habits", h, habit()), op("PUT", "habit_schedules", first, sched(h, "2026-11-15"))).status)
+        // A later version asking to start in the past is moved to tomorrow, never earlier.
+        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "habit_schedules", second, sched(h, "2026-11-10"))).status)
+        assertEquals("2026-11-16", TestDb.scalar("select valid_from from public.habit_schedules where id = '$second'"))
+        // A version already in force can't be changed...
+        val changed = buildJsonObject { sched(h, "2026-11-15").forEach { (k, v) -> put(k, v) }; put("recurrence", "weekdays"); put("weekdays", kotlinx.serialization.json.buildJsonArray { add(kotlinx.serialization.json.JsonPrimitive(1)) }) }
+        assertRejected(upload(a, op("PUT", "habit_schedules", first, changed)).bodyAsText(), "FORBIDDEN", 0)
+        // ...but replaying it unchanged (a retry) is fine.
+        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "habit_schedules", first, sched(h, "2026-11-15"))).status)
+    }
+
+    @Test
+    fun offlineFirstScheduleSyncedAfterMidnightIsMovedToToday() = app { // made Sat 23:50, synced Sun
+        val h = UUID.randomUUID(); val s1 = UUID.randomUUID()
+        val r = upload(a, op("PUT", "habits", h, habit()), op("PUT", "habit_schedules", s1, sched(h, "2026-11-14")))
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        assertEquals("2026-11-15", TestDb.scalar("select valid_from from public.habit_schedules where id = '$s1'"))
+    }
+
+    @Test
+    fun targetFrozenOnceHabitHasLogs() = app {
         val h = UUID.randomUUID()
-        fun sched(from: String) = buildJsonObject {
-            put("habit_id", h.toString()); put("valid_from", from); put("recurrence", "daily")
+        val water = buildJsonObject { put("title", "water"); put("kind", "count"); put("target", 8) }
+        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "habits", h, water)).status)
+        // No logs yet: the target may still change.
+        assertEquals(HttpStatusCode.OK, upload(a, op("PATCH", "habits", h, buildJsonObject { put("target", 10) })).status)
+        val ev = eveningTick(a)
+        val partial = buildJsonObject { log(h, "2026-11-14", 5, ev).forEach { (k, v) -> put(k, v) } }
+        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "habit_logs", UUID.randomUUID(), partial)).status)
+        // With history, lowering the target would turn past partial days into successes.
+        assertRejected(upload(a, op("PATCH", "habits", h, buildJsonObject { put("target", 1) })).bodyAsText(), "FORBIDDEN", 0)
+        // Renaming is still fine.
+        assertEquals(HttpStatusCode.OK, upload(a, op("PATCH", "habits", h, buildJsonObject { put("title", "drink water") })).status)
+    }
+
+    @Test
+    fun archivingInThePastIsMovedToToday() = app {
+        val h = UUID.randomUUID()
+        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "habits", h, habit()), op("PATCH", "habits", h, buildJsonObject { put("archived_on", "2020-01-01") })).status)
+        assertEquals("2026-11-15", TestDb.scalar("select archived_on from public.habits where id = '$h'"))
+    }
+
+    @Test
+    fun malformedValueIs422Not500() = app {
+        val h = UUID.randomUUID()
+        val bad = buildJsonObject {
+            put("habit_id", h.toString()); put("valid_from", "2026-11-15"); put("recurrence", "weekdays")
+            put("weekdays", kotlinx.serialization.json.buildJsonArray { add(buildJsonObject { put("x", 1) }) })
         }
-        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "habits", h, habit()), op("PUT", "habit_schedules", UUID.randomUUID(), sched("2026-11-15"))).status)
-        // A second version must start tomorrow or later; rewriting the past is refused.
-        assertRejected(upload(a, op("PUT", "habit_schedules", UUID.randomUUID(), sched("2026-11-10"))).bodyAsText(), "FORBIDDEN", 0)
-        assertRejected(upload(a, op("PUT", "habit_schedules", UUID.randomUUID(), sched("2026-11-15"))).bodyAsText(), "FORBIDDEN", 0)
-        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "habit_schedules", UUID.randomUUID(), sched("2026-11-16"))).status)
+        val r = upload(a, op("PUT", "habits", h, habit()), op("PUT", "habit_schedules", UUID.randomUUID(), bad))
+        assertRejected(r.bodyAsText(), "BAD_OP", 1)
+    }
+
+    @Test
+    fun anchorSignedWithPreviousSecretStillAccepted() = testApplication {
+        val old = "previous-anchor-secret-32-bytes-long!".toByteArray()
+        application {
+            loopdoModule(Deps(Db(TestDb.apiDataSource()), TestAuth.jwkProvider, TestAuth.ISSUER,
+                "rotated-anchor-secret-32-bytes-long!!".toByteArray(), previousAnchorSecret = old) { sunMorning })
+        }
+        val h = UUID.randomUUID()
+        val ev = evidence(a, "2026-11-14", "2026-11-14T17:30:00Z", "2026-11-14T12:30:00Z", 1_000_000, 5, 19_000_000, 5,
+            sig = signAnchor(old, a.toString(), at("2026-11-14T12:30:00Z")))
+        val r = upload(a, op("PUT", "habits", h, habit()), op("PUT", "habit_logs", UUID.randomUUID(), log(h, "2026-11-14", 1, ev)))
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
     }
 }

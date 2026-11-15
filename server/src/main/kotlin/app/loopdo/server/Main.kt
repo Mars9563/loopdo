@@ -34,6 +34,8 @@ class Deps(
     val issuer: String,
     val anchorSecret: ByteArray,
     val photos: PhotoUrls? = null,
+    /** Old anchor secret, still accepted after a rotation so queued offline ticks aren't lost. */
+    val previousAnchorSecret: ByteArray? = null,
     val clock: () -> Instant = Instant::now,
 )
 
@@ -79,6 +81,6 @@ fun main() {
         .cached(10, 24, TimeUnit.HOURS)
         .rateLimited(10, 1, TimeUnit.MINUTES)
         .build()
-    val deps = Deps(Db(dataSource), jwks, config.issuer, config.anchorSecret, PhotoUrls(config.r2))
+    val deps = Deps(Db(dataSource), jwks, config.issuer, config.anchorSecret, PhotoUrls(config.r2), config.previousAnchorSecret)
     embeddedServer(Netty, port = config.port) { loopdoModule(deps) }.start(wait = true)
 }

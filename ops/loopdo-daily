@@ -25,6 +25,9 @@ if [ "${1:-}" = --test-failure ]; then
 fi
 
 set -a; . "$ENV_FILE"; set +a
+# Never hang: a stuck connection or container would keep the unit "active" and stop the timer.
+export PGCONNECT_TIMEOUT=20
+STEP_TIMEOUT=20m
 
 keepalive() {
   local token lines
@@ -48,7 +51,7 @@ backup() {
   dir="$OUT/$day"
   rm -rf "$dir.part"; install -d -m 700 "$dir.part"
   export PGPASSWORD=$BACKUP_DB_PASSWORD
-  local pg=(docker run --rm -i -e PGPASSWORD "$PG_IMAGE")
+  local pg=(timeout "$STEP_TIMEOUT" docker run --rm -i -e PGPASSWORD -e PGCONNECT_TIMEOUT "$PG_IMAGE")
   local conn=(-h "$BACKUP_DB_HOST" -p 5432 -U "$BACKUP_DB_USER" -d postgres)
   # LoopDo data (public) + migration log and account views (loopdo_meta).
   "${pg[@]}" pg_dump "${conn[@]}" -Fc -n public -n loopdo_meta > "$dir.part/loopdo.dump" 2>>"$LOG" \
@@ -60,7 +63,7 @@ backup() {
       > "$dir.part/$v.csv" 2>>"$LOG" || { echo "export of $v failed"; return 1; }
   done
   unset PGPASSWORD
-  tables=$(docker run --rm -i "$PG_IMAGE" pg_restore --list < "$dir.part/loopdo.dump" | grep -c 'TABLE DATA')
+  tables=$(timeout "$STEP_TIMEOUT" docker run --rm -i "$PG_IMAGE" pg_restore --list < "$dir.part/loopdo.dump" | grep -c 'TABLE DATA')
   users=$(( $(wc -l < "$dir.part/auth_users.csv") - 1 ))
   [ "$tables" -ge 12 ] || { echo "dump looks incomplete: $tables tables with data (expected >= 12)"; return 1; }
   [ "$users" -ge 1 ] || { echo "accounts export is empty"; return 1; }
@@ -72,4 +75,5 @@ backup() {
 status=0
 if out=$(keepalive); then log "$out"; else log "keepalive FAILED: $out"; alert health "keep-alive failed" "$out"; status=1; fi
 if out=$(backup); then log "$out"; else log "backup FAILED: $out"; alert backup "database dump failed" "$out (see $LOG)"; status=1; fi
-exit $status
+# 2 = failed but already alerted (the unit treats it as handled; OnFailure is for hangs/crashes).
+[ "$status" = 0 ] && exit 0 || exit 2

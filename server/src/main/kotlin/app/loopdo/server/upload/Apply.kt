@@ -56,7 +56,12 @@ class Applier(
     private val user: UUID,
     private val anchorSecret: ByteArray,
     private val now: Instant,
+    /** Accepted too, so ticks queued before a secret rotation still verify. */
+    private val previousAnchorSecret: ByteArray? = null,
 ) {
+    /** What a rule decided: the (possibly adjusted) data, server-set columns, or skip as already applied. */
+    private class Prepared(val data: JsonObject, val extra: Map<String, String?> = emptyMap(), val skip: Boolean = false)
+
     private val versions: List<DaySettingsVersion> by lazy { loadDaySettingsVersions(c) }
 
     private fun dateAt(i: Int): (Instant) -> LocalDate {
@@ -74,20 +79,28 @@ class Applier(
         if (op.op != "DELETE" && !spec.columns.keys.containsAll(data.keys)) throw Rejected("BAD_OP", i)
 
         try {
-            val extra = when (spec.name) {
-                "habit_logs" -> habitLogRules(i, op.op, id, data)
-                "tasks" -> taskRules(i, id, data)
-                "habit_schedules" -> { scheduleRules(i, op.op, id, data); emptyMap() }
-                "journal_photos" -> { photoRules(i, op.op, data); emptyMap() }
-                else -> emptyMap()
+            val p = when (spec.name) {
+                "habits" -> habitRules(i, op.op, id, data)
+                "habit_logs" -> Prepared(data, habitLogRules(i, op.op, id, data))
+                "tasks" -> Prepared(data, taskRules(i, id, data))
+                "habit_schedules" -> scheduleRules(i, op.op, id, data)
+                "journal_photos" -> { photoRules(i, op.op, data); Prepared(data) }
+                else -> Prepared(data)
             }
+            if (p.skip) return
             when (op.op) {
-                "PUT" -> put(spec, id, data, extra)
-                "PATCH" -> patch(spec, id, data, extra)
+                "PUT" -> put(spec, id, p.data, p.extra)
+                "PATCH" -> patch(spec, id, p.data, p.extra)
                 "DELETE" -> delete(spec, id)
             }
+        } catch (r: Rejected) {
+            throw r
         } catch (e: SQLException) {
             throw Rejected(codeFor(e), i)
+        } catch (e: RuntimeException) {
+            // Malformed values (wrong JSON shapes etc.): a permanent client error, never a 500
+            // that would leave the phone retrying the same batch forever.
+            throw Rejected("BAD_OP", i)
         }
     }
 
@@ -127,21 +140,56 @@ class Applier(
         }
     }
 
-    /** Schedule versions already in force are history; a new one starts tomorrow at the earliest. */
-    private fun scheduleRules(i: Int, op: String, id: UUID, data: JsonObject) {
+    /**
+     * Schedule versions already in force are history: they can't be changed or deleted
+     * (an unchanged replay is skipped). A new version starts no earlier than tomorrow
+     * (today for a habit's first one); an earlier date, e.g. made offline before midnight,
+     * is moved up to that day instead of being refused.
+     */
+    private fun scheduleRules(i: Int, op: String, id: UUID, data: JsonObject): Prepared {
         val today = today(i)
-        val existingFrom = queryOne("select valid_from from public.habit_schedules where id = ?::uuid", id.toString()) {
-            it.getObject(1, LocalDate::class.java)
+        val existing = queryOne(
+            "select valid_from, habit_id::text, recurrence, weekdays::text from public.habit_schedules where id = ?::uuid",
+            id.toString(),
+        ) { listOf(it.getObject(1, LocalDate::class.java).toString(), it.getString(2), it.getString(3), it.getString(4)) }
+        if (existing != null && LocalDate.parse(existing[0]) <= today) {
+            val sameContent = op == "PUT" &&
+                data.text("habit_id") == existing[1] && data.text("recurrence") == existing[2] &&
+                data["weekdays"]?.let { bindValue(it, Col.SMALLINT_ARRAY) } == existing[3]
+            if (sameContent) return Prepared(data, skip = true)
+            throw Rejected("FORBIDDEN", i)
         }
-        if (existingFrom != null && existingFrom <= today) throw Rejected("FORBIDDEN", i)
-        if (op == "DELETE") return
+        if (op == "DELETE") return Prepared(data)
         val habitId = data.text("habit_id") ?: throw Rejected("BAD_OP", i)
         val from = data.date("valid_from") ?: throw Rejected("BAD_OP", i)
         val hasOther = queryOne(
             "select 1 from public.habit_schedules where habit_id = ?::uuid and id <> ?::uuid limit 1", habitId, id.toString(),
         ) { true } ?: false
         val earliest = if (hasOther) today.plusDays(1) else today
-        if (from < earliest) throw Rejected("FORBIDDEN", i)
+        return if (from < earliest) Prepared(data.with("valid_from", earliest.toString())) else Prepared(data)
+    }
+
+    /**
+     * A habit's kind and target are frozen once it has logs: changing them would re-judge
+     * past days (e.g. target 8 -> 1 turns partial days into successes). Archiving can't be
+     * backdated; an earlier date is moved up to today.
+     */
+    private fun habitRules(i: Int, op: String, id: UUID, data: JsonObject): Prepared {
+        if (op == "DELETE") return Prepared(data)
+        if ("kind" in data || "target" in data) {
+            val existing = queryOne("select kind, target from public.habits where id = ?::uuid", id.toString()) {
+                it.getString(1) to it.getInt(2)
+            }
+            if (existing != null) {
+                val kindChanged = "kind" in data && data.text("kind") != existing.first
+                val targetChanged = "target" in data && data.text("target")?.toIntOrNull() != existing.second
+                val hasLogs = queryOne("select 1 from public.habit_logs where habit_id = ?::uuid limit 1", id.toString()) { true } ?: false
+                if ((kindChanged || targetChanged) && hasLogs) throw Rejected("FORBIDDEN", i)
+            }
+        }
+        val archived = data.date("archived_on") ?: return Prepared(data)
+        val today = today(i)
+        return if (archived < today) Prepared(data.with("archived_on", today.toString())) else Prepared(data)
     }
 
     private fun photoRules(i: Int, op: String, data: JsonObject) {
@@ -154,7 +202,9 @@ class Applier(
             val dto = lenient.decodeFromJsonElement<EvidenceDto>(raw)
             val anchor = dto.anchor?.let {
                 val serverTime = Instant.parse(it.serverTime)
-                if (!verifyAnchor(anchorSecret, user.toString(), serverTime, it.sig)) error("bad anchor signature")
+                val valid = verifyAnchor(anchorSecret, user.toString(), serverTime, it.sig) ||
+                    (previousAnchorSecret != null && verifyAnchor(previousAnchorSecret, user.toString(), serverTime, it.sig))
+                if (!valid) error("bad anchor signature")
                 TimeAnchor(serverTime, it.elapsedRealtimeMs, it.bootCount)
             }
             TickEvidence(
@@ -219,12 +269,22 @@ private fun bindValue(v: JsonElement, col: Col): String? = when {
     else -> v.toString()
 }
 
+private fun JsonObject.with(key: String, value: String) = JsonObject(this + (key to JsonPrimitive(value)))
+
 private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
 private fun JsonObject.date(key: String): LocalDate? = text(key)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 
-/** RLS refusal or a parent that isn't yours → FORBIDDEN; any other data problem → BAD_OP. */
-private fun codeFor(e: SQLException): String = when {
-    e.sqlState == "42501" || e.sqlState == "23503" -> "FORBIDDEN"
-    e.sqlState?.startsWith("23") == true || e.sqlState?.startsWith("22") == true || e.sqlState == "P0001" -> "BAD_OP"
-    else -> throw e
+/**
+ * RLS refusal or a parent that isn't yours -> FORBIDDEN; bad data -> BAD_OP;
+ * serialization failure / deadlock / cancelled statement -> retry later (503).
+ * Anything else is a server bug and stays a 500.
+ */
+private fun codeFor(e: SQLException): String {
+    val state = e.sqlState ?: throw e
+    return when {
+        state == "42501" || state == "23503" -> "FORBIDDEN"
+        state == "40001" || state == "40P01" || state == "57014" -> throw app.loopdo.server.DbUnavailable(e)
+        state.startsWith("23") || state.startsWith("22") || state.startsWith("42") || state == "P0001" -> "BAD_OP"
+        else -> throw e
+    }
 }

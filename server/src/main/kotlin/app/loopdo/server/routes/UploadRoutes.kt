@@ -39,7 +39,7 @@ fun Route.uploadRoutes(deps: Deps) {
         try {
             val now = deps.clock()
             deps.db.asUser(user.id) { c ->
-                val applier = Applier(c, user.id, deps.anchorSecret, now)
+                val applier = Applier(c, user.id, deps.anchorSecret, now, deps.previousAnchorSecret)
                 req.ops.forEachIndexed(applier::apply)
             }
             call.respond(UploadApplied(req.ops.size))

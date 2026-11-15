@@ -25,8 +25,13 @@ EMAIL="e2e-$(date +%s)-$RANDOM@loopdo.invalid"
 PASSWORD=$(openssl rand -hex 16)
 USER_ID=$(python3 -I -c 'import uuid; print(uuid.uuid4())')
 
+# Remember the sign-up switch and restore exactly that (only the --signup-check step touches it).
+SIGNUPS_BEFORE=$(sql -c "select signups_enabled from public.app_config")
+SIGNUPS_TOUCHED=0
 cleanup() {
-  sql -c "update public.app_config set signups_enabled = true" >/dev/null 2>&1 || true
+  if [ "$SIGNUPS_TOUCHED" = 1 ]; then
+    sql -c "update public.app_config set signups_enabled = $( [ "$SIGNUPS_BEFORE" = t ] && echo true || echo false )" >/dev/null 2>&1 || true
+  fi
   sql -c "delete from auth.users where id = '$USER_ID' or email like 'e2e-%@loopdo.invalid'" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -105,11 +110,11 @@ echo "$STREAM" | grep -q "$HABIT" && pass "PowerSync streams the habit" || bad "
 
 # 8. Optional: the sign-up switch (Before-User-Created hook).
 if [ "${1:-}" = --signup-check ]; then
+  SIGNUPS_TOUCHED=1
   sql -c "update public.app_config set signups_enabled = false" >/dev/null
   r=$(curl -s -m 20 -w ' %{http_code}' -X POST "$SUPA/auth/v1/signup" -H "apikey: $KEY" -H 'Content-Type: application/json' \
     -d "{\"email\":\"e2e-closed-$RANDOM@loopdo.invalid\",\"password\":\"$(openssl rand -hex 12)\"}")
   [ "${r##* }" = 403 ] && pass "sign-ups closed -> 403" || bad "sign-up not refused: $r"
-  sql -c "update public.app_config set signups_enabled = true" >/dev/null
 fi
 
 # 9. Cleanup (also on exit): the user and every row it owns.

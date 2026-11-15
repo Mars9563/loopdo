@@ -79,3 +79,22 @@ do $$ begin
   end if;
 end $$;
 rollback;
+
+-- Functions made by later migrations (as postgres) must not be callable through Supabase's /rpc.
+set role postgres;
+create function public.t_future_fn() returns int language sql as 'select 1';
+reset role;
+do $$
+declare f text;
+begin
+  if has_function_privilege('anon', 'public.t_future_fn()', 'execute')
+     or has_function_privilege('authenticated', 'public.t_future_fn()', 'execute') then
+    raise exception 'FAIL grants: a newly created function is executable by anon/authenticated';
+  end if;
+  for f in select p.oid::regprocedure::text from pg_proc p where p.pronamespace = 'public'::regnamespace loop
+    if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then
+      raise exception 'FAIL grants: % is executable by anon/authenticated', f;
+    end if;
+  end loop;
+end $$;
+drop function public.t_future_fn();
