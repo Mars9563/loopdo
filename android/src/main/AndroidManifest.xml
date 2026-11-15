@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Redraw the widget after a reboot (its day may have changed). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".LoopDoApp"
@@ -31,6 +33,19 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/loopdo_widget_info" />
+        </receiver>
+
+        <!-- Widget refresh: our alarms (day end, every 15 min), clock/zone change, boot, app update. -->
+        <receiver
+            android:name=".widget.WidgetRefreshReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="app.loopdo.android.widget.REFRESH" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
         </receiver>
     </application>
 </manifest>

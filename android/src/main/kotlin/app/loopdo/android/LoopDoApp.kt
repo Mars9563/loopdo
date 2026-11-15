@@ -12,6 +12,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
 import androidx.glance.appwidget.updateAll
 import app.loopdo.android.onboarding.hasDaySettings
 import app.loopdo.android.onboarding.isOnboarded
@@ -55,10 +57,20 @@ class AppGraph(context: android.content.Context) {
     /** Widget taps: the same actions as the app, then a redraw (Task 5 adds the refresh schedule). */
     private val widgetRefresh = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-    /** Rebuilds an open widget session now and makes sure a closed one is started (Task 5 adds the schedule). */
+    private val widgetRefresher = app.loopdo.android.widget.WidgetRefresher(appContext)
+
+    /** Rebuilds an open widget session now, starts a closed one, and re-arms the day-end and 15-minute alarms. */
     suspend fun redrawWidget() {
         widgetRefresh.tryEmit(Unit)
         app.loopdo.android.widget.LoopDoWidget().updateAll(appContext)
+        val ready = widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready
+        widgetRefresher.schedule(ready?.model?.dayEndAt, trustedClock.now().instant)
+    }
+
+    init {
+        // Changes that arrive while no widget session is open (sync, the app) still reach the widget.
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
+        scope.launch { todayData.rows().debounce(500).collect { runCatching { redrawWidget() } } }
     }
 
     /** Live widget state: the database's changes plus explicit redraws. */
