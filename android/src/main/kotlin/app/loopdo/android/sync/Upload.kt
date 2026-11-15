@@ -119,10 +119,27 @@ object OpMapper {
  * applied → complete; 422 → keep typed text as drafts, then complete (discard);
  * 503/network → retry; 500 → retry, and after 24 h set it aside like a refusal.
  */
+/** A transaction the server refused and the phone undid; [keptDraft] = typed text was saved as a draft. */
+data class SetAside(val code: String, val keptDraft: Boolean)
+
+/** What the snackbar says (spec: plain-language explanation of a rejected upload). */
+fun SetAside.message(): String {
+    val what = when (code) {
+        "INVALID_EVIDENCE" -> "the server couldn't confirm when that tick happened, so it was undone."
+        "BACKDATED" -> "that change was for a day that had already ended, so it was undone."
+        "FUTURE" -> "that tick was dated in the future, so it was undone."
+        "BEFORE_LAST_ANCHOR" -> "that tick was older than the phone's last time check, so it was undone."
+        "SERVER_ERROR" -> "the server kept failing on a change for a day, so it was undone."
+        else -> "the server refused a change ($code), so it was undone."
+    }
+    return if (keptDraft) "$what your text is saved as a draft." else what
+}
+
 class Uploader(
     private val api: UploadApi,
     private val drafts: DraftStore,
     private val state: UploadState,
+    private val onSetAside: (SetAside) -> Unit = {},
     private val clock: () -> Instant,
 ) {
     suspend fun upload(tx: PendingTransaction) {
@@ -144,15 +161,17 @@ class Uploader(
     }
 
     private suspend fun setAside(tx: PendingTransaction, reason: String) {
+        var kept = false
         for (op in tx.ops) {
             val fields = OpMapper.typedText[op.table] ?: continue
             for (f in fields) {
                 val text = op.data?.get(f) as? String ?: continue
-                if (text.isNotBlank()) drafts.save("${op.table}.$f", text, reason)
+                if (text.isNotBlank()) { drafts.save("${op.table}.$f", text, reason); kept = true }
             }
         }
         state.clear(tx.id)
-        tx.complete()
+        tx.complete() // the next sync checkpoint then restores the server's version locally
+        onSetAside(SetAside(reason, kept))
     }
 
     companion object {

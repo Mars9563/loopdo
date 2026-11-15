@@ -100,4 +100,26 @@ class UploaderTest {
         uploader(api, state = state).upload(tx)
         assertTrue(state.first.isEmpty())
     }
+
+    @Test
+    fun setAsideIsReportedSoTheUserIsTold() = runTest {
+        val reports = mutableListOf<SetAside>()
+        val up = Uploader(FakeApi { HttpResult(422, """{"code":"INVALID_EVIDENCE","opIndex":0}""") }, MemoryDrafts(), MemoryState(), { reports += it }) { now }
+        up.upload(FakeTx(5, listOf(PendingOp("PATCH", "habit_logs", "l-1", mapOf("count" to 1L, "evidence" to "{}")))))
+        up.upload(FakeTx(6, listOf(journalOp)))
+        assertEquals(listOf(SetAside("INVALID_EVIDENCE", keptDraft = false), SetAside("INVALID_EVIDENCE", keptDraft = true)), reports)
+    }
+
+    @Test
+    fun setAsideMessagesAreInPlainWords() {
+        assertEquals(
+            "the server couldn't confirm when that tick happened, so it was undone.",
+            SetAside("INVALID_EVIDENCE", keptDraft = false).message(),
+        )
+        assertEquals(
+            "that change was for a day that had already ended, so it was undone. your text is saved as a draft.",
+            SetAside("BACKDATED", keptDraft = true).message(),
+        )
+        assertEquals("the server refused a change (BAD_OP), so it was undone.", SetAside("BAD_OP", keptDraft = false).message())
+    }
 }

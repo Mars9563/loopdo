@@ -28,11 +28,15 @@ class SyncModule(
 ) {
     val db: PowerSyncDatabase = PowerSyncDatabase(DatabaseDriverFactory(context), LoopDoSchema.schema, dbFilename = "loopdo.db")
     private val prefs = context.getSharedPreferences("loopdo_sync", Context.MODE_PRIVATE)
+    private val setAsideEvents = kotlinx.coroutines.flow.MutableSharedFlow<SetAside>(extraBufferCapacity = 16)
+    /** Uploads the server refused (and the phone undid), for the snackbar. */
+    val setAside: kotlinx.coroutines.flow.SharedFlow<SetAside> = setAsideEvents
     private val http = HttpClient(OkHttp) { install(HttpTimeout) { requestTimeoutMillis = 15_000 } }
     private val uploader = Uploader(
         KtorUploadApi(http) { (auth.session.value as? AuthState.SignedIn)?.accessToken },
         PowerSyncDraftStore(db),
         PowerSyncUploadState(db),
+        { setAsideEvents.tryEmit(it) },
         Instant::now,
     )
     private val connector = LoopDoConnector(auth, uploader)

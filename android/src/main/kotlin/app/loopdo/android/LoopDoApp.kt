@@ -38,7 +38,7 @@ class AppGraph(context: android.content.Context) {
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
         userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
     )
-    fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData, actions) { trustedClock.now().instant }
+    fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData, actions, sync.setAside) { trustedClock.now().instant }
 }
 
 class LoopDoApp : Application() {

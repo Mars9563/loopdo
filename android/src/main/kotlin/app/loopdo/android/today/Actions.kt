@@ -6,6 +6,8 @@ import app.loopdo.android.time.TrustedNow
 import app.loopdo.shared.task.instanceId
 import app.loopdo.shared.task.uuidV5
 import com.powersync.PowerSyncDatabase
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -25,6 +27,17 @@ class Actions(
 ) {
     private class Moment(val now: TrustedNow, val today: LocalDate, val evidence: String) {
         val verified get() = if (now.verified) 1 else 0
+    }
+
+    private fun Moment.forged(): Moment {
+        val ev = kotlinx.serialization.json.Json.parseToJsonElement(evidence).jsonObject.toMutableMap()
+        ev["anchor"] = kotlinx.serialization.json.buildJsonObject {
+            put("serverTime", now.instant.toString())
+            put("elapsedRealtimeMs", 0L)
+            put("bootCount", 0)
+            put("sig", "forged")
+        }
+        return Moment(now, today, kotlinx.serialization.json.JsonObject(ev).toString())
     }
 
     private suspend fun moment(): Moment {
@@ -47,8 +60,17 @@ class Actions(
      * count change without evidence. Evidence always changes between two ticks because
      * elapsedAtTickMs comes from the monotonic boot timer.
      */
-    private suspend fun changeCount(habitId: UUID, next: (String, Int) -> Int): Pair<Int, Int>? {
-        val m = moment()
+    /**
+     * DEBUG BUILDS ONLY (exit check 5): a +1 tick whose anchor signature is forged, so the
+     * server must answer 422 INVALID_EVIDENCE and the phone must undo exactly this tick.
+     */
+    suspend fun debugForgedTick(habitId: UUID): Pair<Int, Int>? {
+        check(app.loopdo.android.BuildConfig.DEBUG) { "debug only" }
+        return changeCount(habitId, forge = true) { kind, c -> if (kind == COUNT) c + 1 else 1 }
+    }
+
+    private suspend fun changeCount(habitId: UUID, forge: Boolean = false, next: (String, Int) -> Int): Pair<Int, Int>? {
+        val m = moment().let { if (forge) it.forged() else it }
         val id = instanceId(habitId, m.today).toString()
         return db.writeTransaction { tx ->
             val kind = tx.getOptional("SELECT kind FROM habits WHERE id = ?", listOf(habitId.toString())) { it.getString(0)!! }

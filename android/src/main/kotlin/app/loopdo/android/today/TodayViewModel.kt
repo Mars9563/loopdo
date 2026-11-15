@@ -3,6 +3,7 @@ package app.loopdo.android.today
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.loopdo.android.sync.message
 import app.loopdo.shared.day.dateResolver
 import app.loopdo.shared.day.dayEndAt
 import app.loopdo.shared.habit.HabitKind
@@ -36,10 +37,18 @@ interface TodayUi {
     fun appendJournal(text: String)
     fun undo(s: Snack)
     fun dismissSnack(id: Long)
+    /** Debug builds only: a tick with a forged anchor signature (exit check 5). */
+    fun debugForgedTick() {}
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class TodayViewModel(data: TodayData, private val actions: Actions, private val now: () -> Instant) : ViewModel(), TodayUi {
+class TodayViewModel(
+    data: TodayData,
+    private val actions: Actions,
+    setAside: kotlinx.coroutines.flow.Flow<app.loopdo.android.sync.SetAside>,
+    private val now: () -> Instant,
+) : ViewModel(), TodayUi {
+
 
     /** Rebuilt whenever the data changes, every minute, and exactly at day end (the ticker). */
     val state: StateFlow<TodayModel?> = data.rows().flatMapLatest { rows ->
@@ -58,6 +67,10 @@ class TodayViewModel(data: TodayData, private val actions: Actions, private val 
 
     private val _snack = MutableStateFlow<Snack?>(null)
     val snack: StateFlow<Snack?> = _snack.asStateFlow()
+
+    init {
+        viewModelScope.launch { setAside.collect { _snack.value = Snack(it.message(), null) } }
+    }
 
     override fun dismissSnack(id: Long) { _snack.compareAndSet(_snack.value?.takeIf { it.id == id }, null) }
 
@@ -122,6 +135,11 @@ class TodayViewModel(data: TodayData, private val actions: Actions, private val 
             else -> "inbox"
         }
         _snack.value = Snack("added to $where", null)
+    }
+
+    override fun debugForgedTick() = run {
+        val h = state.value?.habitsOpen?.firstOrNull() ?: return@run
+        if (actions.debugForgedTick(UUID.fromString(h.id)) != null) _snack.value = Snack("debug: forged tick sent", null)
     }
 
     override fun appendJournal(text: String) = run {

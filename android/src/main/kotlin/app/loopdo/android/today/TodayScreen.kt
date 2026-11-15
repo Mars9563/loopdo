@@ -67,6 +67,7 @@ fun TodayScreen(vm: TodayViewModel, onSignOut: () -> Unit) {
     TodayContent(model, snack, vm, onSignOut)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -> Unit) {
     var adding by rememberSaveable { mutableStateOf(false) }
@@ -80,7 +81,12 @@ fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -
                         withStyle(SpanStyle(color = LoopDoColors.accent)) { append("~/today") }
                         model?.let { append(" " + it.date.short()) }
                     },
-                    style = LoopDoType.title, modifier = Modifier.weight(1f),
+                    style = LoopDoType.title,
+                    modifier = Modifier.weight(1f).then(
+                        // Debug builds only: long-press the title to send a forged tick (exit check 5).
+                        if (app.loopdo.android.BuildConfig.DEBUG) Modifier.combinedClickable(onClick = {}, onLongClick = { vm.debugForgedTick() })
+                        else Modifier,
+                    ),
                 )
                 model?.let { Text("⏳ " + it.endsIn.countdown(), style = LoopDoType.small.copy(color = LoopDoColors.dim)) }
                 Bracket("⚙", idle = !settingsOpen) { settingsOpen = !settingsOpen }
