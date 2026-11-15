@@ -139,14 +139,14 @@ private fun ColumnScope.Ready(m: WidgetModel, size: DpSize) {
         }
     }
 
-    // Bottom bar: [+ add]  |  [✎ journal]●   (the journal pop-up arrives in Task 7)
+    // Bottom bar: [+ add]  |  [✎ journal]●  (both open pop-ups over the home screen)
     DashedRule(inner, GlanceModifier.padding(top = 6.dp))
     Row(GlanceModifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(GlanceModifier.defaultWeight().fillMaxHeight().clickable(actionStartActivity<app.loopdo.android.popup.AddPopupActivity>()), contentAlignment = Alignment.Center) {
             MonoText("[+ add]", ACCENT, bold = true)
         }
         MonoText("|", SEPARATOR)
-        Box(GlanceModifier.defaultWeight().fillMaxHeight().clickable(openApp), contentAlignment = Alignment.Center) {
+        Box(GlanceModifier.defaultWeight().fillMaxHeight().clickable(actionStartActivity<app.loopdo.android.popup.JournalPopupActivity>()), contentAlignment = Alignment.Center) {
             if (m.journalWritten) MonoText("[✓ journal]", TEXT)
             else Row(verticalAlignment = Alignment.CenterVertically) { MonoText("[✎ journal]", TEXT); MonoText("●", WARN) }
         }

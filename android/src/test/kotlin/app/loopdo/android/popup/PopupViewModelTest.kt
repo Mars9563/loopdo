@@ -76,4 +76,29 @@ class PopupViewModelTest {
         assertEquals(1, saved)
         assertEquals(null, vm.error.value)
     }
+
+    @Test
+    fun failedJournalSaveKeepsText() = runTest {
+        val vm = vm()
+        val sat = LocalDate.of(2026, 11, 14)
+        vm.keepDraft(PopupViewModel.journalKey(sat), "a long day")
+        actions.fail = "today's entry is full (20000 characters)."
+        var saved = 0
+        vm.saveJournal(sat, "a long day", 4) { saved++ }
+        assertEquals("today's entry is full (20000 characters).", vm.error.value)
+        assertEquals("a long day", drafts.load("journal:2026-11-14"))
+        assertEquals(0, saved)
+    }
+
+    @Test
+    fun journalSavesToTheDateItOpenedOn() = runTest {
+        // Opened on sat 14, saved after midnight: the activity passes the date it captured at open.
+        val opened = LocalDate.of(2026, 11, 14)
+        val vm = vm()
+        vm.keepDraft(PopupViewModel.journalKey(opened), "late night")
+        vm.saveJournal(opened, "late night", 4) {}
+        assertEquals(listOf(Triple<LocalDate, String, Int?>(opened, "late night", 4)), actions.journalSaves)
+        assertEquals("", drafts.load("journal:2026-11-14"))
+        assertEquals(1, redraws)
+    }
 }

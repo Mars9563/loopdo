@@ -48,6 +48,11 @@ import app.loopdo.android.ui.theme.LoopDoType
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        /** Open on a tab ("journal" from the journal pop-up's [open app ↗]). */
+        const val EXTRA_TAB = "tab"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(SystemBarStyle.dark(AndroidColor.TRANSPARENT), SystemBarStyle.dark(AndroidColor.TRANSPARENT))
         super.onCreate(savedInstanceState)
@@ -80,7 +85,7 @@ class MainActivity : ComponentActivity() {
                     StartState.SignedOut -> AuthFlow(graph.auth, graph.google)
                     StartState.SyncingFirstTime -> FirstSyncScreen(rows)
                     StartState.NeedsOnboarding -> OnboardingScreen(graph.onboarding, settingsAlreadySaved = hasSettings)
-                    StartState.Ready -> SignedInApp(graph)
+                    StartState.Ready -> SignedInApp(graph, initialTab = Tab.entries.firstOrNull { it.name.equals(intent.getStringExtra(EXTRA_TAB), ignoreCase = true) } ?: Tab.TODAY)
                 }
             }
         }
@@ -88,8 +93,8 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SignedInApp(graph: AppGraph) {
-    var tab by rememberSaveable { mutableStateOf(Tab.TODAY) }
+private fun SignedInApp(graph: AppGraph, initialTab: Tab = Tab.TODAY) {
+    var tab by rememberSaveable { mutableStateOf(initialTab) }
     val todayVm = viewModel { graph.todayViewModel() }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
