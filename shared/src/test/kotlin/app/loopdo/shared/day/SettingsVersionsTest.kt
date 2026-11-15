@@ -63,4 +63,13 @@ class SettingsVersionsTest {
         val replaced = nextVersion(listOf(base(ist), pending), utc, now.plusSeconds(60))
         assertEquals(nextVersion(listOf(base(ist)), utc, now.plusSeconds(60)), replaced)
     }
+
+    @Test
+    fun dayEndAtFollowsTheHistory() {
+        val versions = listOf(base(ist), DaySettingsVersion(at("2026-11-14T22:30:00Z"), ny, LocalDate.of(2026, 11, 14)))
+        // Sat 14 (IST) ends Sun 04:00 IST, exactly when the New York version takes over.
+        assertEquals(at("2026-11-14T22:30:00Z"), dayEndAt(versions, at("2026-11-14T19:12:00Z")))
+        // Sun 15 (NY) ends Mon 04:00 New York time.
+        assertEquals(at("2026-11-16T09:00:00Z"), dayEndAt(versions, at("2026-11-15T15:00:00Z")))
+    }
 }

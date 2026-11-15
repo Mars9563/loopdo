@@ -44,3 +44,7 @@ fun nextVersion(versions: List<DaySettingsVersion>, new: DaySettings, now: Insta
     val scheduled = scheduleChange(state, new, now)
     return DaySettingsVersion(scheduled.pendingEffectiveAt!!, new, scheduled.pendingFloorDate)
 }
+
+/** When the LoopDo day that [t] belongs to ends, under the settings in force at [t]. */
+fun dayEndAt(versions: List<DaySettingsVersion>, t: Instant): Instant =
+    dayEndInstant(dateResolver(versions)(t), versions.inForceAt(t).settings)

@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.loopdo.android.auth.AuthFlow
+import app.loopdo.android.today.TodayScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
 import app.loopdo.android.onboarding.FirstSyncScreen
 import app.loopdo.android.onboarding.OnboardingScreen
 import app.loopdo.android.onboarding.StartState
@@ -50,6 +52,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(AndroidColor.TRANSPARENT), SystemBarStyle.dark(AndroidColor.TRANSPARENT))
         super.onCreate(savedInstanceState)
         val graph = (application as LoopDoApp).graph
+        val demo = BuildConfig.DEBUG && intent.getBooleanExtra("demo", false)
         setContent {
             LoopDoTheme {
                 val session by graph.auth.session.collectAsStateWithLifecycle()
@@ -57,12 +60,16 @@ class MainActivity : ComponentActivity() {
                 val hasSettings by remember { graph.sync.db.hasDaySettings() }.collectAsStateWithLifecycle(false)
                 val onboarded by remember { graph.sync.db.isOnboarded() }.collectAsStateWithLifecycle(false)
                 val rows by remember { graph.sync.db.localRowCount() }.collectAsStateWithLifecycle(0L)
+                if (demo) {
+                    DemoApp()
+                    return@LoopDoTheme
+                }
                 when (startState(session, hasSynced, hasSettings, onboarded)) {
                     StartState.Loading -> Unit // the tinted wallpaper for a moment while the saved session loads
                     StartState.SignedOut -> AuthFlow(graph.auth, graph.google)
                     StartState.SyncingFirstTime -> FirstSyncScreen(rows)
                     StartState.NeedsOnboarding -> OnboardingScreen(graph.onboarding, settingsAlreadySaved = hasSettings)
-                    StartState.Ready -> SignedInApp(onSignOut = { graph.scope.launch { graph.auth.signOut() } })
+                    StartState.Ready -> SignedInApp(graph, onSignOut = { graph.scope.launch { graph.auth.signOut() } })
                 }
             }
         }
@@ -70,26 +77,29 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SignedInApp(onSignOut: () -> Unit) {
+private fun SignedInApp(graph: AppGraph, onSignOut: () -> Unit) {
     var tab by rememberSaveable { mutableStateOf(Tab.TODAY) }
-    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    val todayVm = viewModel { graph.todayViewModel() }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
-                Tab.TODAY -> Column(Modifier.padding(horizontal = 22.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("~/today", style = LoopDoType.title.copy(color = LoopDoColors.accent), modifier = Modifier.weight(1f))
-                        Bracket("⚙", idle = !settingsOpen) { settingsOpen = !settingsOpen }
-                    }
-                    // Until the M9 settings screen, [⚙] only offers sign out (locked auth-onboarding-v1).
-                    if (settingsOpen) BracketRow(
-                        BracketItem("sign out", primary = true) { settingsOpen = false; onSignOut() },
-                        BracketItem("cancel", idle = true) { settingsOpen = false },
-                    )
-                    // The real today screen arrives in Task 9.
-                }
+                Tab.TODAY -> TodayScreen(todayVm, onSignOut)
                 else -> ComingSoon(tab)
             }
+        }
+        LoopDoNavBar(selected = tab, onSelect = { tab = it })
+    }
+}
+
+/** Debug-only look check: the mockup's sample day, no data access. */
+@Composable
+private fun DemoApp() {
+    var tab by rememberSaveable { mutableStateOf(Tab.TODAY) }
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
+            if (tab == Tab.TODAY) app.loopdo.android.today.TodayContent(
+                remember { app.loopdo.android.today.demoToday() }, null, app.loopdo.android.today.DemoUi, onSignOut = {},
+            ) else ComingSoon(tab)
         }
         LoopDoNavBar(selected = tab, onSelect = { tab = it })
     }

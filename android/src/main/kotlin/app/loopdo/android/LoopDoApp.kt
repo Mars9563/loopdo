@@ -32,6 +32,13 @@ class AppGraph(context: android.content.Context) {
         app.loopdo.android.onboarding.PowerSyncProfileWriter(sync.db) { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
         logFailure = { android.util.Log.w("loopdo_onboarding", "setup failed", it) },
     )
+    private val todayData = app.loopdo.android.today.TodayData(sync.db)
+    private val actions = app.loopdo.android.today.Actions(
+        sync.db, trustedClock, evidence,
+        dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
+        userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+    )
+    fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData, actions) { trustedClock.now().instant }
 }
 
 class LoopDoApp : Application() {
