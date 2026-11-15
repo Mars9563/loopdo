@@ -25,7 +25,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.loopdo.android.auth.AuthFlow
-import app.loopdo.android.auth.AuthState
+import app.loopdo.android.onboarding.FirstSyncScreen
+import app.loopdo.android.onboarding.OnboardingScreen
+import app.loopdo.android.onboarding.StartState
+import app.loopdo.android.onboarding.hasDaySettings
+import app.loopdo.android.onboarding.localRowCount
+import app.loopdo.android.onboarding.startState
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.map
 import app.loopdo.android.ui.nav.LoopDoNavBar
 import app.loopdo.android.ui.nav.Tab
 import app.loopdo.android.ui.placeholder.ComingSoon
@@ -45,10 +52,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             LoopDoTheme {
                 val session by graph.auth.session.collectAsStateWithLifecycle()
-                when (session) {
-                    AuthState.Loading -> Unit // the tinted wallpaper for a moment while the saved session loads
-                    AuthState.SignedOut -> AuthFlow(graph.auth, graph.google)
-                    is AuthState.SignedIn -> SignedInApp(onSignOut = { graph.scope.launch { graph.auth.signOut() } })
+                val hasSynced by remember { graph.sync.db.currentStatus.asFlow().map { it.hasSynced } }.collectAsStateWithLifecycle(null)
+                val hasSettings by remember { graph.sync.db.hasDaySettings() }.collectAsStateWithLifecycle(false)
+                val rows by remember { graph.sync.db.localRowCount() }.collectAsStateWithLifecycle(0L)
+                when (startState(session, hasSynced, hasSettings)) {
+                    StartState.Loading -> Unit // the tinted wallpaper for a moment while the saved session loads
+                    StartState.SignedOut -> AuthFlow(graph.auth, graph.google)
+                    StartState.SyncingFirstTime -> FirstSyncScreen(rows)
+                    StartState.NeedsOnboarding -> OnboardingScreen(graph.onboarding)
+                    StartState.Ready -> SignedInApp(onSignOut = { graph.scope.launch { graph.auth.signOut() } })
                 }
             }
         }

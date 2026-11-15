@@ -21,10 +21,16 @@ class AppGraph(context: android.content.Context) {
     val anchorStore = app.loopdo.android.time.PrefsAnchorStore(context)
     val trustedClock = app.loopdo.android.time.TrustedClock(clocks, anchorStore)
     val evidence = app.loopdo.android.time.EvidenceFactory(clocks, anchorStore)
-    private val timeApi = app.loopdo.android.time.KtorTimeApi(io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp)) {
-        (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.accessToken
+    private val http = io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
+        install(io.ktor.client.plugins.HttpTimeout) { requestTimeoutMillis = 15_000 }
     }
+    private val token = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.accessToken }
+    private val timeApi = app.loopdo.android.time.KtorTimeApi(http, token)
     val sync = app.loopdo.android.sync.SyncModule(context, auth, scope, app.loopdo.android.time.AnchorRefresher(timeApi, anchorStore, clocks))
+    val onboarding = app.loopdo.android.onboarding.Onboarding(
+        app.loopdo.android.onboarding.KtorSettingsApi(http, token),
+        app.loopdo.android.onboarding.PowerSyncProfileWriter(sync.db) { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+    )
 }
 
 class LoopDoApp : Application() {
