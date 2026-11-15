@@ -22,10 +22,11 @@ private val scheme = darkColorScheme(
 
 /** The locked world: wallpaper (from the window) under the dark tint, mono text. */
 @Composable
-fun LoopDoTheme(content: @Composable () -> Unit) {
+fun LoopDoTheme(backdrop: Boolean = true, content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme) {
         CompositionLocalProvider(LocalTextStyle provides LoopDoType.body) {
-            Box(Modifier.fillMaxSize().background(LoopDoColors.tint)) { content() }
+            // Pop-ups over the home screen skip the full-screen tint (their sheet draws its own dim).
+            if (backdrop) Box(Modifier.fillMaxSize().background(LoopDoColors.tint)) { content() } else content()
         }
     }
 }

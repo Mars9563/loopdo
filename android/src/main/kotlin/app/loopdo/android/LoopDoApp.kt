@@ -47,7 +47,7 @@ class AppGraph(context: android.content.Context) {
         logFailure = { android.util.Log.w("loopdo_onboarding", "setup failed", it) },
     )
     private val todayData = app.loopdo.android.today.TodayData(sync.db)
-    private val actions = app.loopdo.android.today.Actions(
+    val actions = app.loopdo.android.today.Actions(
         sync.db, trustedClock, evidence,
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
         userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
@@ -92,6 +92,10 @@ class AppGraph(context: android.content.Context) {
         val built = if (start == app.loopdo.android.onboarding.StartState.Ready) todayData.rows().first().toModel(trustedClock.now().instant) else null
         return app.loopdo.android.widget.widgetState(start, built?.first, built?.second)
     }
+
+    /** Today for a pop-up, or null when the app isn't ready (same gate as the widget). */
+    suspend fun todayForPopup(): app.loopdo.android.today.TodayModel? =
+        if (widgetSnapshot() is app.loopdo.android.widget.WidgetState.Ready) todayData.rows().first().toModel(trustedClock.now().instant)?.first else null
 
     fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
 }

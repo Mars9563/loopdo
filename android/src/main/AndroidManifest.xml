@@ -22,6 +22,16 @@
             </intent-filter>
         </activity>
 
+        <!-- Widget pop-ups: float over the home screen with the keyboard open, never in Recents (M4 Task 1). -->
+        <activity
+            android:name=".popup.AddPopupActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
+
         <!-- The home-screen widget (locked design docs/design/widget). -->
         <receiver
             android:name=".widget.LoopDoWidgetReceiver"

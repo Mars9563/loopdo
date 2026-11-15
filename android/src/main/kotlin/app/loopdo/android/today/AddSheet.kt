@@ -68,6 +68,7 @@ fun AddSheet(
     onText: (String) -> Unit,
     journal: Boolean,
     onJournal: (Boolean) -> Unit,
+    error: String? = null,
     onDismiss: () -> Unit,
     onAddTask: (title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?) -> Unit,
     onAddJournal: (String) -> Unit,
@@ -131,6 +132,8 @@ fun AddSheet(
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
             }
+            // Refusals in red under the field, in plain words (locked style); the text stays.
+            error?.let { Text(it, style = LoopDoType.small.copy(color = LoopDoColors.warn), modifier = Modifier.padding(top = 6.dp)) }
             if (!journal) {
                 Text("WHEN", style = LoopDoType.label, modifier = Modifier.padding(top = 12.dp))
                 FlowRow {
