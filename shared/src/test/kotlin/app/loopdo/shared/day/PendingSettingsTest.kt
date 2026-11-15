@@ -26,19 +26,19 @@ class PendingSettingsTest {
     fun dateNeverDecreasesAcrossSwitch() {
         val st = scheduleChange(DaySettingsState(ist), ny, now)
         val t = st.pendingEffectiveAt!!
-        val before = loopDoDate(t.minusSeconds(1), effectiveSettings(st, t.minusSeconds(1)))
-        val after = loopDoDate(t, effectiveSettings(st, t))
+        val before = currentLoopDoDate(st, t.minusSeconds(1))
+        val after = currentLoopDoDate(st, t)
         assertTrue(after >= before, "date went from $before to $after")
     }
 
     @Test
     fun eastwardJumpNeverDecreases() {
         val st = scheduleChange(DaySettingsState(ny), ist, now)
-        var previous = loopDoDate(now, effectiveSettings(st, now))
+        var previous = currentLoopDoDate(st, now)
         var t = now
         repeat(96) { // every 30 minutes for 48 hours
             t = t.plus(Duration.ofMinutes(30))
-            val date = loopDoDate(t, effectiveSettings(st, t))
+            val date = currentLoopDoDate(st, t)
             assertTrue(date >= previous, "date went from $previous to $date at $t")
             previous = date
         }
@@ -68,5 +68,54 @@ class PendingSettingsTest {
         val st = DaySettingsState(ist)
         assertEquals(ist, effectiveSettings(st, now))
         assertNull(st.pending)
+    }
+
+    private fun assertNeverDecreases(st: DaySettingsState, from: Instant, hours: Long) {
+        var previous = currentLoopDoDate(st, from)
+        var t = from
+        repeat((hours * 4).toInt()) { // every 15 minutes
+            t = t.plus(Duration.ofMinutes(15))
+            val date = currentLoopDoDate(st, t)
+            assertTrue(date >= previous, "date went from $previous to $date at $t")
+            previous = date
+        }
+    }
+
+    // Reviewer finding 1: new settings lagging the old by more than 24 h.
+    @Test
+    fun largeWestwardLagNeverReopens() {
+        val akl = DaySettings(ZoneId.of("Pacific/Auckland"), LocalTime.MIDNIGHT)
+        val la = DaySettings(ZoneId.of("America/Los_Angeles"), LocalTime.of(4, 0))
+        val from = Instant.parse("2026-11-16T00:00:00Z")
+        assertNeverDecreases(scheduleChange(DaySettingsState(akl), la, from), from, 96)
+    }
+
+    @Test
+    fun zoneOnlyLagOverADayNeverReopens() {
+        val kiritimati = DaySettings(ZoneId.of("Pacific/Kiritimati"), LocalTime.of(4, 0))
+        val niue = DaySettings(ZoneId.of("Pacific/Niue"), LocalTime.of(4, 0))
+        val from = Instant.parse("2026-11-16T00:00:00Z")
+        assertNeverDecreases(scheduleChange(DaySettingsState(kiritimati), niue, from), from, 96)
+    }
+
+    @Test
+    fun dayStretchesAtTheSwitch() {
+        val akl = DaySettings(ZoneId.of("Pacific/Auckland"), LocalTime.MIDNIGHT)
+        val la = DaySettings(ZoneId.of("America/Los_Angeles"), LocalTime.of(4, 0))
+        val st = scheduleChange(DaySettingsState(akl), la, Instant.parse("2026-11-16T00:00:00Z"))
+        val t = st.pendingEffectiveAt!!
+        assertEquals(currentLoopDoDate(st, t.minusSeconds(1)), currentLoopDoDate(st, t))
+    }
+
+    @Test
+    fun floorSurvivesTheNextChange() {
+        val akl = DaySettings(ZoneId.of("Pacific/Auckland"), LocalTime.MIDNIGHT)
+        val la = DaySettings(ZoneId.of("America/Los_Angeles"), LocalTime.of(4, 0))
+        val from = Instant.parse("2026-11-16T00:00:00Z")
+        val first = scheduleChange(DaySettingsState(akl), la, from)
+        val afterSwitch = first.pendingEffectiveAt!!.plusSeconds(60)
+        val second = scheduleChange(first, la.copy(dayEnd = LocalTime.of(5, 0)), afterSwitch)
+        assertEquals(currentLoopDoDate(first, afterSwitch), currentLoopDoDate(second, afterSwitch))
+        assertNeverDecreases(second, afterSwitch, 72)
     }
 }
