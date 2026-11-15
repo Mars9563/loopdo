@@ -30,6 +30,7 @@ class AppGraph(context: android.content.Context) {
     val onboarding = app.loopdo.android.onboarding.Onboarding(
         app.loopdo.android.onboarding.KtorSettingsApi(http, token),
         app.loopdo.android.onboarding.PowerSyncProfileWriter(sync.db) { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+        logFailure = { android.util.Log.w("loopdo_onboarding", "setup failed", it) },
     )
 }
 

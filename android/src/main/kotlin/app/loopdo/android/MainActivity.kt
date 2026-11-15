@@ -29,6 +29,7 @@ import app.loopdo.android.onboarding.FirstSyncScreen
 import app.loopdo.android.onboarding.OnboardingScreen
 import app.loopdo.android.onboarding.StartState
 import app.loopdo.android.onboarding.hasDaySettings
+import app.loopdo.android.onboarding.isOnboarded
 import app.loopdo.android.onboarding.localRowCount
 import app.loopdo.android.onboarding.startState
 import androidx.compose.runtime.remember
@@ -54,12 +55,13 @@ class MainActivity : ComponentActivity() {
                 val session by graph.auth.session.collectAsStateWithLifecycle()
                 val hasSynced by remember { graph.sync.db.currentStatus.asFlow().map { it.hasSynced } }.collectAsStateWithLifecycle(null)
                 val hasSettings by remember { graph.sync.db.hasDaySettings() }.collectAsStateWithLifecycle(false)
+                val onboarded by remember { graph.sync.db.isOnboarded() }.collectAsStateWithLifecycle(false)
                 val rows by remember { graph.sync.db.localRowCount() }.collectAsStateWithLifecycle(0L)
-                when (startState(session, hasSynced, hasSettings)) {
+                when (startState(session, hasSynced, hasSettings, onboarded)) {
                     StartState.Loading -> Unit // the tinted wallpaper for a moment while the saved session loads
                     StartState.SignedOut -> AuthFlow(graph.auth, graph.google)
                     StartState.SyncingFirstTime -> FirstSyncScreen(rows)
-                    StartState.NeedsOnboarding -> OnboardingScreen(graph.onboarding)
+                    StartState.NeedsOnboarding -> OnboardingScreen(graph.onboarding, settingsAlreadySaved = hasSettings)
                     StartState.Ready -> SignedInApp(onSignOut = { graph.scope.launch { graph.auth.signOut() } })
                 }
             }

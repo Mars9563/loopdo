@@ -52,3 +52,7 @@ fun PowerSyncDatabase.localRowCount(): Flow<Long> = watch(
     """SELECT (SELECT count(*) FROM habits) + (SELECT count(*) FROM habit_logs) + (SELECT count(*) FROM tasks)
        + (SELECT count(*) FROM journal_entries) + (SELECT count(*) FROM lists) + (SELECT count(*) FROM habit_schedules)""",
 ) { it.getLong(0)!! }.map { it.firstOrNull() ?: 0L }
+
+/** True once the profile says onboarding finished (the name step). */
+fun PowerSyncDatabase.isOnboarded(): Flow<Boolean> =
+    watch("SELECT count(*) FROM profiles WHERE onboarded_at IS NOT NULL") { it.getLong(0)!! }.map { it.firstOrNull() ?: 0L > 0 }

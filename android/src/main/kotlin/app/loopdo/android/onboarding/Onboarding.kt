@@ -20,13 +20,13 @@ sealed interface StartState {
     data object Ready : StartState
 }
 
-fun startState(auth: AuthState, hasSynced: Boolean?, hasSettings: Boolean): StartState = when (auth) {
+fun startState(auth: AuthState, hasSynced: Boolean?, hasSettings: Boolean, onboarded: Boolean): StartState = when (auth) {
     AuthState.Loading -> StartState.Loading
     AuthState.SignedOut -> StartState.SignedOut
     is AuthState.SignedIn -> when {
-        hasSettings -> StartState.Ready // settings already on the phone: usable, even offline
-        hasSynced != true -> StartState.SyncingFirstTime
-        else -> StartState.NeedsOnboarding
+        hasSettings && onboarded -> StartState.Ready // on the phone already: usable, even offline
+        !hasSettings && hasSynced != true -> StartState.SyncingFirstTime
+        else -> StartState.NeedsOnboarding // incl. settings saved but the name step never finished
     }
 }
 
@@ -40,17 +40,26 @@ interface ProfileWriter {
     suspend fun finishOnboarding(displayName: String, at: Instant)
 }
 
-class Onboarding(private val api: SettingsApi, private val profile: ProfileWriter, private val clock: () -> Instant = Instant::now) {
-    suspend fun submit(zone: ZoneId, dayEnd: LocalTime, name: String): Result<Unit> {
+class Onboarding(
+    private val api: SettingsApi,
+    private val profile: ProfileWriter,
+    private val clock: () -> Instant = Instant::now,
+    private val logFailure: (Throwable) -> Unit = {},
+) {
+    suspend fun submit(zone: ZoneId, dayEnd: LocalTime, name: String, settingsAlreadySaved: Boolean = false): Result<Unit> {
         if (dayEnd > LocalTime.of(Limits.DAY_END_MAX_HOUR, 0)) return Result.failure(IllegalArgumentException("the day can end at 08:00 at the latest."))
         if (name.isBlank()) return Result.failure(IllegalArgumentException("tell us what to call you."))
         return try {
-            api.setDaySettings(zone.id, "%02d:%02d".format(dayEnd.hour, dayEnd.minute))
+            // The name first: a local write that can't fail on the network, so a lost
+            // response after the server saved the settings can't leave the profile nameless.
             profile.finishOnboarding(name.trim(), clock())
+            if (!settingsAlreadySaved) api.setDaySettings(zone.id, "%02d:%02d".format(dayEnd.hour, dayEnd.minute))
             Result.success(Unit)
         } catch (e: IOException) {
+            logFailure(e)
             Result.failure(IOException("setup needs a connection once. connect and tap [start] again."))
         } catch (e: IllegalArgumentException) {
+            logFailure(e)
             Result.failure(e)
         }
     }

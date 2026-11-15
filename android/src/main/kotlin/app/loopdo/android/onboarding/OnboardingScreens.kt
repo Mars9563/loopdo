@@ -46,7 +46,7 @@ import java.time.ZoneId
 /** Locked auth-onboarding-v1 screen 3: zone, day end (whole hours), name. Once, can't be skipped. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun OnboardingScreen(onboarding: Onboarding) {
+fun OnboardingScreen(onboarding: Onboarding, settingsAlreadySaved: Boolean = false) {
     var zone by rememberSaveable { mutableStateOf(ZoneId.systemDefault().id) }
     var dayEndHour by rememberSaveable { mutableStateOf(4) }
     var name by rememberSaveable { mutableStateOf("") }
@@ -66,6 +66,7 @@ fun OnboardingScreen(onboarding: Onboarding) {
             Text("~/setup", style = LoopDoType.title.copy(color = LoopDoColors.accent), modifier = Modifier.weight(1f))
             Text("1 time only", style = LoopDoType.small.copy(color = LoopDoColors.dim))
         }
+        if (!settingsAlreadySaved) {
         Text("TIME ZONE", style = LoopDoType.label, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
         Row(
             Modifier.fillMaxWidth().border(1.dp, LoopDoColors.accent.copy(alpha = 0.18f), RoundedCornerShape(12.dp)).padding(start = 12.dp),
@@ -84,6 +85,9 @@ fun OnboardingScreen(onboarding: Onboarding) {
             style = LoopDoType.small.copy(color = LoopDoColors.dim),
             modifier = Modifier.padding(top = 4.dp),
         )
+        } else {
+            Text("your time zone and day end are saved. one last thing:", style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(top = 14.dp))
+        }
         TerminalField("name", name, { name = it }, imeAction = ImeAction.Done)
         Text(
             "you can change these later in [⚙]. changes start when your current day ends, so a closed day never reopens.",
@@ -95,7 +99,7 @@ fun OnboardingScreen(onboarding: Onboarding) {
             Bracket(if (busy) "..." else "start", primary = true, enabled = !busy) {
                 busy = true; error = null
                 scope.launch {
-                    onboarding.submit(ZoneId.of(zone), LocalTime.of(dayEndHour, 0), name).onFailure { error = it.message }
+                    onboarding.submit(ZoneId.of(zone), LocalTime.of(dayEndHour, 0), name, settingsAlreadySaved).onFailure { error = it.message }
                     busy = false // on success the synced settings row moves the app on
                 }
             }
