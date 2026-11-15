@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# loopdo-daily — installed as /usr/local/sbin/loopdo-daily on ubuntu-oracle, run by loopdo-daily.timer.
+#  1. keep-alive: log in to Supabase Auth, hit the LoopDo API (which queries the database)
+#     and open a PowerSync stream, so the free-tier projects never pause for inactivity;
+#  2. backup: pg_dump the Supabase database + CSV of the accounts (read-only role
+#     loopdo_backup) into /var/backups/loopdo/<YYYYMMDD>/, keeping 2 nights; the nightly
+#     restic → B2 backup at 03:00 IST picks the folder up;
+#  3. alert: any failure goes to server-notify (Discord + email through n8n).
+# Secrets: /etc/loopdo/daily.env (600 root). Never printed.
+#   --test-failure   send one test alert and exit 1 (changes nothing)
+set -uo pipefail
+ENV_FILE=/etc/loopdo/daily.env
+OUT=/var/backups/loopdo
+LOG=/var/log/loopdo-daily.log
+PG_IMAGE=postgres:17-alpine
+KEEP=2
+
+log() { echo "$(date -u +%FT%TZ) $*" | tee -a "$LOG"; }
+alert() { /usr/local/sbin/server-notify "$1" failure "LoopDo: $2" "$3" >/dev/null 2>&1 || log "WARN: server-notify failed"; }
+
+if [ "${1:-}" = --test-failure ]; then
+  log "TEST: simulated failure requested with --test-failure"
+  alert health "daily job TEST alert" "Test of the LoopDo daily job's alert path (loopdo-daily --test-failure). Nothing is wrong."
+  exit 1
+fi
+
+set -a; . "$ENV_FILE"; set +a
+
+keepalive() {
+  local token lines
+  token=$(curl -fsS -m 20 -X POST "$LOOPDO_SUPABASE_URL/auth/v1/token?grant_type=password" \
+            -H "apikey: $LOOPDO_PUBLISHABLE_KEY" -H 'Content-Type: application/json' --data-binary @- \
+            <<<"{\"email\":\"$KEEPALIVE_EMAIL\",\"password\":\"$KEEPALIVE_PASSWORD\"}" \
+          | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["access_token"])') \
+    || { echo "Supabase Auth login failed (project paused or down?)"; return 1; }
+  curl -fsS -m 20 -o /dev/null -H "Authorization: Bearer $token" "$LOOPDO_API_URL/api/time" \
+    || { echo "LoopDo API /api/time failed (API down, or its database unreachable)"; return 1; }
+  lines=$( (curl -sS -N -m 10 -X POST "$LOOPDO_POWERSYNC_URL/sync/stream" -H "Authorization: Token $token" \
+              -H 'Content-Type: application/json' -d '{"raw_data":true}' 2>/dev/null || true) | wc -l)
+  [ "$lines" -ge 1 ] || { echo "PowerSync stream returned nothing (instance deactivated or down?)"; return 1; }
+  echo "keepalive OK (auth, api+db, powersync $lines lines)"
+}
+
+backup() {
+  local day dir tables users
+  install -d -m 700 "$OUT"
+  day=$(date -u +%Y%m%d)
+  dir="$OUT/$day"
+  rm -rf "$dir.part"; install -d -m 700 "$dir.part"
+  export PGPASSWORD=$BACKUP_DB_PASSWORD
+  local pg=(docker run --rm -i -e PGPASSWORD "$PG_IMAGE")
+  local conn=(-h "$BACKUP_DB_HOST" -p 5432 -U "$BACKUP_DB_USER" -d postgres)
+  # LoopDo data (public) + migration log and account views (loopdo_meta).
+  "${pg[@]}" pg_dump "${conn[@]}" -Fc -n public -n loopdo_meta > "$dir.part/loopdo.dump" 2>>"$LOG" \
+    || { echo "pg_dump failed"; return 1; }
+  # Accounts (incl. password hashes) through the backup views, so logins can be restored too.
+  for v in auth_users auth_identities; do
+    "${pg[@]}" psql "${conn[@]}" -X -q -v ON_ERROR_STOP=1 \
+      -c "\\copy (select * from loopdo_meta.${v}_backup) to stdout with (format csv, header)" \
+      > "$dir.part/$v.csv" 2>>"$LOG" || { echo "export of $v failed"; return 1; }
+  done
+  unset PGPASSWORD
+  tables=$(docker run --rm -i "$PG_IMAGE" pg_restore --list < "$dir.part/loopdo.dump" | grep -c 'TABLE DATA')
+  users=$(( $(wc -l < "$dir.part/auth_users.csv") - 1 ))
+  [ "$tables" -ge 12 ] || { echo "dump looks incomplete: $tables tables with data (expected >= 12)"; return 1; }
+  [ "$users" -ge 1 ] || { echo "accounts export is empty"; return 1; }
+  rm -rf "$dir"; mv "$dir.part" "$dir"
+  ls -1dt "$OUT"/2*/ | tail -n +$((KEEP + 1)) | xargs -r rm -rf
+  echo "dump OK ($(du -sh "$dir" | cut -f1): $tables tables, $users accounts)"
+}
+
+status=0
+if out=$(keepalive); then log "$out"; else log "keepalive FAILED: $out"; alert health "keep-alive failed" "$out"; status=1; fi
+if out=$(backup); then log "$out"; else log "backup FAILED: $out"; alert backup "database dump failed" "$out (see $LOG)"; status=1; fi
+exit $status

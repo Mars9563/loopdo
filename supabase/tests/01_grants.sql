@@ -43,3 +43,39 @@ select t.expect_error($q$insert into public.habit_logs (user_id, habit_id, loopd
   values ('00000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-00000000000a', '2026-11-14', 1, true, '{}')$q$,
   '42501', 'authenticated writes a verified tick');
 rollback;
+
+-- The nightly backup role can read everything (incl. past RLS) and write nothing.
+do $$ begin
+  if not (select rolbypassrls and rolcanlogin from pg_roles where rolname = 'loopdo_backup') then
+    raise exception 'FAIL grants: loopdo_backup must LOGIN with BYPASSRLS';
+  end if;
+  if not has_table_privilege('loopdo_backup', 'public.habit_logs', 'select')
+     or not has_table_privilege('loopdo_backup', 'loopdo_meta.schema_migrations', 'select') then
+    raise exception 'FAIL grants: loopdo_backup cannot read LoopDo tables';
+  end if;
+  if has_table_privilege('loopdo_backup', 'public.habit_logs', 'insert,update,delete') then
+    raise exception 'FAIL grants: loopdo_backup must be read-only';
+  end if;
+end $$;
+
+-- Accounts are backed up through views owned by postgres (no direct access to the auth schema).
+do $$ begin
+  if to_regclass('loopdo_meta.auth_users_backup') is null then
+    raise exception 'FAIL grants: loopdo_meta.auth_users_backup view missing';
+  end if;
+  if not has_table_privilege('loopdo_backup', 'loopdo_meta.auth_users_backup', 'select') then
+    raise exception 'FAIL grants: loopdo_backup cannot read the accounts backup view';
+  end if;
+  if has_table_privilege('authenticated', 'loopdo_meta.auth_users_backup', 'select')
+     or has_table_privilege('anon', 'loopdo_meta.auth_users_backup', 'select') then
+    raise exception 'FAIL grants: API roles can read the accounts backup view';
+  end if;
+end $$;
+begin;
+set local role loopdo_backup;
+do $$ begin
+  if (select count(*) from loopdo_meta.auth_users_backup) < 2 then
+    raise exception 'FAIL grants: loopdo_backup does not see the users through the view';
+  end if;
+end $$;
+rollback;

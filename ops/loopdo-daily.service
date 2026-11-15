@@ -1,0 +1,8 @@
+[Unit]
+Description=LoopDo daily keep-alive + Supabase dump (see /usr/local/sbin/loopdo-daily)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/loopdo-daily

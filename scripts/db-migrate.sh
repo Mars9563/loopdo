@@ -15,14 +15,14 @@ DB_URL=$(value "$cfg/supabase.env" SUPABASE_DB_URL)
 [ -n "$DB_URL" ] || { echo "SUPABASE_DB_URL missing in $cfg/supabase.env" >&2; exit 1; }
 
 roles="$cfg/roles.env"
-if [ ! -f "$roles" ]; then
-  umask 077
-  {
-    echo "LOOPDO_API_PASSWORD=$(openssl rand -hex 24)"
-    echo "POWERSYNC_PASSWORD=$(openssl rand -hex 24)"
-  } > "$roles"
-  echo "generated role passwords in $roles"
-fi
+umask 077
+touch "$roles"
+for k in LOOPDO_API_PASSWORD POWERSYNC_PASSWORD LOOPDO_BACKUP_PASSWORD; do
+  if ! grep -q "^$k=" "$roles"; then
+    echo "$k=$(openssl rand -hex 24)" >> "$roles"
+    echo "generated $k in $roles"
+  fi
+done
 
 run() { PGCONNECT_TIMEOUT=20 PGOPTIONS='-c client_min_messages=warning' psql -X -q -v ON_ERROR_STOP=1 "$DB_URL" "$@"; }
 
@@ -49,8 +49,10 @@ done
 # Role passwords (idempotent; via stdin so they never show in process lists).
 api_pw=$(value "$roles" LOOPDO_API_PASSWORD)
 ps_pw=$(value "$roles" POWERSYNC_PASSWORD)
+backup_pw=$(value "$roles" LOOPDO_BACKUP_PASSWORD)
 run <<SQL
 alter role loopdo_api password '$api_pw';
 alter role powersync_role password '$ps_pw';
+alter role loopdo_backup password '$backup_pw';
 SQL
 echo "role passwords set"
