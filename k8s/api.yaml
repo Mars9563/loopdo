@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loopdo-api
+  namespace: loopdo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loopdo-api
+  template:
+    metadata:
+      labels:
+        app: loopdo-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: loopdo-api
+          image: ghcr.io/mars9563/loopdo-api:initial
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: '8080'
+          envFrom:
+            - secretRef:
+                name: loopdo-api-env
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 384Mi
+          startupProbe:
+            httpGet: { path: /health, port: 8080 }
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loopdo-api
+  namespace: loopdo
+spec:
+  type: NodePort
+  selector:
+    app: loopdo-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30084

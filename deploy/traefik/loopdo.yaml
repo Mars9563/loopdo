@@ -1,0 +1,23 @@
+# Installed on the server as /data/coolify/proxy/dynamic/loopdo.yaml (Traefik file provider).
+http:
+  middlewares:
+    loopdo-redirect-to-https:
+      redirectScheme:
+        scheme: https
+  routers:
+    loopdo-api-http:
+      entryPoints: [http]
+      rule: Host(`loopdo.mrsdev.in`)
+      middlewares: [loopdo-redirect-to-https]
+      service: loopdo-api
+    loopdo-api-https:
+      entryPoints: [https]
+      rule: Host(`loopdo.mrsdev.in`)
+      service: loopdo-api
+      tls:
+        certResolver: letsencrypt
+  services:
+    loopdo-api:
+      loadBalancer:
+        servers:
+          - url: 'http://host.docker.internal:30084'

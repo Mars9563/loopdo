@@ -1,0 +1,37 @@
+# PowerSync Sync Streams for LoopDo (paste into the PowerSync Cloud dashboard).
+# Every signed-in user receives exactly their own rows of each table.
+# Writes never go through PowerSync: the phone uploads to the LoopDo API.
+config:
+  edition: 3
+
+streams:
+  profile:
+    auto_subscribe: true
+    query: SELECT * FROM profiles WHERE id = auth.user_id()
+  day_settings_versions:
+    auto_subscribe: true
+    query: SELECT * FROM day_settings_versions WHERE user_id = auth.user_id()
+  habits:
+    auto_subscribe: true
+    query: SELECT * FROM habits WHERE user_id = auth.user_id()
+  habit_schedules:
+    auto_subscribe: true
+    query: SELECT * FROM habit_schedules WHERE user_id = auth.user_id()
+  habit_logs:
+    auto_subscribe: true
+    query: SELECT * FROM habit_logs WHERE user_id = auth.user_id()
+  lists:
+    auto_subscribe: true
+    query: SELECT * FROM lists WHERE user_id = auth.user_id()
+  tasks:
+    auto_subscribe: true
+    query: SELECT * FROM tasks WHERE user_id = auth.user_id()
+  subtasks:
+    auto_subscribe: true
+    query: SELECT * FROM subtasks WHERE user_id = auth.user_id()
+  journal_entries:
+    auto_subscribe: true
+    query: SELECT * FROM journal_entries WHERE user_id = auth.user_id()
+  journal_photos:
+    auto_subscribe: true
+    query: SELECT * FROM journal_photos WHERE user_id = auth.user_id()
