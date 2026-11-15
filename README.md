@@ -1,4 +1,4 @@
-# LoopDo
+# loopdo_
 
 A local-first Android app for to-dos, habits and a daily journal, with streaks, heatmaps and a home-screen widget. A day can only be ticked off while it is that day, using your own day boundary.
 
