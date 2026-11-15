@@ -145,4 +145,16 @@ class AuthRepositoryTest {
         assertEquals("no connection. signing out needs the network.", auth.signOut().exceptionOrNull()?.message)
         assertIs<AuthState.SignedIn>(auth.session.value)
     }
+
+    @Test
+    fun backgroundingKeepsTheSessionSignedIn() = runTest(UnconfinedTestDispatcher()) {
+        // supabase-kt's Android lifecycle hook sets "Initializing" when the app goes to the background
+        // (M4 Task 8): the widget and background sync must still see the signed-in user.
+        val b = FakeBackend(); val auth = repo(b, this)
+        auth.signIn("kaze@example.com", "correct-horse")
+        b.status.value = BackendStatus.Loading
+        assertEquals(AuthState.SignedIn(b.userId, "token-${b.userId}"), auth.session.value)
+        b.status.value = BackendStatus.SignedOut // a real sign-out still signs out
+        assertIs<AuthState.SignedOut>(auth.session.value)
+    }
 }

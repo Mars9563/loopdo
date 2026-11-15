@@ -23,7 +23,6 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
-import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -54,8 +53,6 @@ internal val RULE = Color(0x2EBED7FF)
 
 /** Height of a habit/task row; the checkbox and `[+1]` fill it. Tuned against the locked mockup. */
 internal const val ROW_DP = 40
-/** Rows beyond this show as "+n more" (each row is a few images; launchers cap widget image memory). */
-internal const val MAX_ROWS = 40
 private val PAD = 16.dp
 
 class LoopDoWidget : GlanceAppWidget() {
@@ -124,18 +121,19 @@ private fun ColumnScope.Ready(m: WidgetModel, size: DpSize) {
     }
     DashedRule(inner)
 
-    val habits = m.habits.take(MAX_ROWS)
-    val tasks = m.tasks.take(MAX_ROWS - habits.size)
-    val more = m.habits.size + m.tasks.size - habits.size - tasks.size
-    LazyColumn(GlanceModifier.defaultWeight().fillMaxWidth()) {
-        item { Label("HABITS", "${m.habitsDone}/${m.habitsTotal}") }
-        if (habits.isEmpty()) item { Hint("no habits due today.") }
-        items(habits.size, itemId = { 1_000L + it }) { i -> RowView(habits[i], m.date, inner) }
-        item { Label("TASKS", "${m.tasksOpen}") }
-        if (tasks.isEmpty()) item { Hint("nothing due today.") }
-        items(tasks.size, itemId = { 100_000L + it }) { i -> RowView(tasks[i], m.date, inner) }
-        if (more > 0) item {
-            Box(GlanceModifier.height(ROW_DP.dp).clickable(openApp), contentAlignment = Alignment.CenterStart) { MonoText("+$more more", DIM) }
+    val scale = LocalContext.current.resources.configuration.fontScale
+    val hints = (if (m.habits.isEmpty()) 1 else 0) + (if (m.tasks.isEmpty()) 1 else 0)
+    val fit = fitRows(m.habits.size, m.tasks.size, rowSlots(size.height.value, scale) - hints)
+    // Plain rows, no scrolling list: each checkbox keeps its own tap target (see fitRows).
+    Column(GlanceModifier.defaultWeight().fillMaxWidth()) {
+        Label("HABITS", "${m.habitsDone}/${m.habitsTotal}")
+        if (m.habits.isEmpty()) Hint("no habits due today.")
+        RowGroups(m.habits.take(fit.habits), m.date, inner)
+        Label("TASKS", "${m.tasksOpen}")
+        if (m.tasks.isEmpty()) Hint("nothing due today.")
+        RowGroups(m.tasks.take(fit.tasks), m.date, inner)
+        if (fit.more > 0) Box(GlanceModifier.height(ROW_DP.dp).clickable(openApp), contentAlignment = Alignment.CenterStart) {
+            MonoText("+${fit.more} more", DIM)
         }
     }
 
@@ -150,6 +148,15 @@ private fun ColumnScope.Ready(m: WidgetModel, size: DpSize) {
             if (m.journalWritten) MonoText("[✓ journal]", TEXT)
             else Row(verticalAlignment = Alignment.CenterVertically) { MonoText("[✎ journal]", TEXT); MonoText("●", WARN) }
         }
+    }
+}
+
+/** Glance allows at most 10 children per Row/Column, so rows go in groups of 10. */
+@Composable
+private fun RowGroups(rows: List<WidgetRow>, date: LocalDate, inner: Dp) {
+    if (rows.isEmpty()) return
+    Column(GlanceModifier.fillMaxWidth()) {
+        rows.chunked(10).forEach { chunk -> Column(GlanceModifier.fillMaxWidth()) { chunk.forEach { RowView(it, date, inner) } } }
     }
 }
 

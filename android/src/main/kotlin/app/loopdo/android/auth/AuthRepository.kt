@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -20,8 +21,14 @@ sealed interface AuthState {
 class AuthProblem(message: String) : Exception(message)
 
 class AuthRepository(private val backend: AuthBackend, scope: CoroutineScope) {
+    /**
+     * Once signed in, a later "loading" is not a sign-out: supabase-kt's Android lifecycle hook
+     * reports "Initializing" whenever the app goes to the background. Only a real sign-out (or a
+     * refresh failure without a stored session) leaves SignedIn.
+     */
     val session: StateFlow<AuthState> = backend.status
         .map { it.toState() }
+        .scan(backend.status.value.toState()) { prev, next -> if (next is AuthState.Loading && prev is AuthState.SignedIn) prev else next }
         .stateIn(scope, SharingStarted.Eagerly, backend.status.value.toState())
 
     suspend fun signIn(email: String, password: String) = attempt { backend.signInWithPassword(email.trim(), password) }

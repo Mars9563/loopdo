@@ -26,7 +26,13 @@ class AppGraph(context: android.content.Context) {
         SupervisorJob() + Dispatchers.Default +
             kotlinx.coroutines.CoroutineExceptionHandler { _, e -> android.util.Log.e("loopdo", "background job failed", e) },
     )
-    val supabase = createSupabaseClient(AppConfig.supabaseUrl, AppConfig.publishableKey) { install(Auth) }
+    val supabase = createSupabaseClient(AppConfig.supabaseUrl, AppConfig.publishableKey) {
+        install(Auth) {
+            // Off: on Android it stops token refresh and reports "Initializing" whenever the app is in the
+            // background, which stalled background sync and blanked the widget (M4 Task 8).
+            enableLifecycleCallbacks = false
+        }
+    }
     val auth = AuthRepository(SupabaseAuthBackend(supabase, scope), scope)
     val google = GoogleSignIn(AppConfig.googleWebClientId)
     val clocks = app.loopdo.android.time.AndroidDeviceClocks(context)

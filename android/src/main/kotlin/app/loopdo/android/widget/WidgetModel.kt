@@ -71,3 +71,28 @@ fun widgetState(start: StartState, today: TodayModel?, dayEndAt: Instant?): Widg
  */
 fun widgetStates(changes: kotlinx.coroutines.flow.Flow<Unit>, snapshot: suspend () -> WidgetState): kotlinx.coroutines.flow.Flow<WidgetState> =
     changes.onStart { emit(Unit) }.conflate().map { snapshot() }
+
+/** How many habit and task rows the widget shows, and how many are left for "+n more". */
+data class Fit(val habits: Int, val tasks: Int, val more: Int)
+
+/**
+ * The widget has no scrolling list (owner, 2026-11-15: Android's recycled list rows once ticked the
+ * wrong item). Rows fill [slots] in list order; on overflow the last slot says "+n more".
+ */
+fun fitRows(habits: Int, tasks: Int, slots: Int): Fit {
+    val total = habits + tasks
+    if (total <= slots) return Fit(habits, tasks, 0)
+    val shown = (slots - 1).coerceAtLeast(0)
+    val h = minOf(habits, shown)
+    val t = minOf(tasks, shown - h)
+    return Fit(h, t, total - h - t)
+}
+
+/**
+ * Row slots in a widget [heightDp] tall. Fixed parts: panel padding 28, rules 1, bottom bar 55,
+ * safety 8 (= 92 dp), plus text that grows with the font scale: header 17, streak line 23 and the
+ * two section labels 24 each (= 88 dp at scale 1).
+ */
+fun rowSlots(heightDp: Float, fontScale: Float): Int =
+    ((heightDp - 92f - 88f * fontScale) / ROW_DP).toInt().coerceAtLeast(0)
+
