@@ -44,3 +44,17 @@ class Db(private val dataSource: DataSource) {
 /** SQLSTATE class 08 = connection exception; 57P = server shutting down. */
 private fun SQLException.isConnectionProblem(): Boolean =
     this is SQLTransientConnectionException || sqlState?.startsWith("08") == true || sqlState?.startsWith("57P") == true
+
+/** The signed-in user's day-settings history (RLS limits it to their rows). */
+fun loadDaySettingsVersions(c: Connection): List<app.loopdo.shared.day.DaySettingsVersion> =
+    c.prepareStatement("select effective_at, time_zone, day_end, floor_date from public.day_settings_versions").use { st ->
+        st.executeQuery().use { rs ->
+            buildList {
+                while (rs.next()) add(app.loopdo.shared.day.DaySettingsVersion(
+                    rs.getTimestamp(1).toInstant(),
+                    app.loopdo.shared.day.DaySettings(java.time.ZoneId.of(rs.getString(2)), rs.getObject(3, java.time.LocalTime::class.java)),
+                    rs.getObject(4, java.time.LocalDate::class.java),
+                ))
+            }
+        }
+    }

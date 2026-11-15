@@ -1,5 +1,7 @@
 package app.loopdo.server
 
+import app.loopdo.server.routes.photoRoutes
+import app.loopdo.server.routes.settingsRoutes
 import app.loopdo.server.routes.timeRoutes
 import app.loopdo.server.routes.uploadRoutes
 import com.auth0.jwk.JwkProviderBuilder
@@ -31,6 +33,7 @@ class Deps(
     val jwkProvider: com.auth0.jwk.JwkProvider,
     val issuer: String,
     val anchorSecret: ByteArray,
+    val photos: PhotoUrls? = null,
     val clock: () -> Instant = Instant::now,
 )
 
@@ -55,6 +58,8 @@ fun Application.loopdoModule(deps: Deps) {
             authenticate(AUTH) {
                 timeRoutes(deps)
                 uploadRoutes(deps)
+                settingsRoutes(deps)
+                photoRoutes(deps)
             }
         }
     }
@@ -74,6 +79,6 @@ fun main() {
         .cached(10, 24, TimeUnit.HOURS)
         .rateLimited(10, 1, TimeUnit.MINUTES)
         .build()
-    val deps = Deps(Db(dataSource), jwks, config.issuer, config.anchorSecret)
+    val deps = Deps(Db(dataSource), jwks, config.issuer, config.anchorSecret, PhotoUrls(config.r2))
     embeddedServer(Netty, port = config.port) { loopdoModule(deps) }.start(wait = true)
 }

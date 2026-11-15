@@ -1,6 +1,6 @@
 package app.loopdo.server.upload
 
-import app.loopdo.shared.day.DaySettings
+import app.loopdo.server.loadDaySettingsVersions
 import app.loopdo.shared.day.DaySettingsVersion
 import app.loopdo.shared.day.dateResolver
 import app.loopdo.shared.time.ClaimResult
@@ -22,8 +22,6 @@ import java.sql.ResultSet
 import java.sql.SQLException
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
-import java.time.ZoneId
 import java.util.UUID
 
 /** One PowerSync CrudEntry, as the phone uploads it. */
@@ -59,19 +57,7 @@ class Applier(
     private val anchorSecret: ByteArray,
     private val now: Instant,
 ) {
-    private val versions: List<DaySettingsVersion> by lazy {
-        c.prepareStatement("select effective_at, time_zone, day_end, floor_date from public.day_settings_versions").use { st ->
-            st.executeQuery().use { rs ->
-                buildList {
-                    while (rs.next()) add(DaySettingsVersion(
-                        rs.getTimestamp(1).toInstant(),
-                        DaySettings(ZoneId.of(rs.getString(2)), rs.getObject(3, LocalTime::class.java)),
-                        rs.getObject(4, LocalDate::class.java),
-                    ))
-                }
-            }
-        }
-    }
+    private val versions: List<DaySettingsVersion> by lazy { loadDaySettingsVersions(c) }
 
     private fun dateAt(i: Int): (Instant) -> LocalDate {
         if (versions.isEmpty()) throw Rejected("SETTINGS_REQUIRED", i)

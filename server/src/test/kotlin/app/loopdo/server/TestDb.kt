@@ -13,6 +13,8 @@ import java.util.UUID
 object TestDb {
     val userA: UUID = UUID.fromString("00000000-0000-0000-0000-00000000000a")
     val userB: UUID = UUID.fromString("00000000-0000-0000-0000-00000000000b")
+    /** A brand-new user with no day settings yet (onboarding). */
+    val userC: UUID = UUID.fromString("00000000-0000-0000-0000-00000000000c")
     val habitA: UUID = UUID.fromString("10000000-0000-0000-0000-00000000000a")
     val habitB: UUID = UUID.fromString("10000000-0000-0000-0000-00000000000b")
 
@@ -52,7 +54,8 @@ object TestDb {
         psql(c, "supabase_admin", """
             insert into auth.users (id, email, aud, role) values
               ('$userA', 'a@test.local', 'authenticated', 'authenticated'),
-              ('$userB', 'b@test.local', 'authenticated', 'authenticated');
+              ('$userB', 'b@test.local', 'authenticated', 'authenticated'),
+              ('$userC', 'c@test.local', 'authenticated', 'authenticated');
             insert into public.habits (id, user_id, title, kind, target) values
               ('$habitA', '$userA', 'meditate', 'yes_no', 1),
               ('$habitB', '$userB', 'gym', 'yes_no', 1);

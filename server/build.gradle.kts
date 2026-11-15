@@ -31,6 +31,11 @@ dependencies {
     implementation(libs.postgresql)
     implementation(libs.hikari)
     implementation(libs.logback)
+    // Only the offline URL presigner is used; drop the SDK's HTTP clients.
+    implementation(libs.awssdk.s3) {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+        exclude(group = "software.amazon.awssdk", module = "apache-client")
+    }
 
     testImplementation(kotlin("test"))
     testImplementation(libs.ktor.server.test.host)
