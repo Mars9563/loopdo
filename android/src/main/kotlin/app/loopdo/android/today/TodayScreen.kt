@@ -28,7 +28,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
@@ -97,10 +99,19 @@ fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -
                 .shadow(10.dp, RoundedCornerShape(16.dp))
                 .background(Color(0xEB182438), RoundedCornerShape(16.dp))
                 .border(1.dp, LoopDoColors.accent.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .clickable(role = Role.Button) { adding = true }
-                .heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+                .height(48.dp).padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Text("[+ add]", style = LoopDoType.control.copy(color = LoopDoColors.accent, fontWeight = FontWeight.SemiBold))
+            // Centre the glyphs, not the line box: JetBrains Mono has more room below than above.
+            Text(
+                "[+ add]",
+                style = LoopDoType.control.copy(
+                    color = LoopDoColors.accent, fontWeight = FontWeight.SemiBold,
+                    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+                ),
+            )
         }
 
         snack?.let { s ->
