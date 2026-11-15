@@ -20,7 +20,12 @@ import java.time.Instant
  * signing in clears the previous one's local data first; signing out only disconnects,
  * so changes not yet uploaded are never lost.
  */
-class SyncModule(context: Context, private val auth: AuthRepository, scope: CoroutineScope) {
+class SyncModule(
+    context: Context,
+    private val auth: AuthRepository,
+    scope: CoroutineScope,
+    private val anchors: app.loopdo.android.time.AnchorRefresher? = null,
+) {
     val db: PowerSyncDatabase = PowerSyncDatabase(DatabaseDriverFactory(context), LoopDoSchema.schema, dbFilename = "loopdo.db")
     private val prefs = context.getSharedPreferences("loopdo_sync", Context.MODE_PRIVATE)
     private val http = HttpClient(OkHttp) { install(HttpTimeout) { requestTimeoutMillis = 15_000 } }
@@ -45,7 +50,7 @@ class SyncModule(context: Context, private val auth: AuthRepository, scope: Coro
                             prefs.edit().putString(LAST_USER, user).apply()
                             Log.i("loopdo_sync", "connecting")
                             db.connect(connector)
-                            Log.i("loopdo_sync", "connect() returned")
+                            refreshAnchor()
                         }
                         AuthState.SignedOut -> db.disconnect()
                         AuthState.Loading -> Unit
@@ -58,6 +63,18 @@ class SyncModule(context: Context, private val auth: AuthRepository, scope: Coro
             }
         }
     }
+
+    /** Fresh signed server time (anchors come only from /api/time). Offline is fine: the old anchor stays. */
+    fun refreshAnchor() {
+        val r = anchors ?: return
+        anchorScope.launch {
+            runCatching { r.refresh() }
+                .onSuccess { Log.i("loopdo_sync", "time anchor refreshed") }
+                .onFailure { Log.i("loopdo_sync", "time anchor not refreshed: ${it.message}") }
+        }
+    }
+
+    private val anchorScope = scope
 
     private companion object {
         const val LAST_USER = "last_user_id"

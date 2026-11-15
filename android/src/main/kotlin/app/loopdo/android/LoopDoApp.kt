@@ -17,7 +17,14 @@ class AppGraph(context: android.content.Context) {
     val supabase = createSupabaseClient(AppConfig.supabaseUrl, AppConfig.publishableKey) { install(Auth) }
     val auth = AuthRepository(SupabaseAuthBackend(supabase, scope), scope)
     val google = GoogleSignIn(AppConfig.googleWebClientId)
-    val sync = app.loopdo.android.sync.SyncModule(context, auth, scope)
+    val clocks = app.loopdo.android.time.AndroidDeviceClocks(context)
+    val anchorStore = app.loopdo.android.time.PrefsAnchorStore(context)
+    val trustedClock = app.loopdo.android.time.TrustedClock(clocks, anchorStore)
+    val evidence = app.loopdo.android.time.EvidenceFactory(clocks, anchorStore)
+    private val timeApi = app.loopdo.android.time.KtorTimeApi(io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp)) {
+        (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.accessToken
+    }
+    val sync = app.loopdo.android.sync.SyncModule(context, auth, scope, app.loopdo.android.time.AnchorRefresher(timeApi, anchorStore, clocks))
 }
 
 class LoopDoApp : Application() {
