@@ -18,11 +18,11 @@ import app.loopdo.android.ui.theme.LoopDoType
 /** Locked "not built yet" screen (auth-onboarding-v1, screen 5). */
 @Composable
 fun ComingSoon(tab: Tab) {
-    val (milestone, what) = when (tab) {
-        Tab.HABITS -> "M5" to "the habits list, heatmaps and the habit editor arrive in the next builds (M5). your habits already sync, and you can tick them on [today]."
-        Tab.JOURNAL -> "M6" to "the journal feed, calendar, photos and on-this-day arrive in the next builds (M6). journal lines you add from [+ add] are already saved."
-        Tab.STATS -> "M8" to "year in pixels, the weekly review and mood vs habits arrive in a later build (M8)."
-        Tab.TODAY -> "" to ""
+    val what = when (tab) {
+        Tab.HABITS -> "the habits list, heatmaps and the habit editor arrive in the next builds (M5). your habits already sync, and you can tick them on [today]."
+        Tab.JOURNAL -> "the journal feed, calendar, photos and on-this-day arrive in the next builds (M6). journal lines you add from [+ add] are already saved."
+        Tab.STATS -> "year in pixels, the weekly review and mood vs habits arrive in a later build (M8)."
+        Tab.TODAY -> ""
     }
     Column(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) {
         Text("~/${tab.label}", style = LoopDoType.title.copy(color = LoopDoColors.accent))
@@ -33,6 +33,5 @@ fun ComingSoon(tab: Tab) {
         }, style = LoopDoType.body.copy(color = LoopDoColors.bright))
         Spacer(Modifier.height(8.dp))
         Text(what, style = LoopDoType.small.copy(color = LoopDoColors.dim))
-        if (milestone.isEmpty()) Unit
     }
 }
