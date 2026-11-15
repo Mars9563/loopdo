@@ -12,11 +12,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
 
 /** Manual dependency graph: one of each, alive for the app's lifetime. */
-class AppGraph {
+class AppGraph(context: android.content.Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val supabase = createSupabaseClient(AppConfig.supabaseUrl, AppConfig.publishableKey) { install(Auth) }
     val auth = AuthRepository(SupabaseAuthBackend(supabase, scope), scope)
     val google = GoogleSignIn(AppConfig.googleWebClientId)
+    val sync = app.loopdo.android.sync.SyncModule(context, auth, scope)
 }
 
 class LoopDoApp : Application() {
@@ -25,6 +26,6 @@ class LoopDoApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        graph = AppGraph()
+        graph = AppGraph(this)
     }
 }

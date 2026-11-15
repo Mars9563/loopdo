@@ -1,0 +1,103 @@
+package app.loopdo.android.sync
+
+import kotlinx.coroutines.test.runTest
+import java.io.IOException
+import java.time.Duration
+import java.time.Instant
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+private class FakeTx(override val id: Int, override val ops: List<PendingOp>) : PendingTransaction {
+    var completed = false
+    override suspend fun complete() { completed = true }
+}
+
+private class FakeApi(var reply: () -> HttpResult) : UploadApi {
+    val bodies = mutableListOf<kotlinx.serialization.json.JsonObject>()
+    override suspend fun upload(body: kotlinx.serialization.json.JsonObject): HttpResult { bodies += body; return reply() }
+}
+
+private class MemoryDrafts : DraftStore {
+    val saved = mutableListOf<Draft>()
+    override suspend fun save(kind: String, payload: String, reason: String) { saved += Draft(kind, payload, reason) }
+}
+
+private class MemoryState : UploadState {
+    val first = mutableMapOf<Int, Instant>()
+    override suspend fun firstFailure(txId: Int) = first[txId]
+    override suspend fun markFailure(txId: Int, at: Instant) { first.putIfAbsent(txId, at) }
+    override suspend fun clear(txId: Int) { first.remove(txId) }
+}
+
+class UploaderTest {
+    private var now = Instant.parse("2026-11-15T10:00:00Z")
+    private val journalOp = PendingOp("PUT", "journal_entries", "j-1", mapOf("loopdo_date" to "2026-11-15", "text" to "pizza was good"))
+    private val habitOp = PendingOp("PUT", "habits", "h-1", mapOf("title" to "gym", "kind" to "yes_no", "target" to 1L))
+
+    private fun uploader(api: UploadApi, drafts: DraftStore = MemoryDrafts(), state: UploadState = MemoryState()) =
+        Uploader(api, drafts, state) { now }
+
+    @Test
+    fun oneTransactionPerUpload() = runTest {
+        val api = FakeApi { HttpResult(200, """{"applied":2}""") }
+        val tx = FakeTx(1, listOf(habitOp, journalOp))
+        uploader(api).upload(tx)
+        assertEquals(1, api.bodies.size)
+        assertEquals(2, (api.bodies.single()["ops"] as kotlinx.serialization.json.JsonArray).size)
+        assertTrue(tx.completed)
+    }
+
+    @Test
+    fun rejectedTransactionTextBecomesDraft() = runTest {
+        val drafts = MemoryDrafts()
+        val tx = FakeTx(2, listOf(journalOp))
+        uploader(FakeApi { HttpResult(422, """{"code":"BAD_OP","opIndex":0}""") }, drafts).upload(tx)
+        assertTrue(tx.completed) // discarded from the queue...
+        assertEquals(listOf(Draft("journal_entries.text", "pizza was good", "BAD_OP")), drafts.saved) // ...but the words are kept
+    }
+
+    @Test
+    fun rejectionWithoutTypedTextSavesNoDraft() = runTest {
+        val drafts = MemoryDrafts()
+        val tick = PendingOp("PUT", "habit_logs", "l-1", mapOf("count" to 1L, "evidence" to "{}"))
+        uploader(FakeApi { HttpResult(422, """{"code":"BACKDATED","opIndex":0}""") }, drafts).upload(FakeTx(3, listOf(tick)))
+        assertTrue(drafts.saved.isEmpty())
+    }
+
+    @Test
+    fun retryLaterDoesNotComplete() = runTest {
+        val tx = FakeTx(4, listOf(habitOp))
+        assertFailsWith<RetryLater> { uploader(FakeApi { HttpResult(503, null) }).upload(tx) }
+        assertFalse(tx.completed)
+        assertFailsWith<RetryLater> { uploader(FakeApi { throw IOException("offline") }).upload(tx) }
+        assertFalse(tx.completed)
+    }
+
+    @Test
+    fun serverBugBecomesDraftAfter24h() = runTest {
+        val drafts = MemoryDrafts(); val state = MemoryState()
+        val api = FakeApi { HttpResult(500, "boom") }
+        val tx = FakeTx(5, listOf(journalOp))
+        assertFailsWith<RetryLater> { uploader(api, drafts, state).upload(tx) } // first failure: retry
+        now = now.plus(Duration.ofHours(23))
+        assertFailsWith<RetryLater> { uploader(api, drafts, state).upload(tx) } // still within a day
+        now = now.plus(Duration.ofHours(2))
+        uploader(api, drafts, state).upload(tx) // a day on: set aside so the queue moves
+        assertTrue(tx.completed)
+        assertEquals("SERVER_ERROR", drafts.saved.single().reason)
+    }
+
+    @Test
+    fun successAfterFailuresClearsState() = runTest {
+        val state = MemoryState(); var status = 500
+        val api = FakeApi { HttpResult(status, null) }
+        val tx = FakeTx(6, listOf(habitOp))
+        assertFailsWith<RetryLater> { uploader(api, state = state).upload(tx) }
+        status = 200
+        uploader(api, state = state).upload(tx)
+        assertTrue(state.first.isEmpty())
+    }
+}
