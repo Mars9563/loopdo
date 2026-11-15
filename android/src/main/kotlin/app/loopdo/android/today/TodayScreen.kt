@@ -48,16 +48,7 @@ import app.loopdo.android.ui.theme.LoopDoColors
 import app.loopdo.android.ui.theme.LoopDoType
 import app.loopdo.shared.habit.HabitKind
 import kotlinx.coroutines.delay
-import java.time.Duration
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
-private val dayFmt = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
-internal fun LocalDate.short() = format(dayFmt).lowercase(Locale.ENGLISH)
-
-/** `3h18m`, or `42m` in the last hour. */
-internal fun Duration.countdown(): String = toMinutes().let { if (it >= 60) "${it / 60}h${it % 60}m" else "${it}m" }
 
 /** Locked screen 1 (docs/design/app/app-screens-v2.html). */
 @Composable
