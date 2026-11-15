@@ -25,19 +25,23 @@ class SyncModule(
     private val auth: AuthRepository,
     scope: CoroutineScope,
     private val anchors: app.loopdo.android.time.AnchorRefresher? = null,
+    /** Trusted time, so the 24 h server-error patience can't be skipped by changing the phone's clock. */
+    now: () -> Instant = Instant::now,
 ) {
     val db: PowerSyncDatabase = PowerSyncDatabase(DatabaseDriverFactory(context), LoopDoSchema.schema, dbFilename = "loopdo.db")
     private val prefs = context.getSharedPreferences("loopdo_sync", Context.MODE_PRIVATE)
-    private val setAsideEvents = kotlinx.coroutines.flow.MutableSharedFlow<SetAside>(extraBufferCapacity = 16)
-    /** Uploads the server refused (and the phone undid), for the snackbar. */
-    val setAside: kotlinx.coroutines.flow.SharedFlow<SetAside> = setAsideEvents
+    /** Uploads the server refused (and the phone undid), kept until the today screen shows them. */
+    val notices = SetAsideNotices()
+    private val blockedState = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    /** Non-null while a different account signed in over unsynced changes: the app must not open. */
+    val blocked: kotlinx.coroutines.flow.StateFlow<String?> = blockedState
     private val http = HttpClient(OkHttp) { install(HttpTimeout) { requestTimeoutMillis = 15_000 } }
     private val uploader = Uploader(
         KtorUploadApi(http) { (auth.session.value as? AuthState.SignedIn)?.accessToken },
         PowerSyncDraftStore(db),
         PowerSyncUploadState(db),
-        { setAsideEvents.tryEmit(it) },
-        Instant::now,
+        notices::add,
+        now,
     )
     private val connector = LoopDoConnector(auth, uploader)
 
@@ -50,13 +54,23 @@ class SyncModule(
                     when (val s = auth.session.value) {
                         is AuthState.SignedIn -> {
                             val user = s.userId.toString()
-                            if (prefs.getString(LAST_USER, null).let { it != null && it != user }) db.disconnectAndClear()
+                            val last = prefs.getString(LAST_USER, null)
+                            when (accountSwitch(last, user, unsyncedChanges = last != null && last != user && hasUnsynced())) {
+                                SwitchAction.REFUSE -> {
+                                    Log.w("loopdo_sync", "account switch refused: unsynced changes from the previous account")
+                                    blockedState.value = SWITCH_REFUSED
+                                    return@collect
+                                }
+                                SwitchAction.CLEAR_THEN_CONNECT -> db.disconnectAndClear()
+                                SwitchAction.CONNECT -> Unit
+                            }
+                            blockedState.value = null
                             prefs.edit().putString(LAST_USER, user).apply()
                             Log.i("loopdo_sync", "connecting")
                             db.connect(connector)
                             refreshAnchor()
                         }
-                        AuthState.SignedOut -> db.disconnect()
+                        AuthState.SignedOut -> { blockedState.value = null; db.disconnect() }
                         AuthState.Loading -> Unit
                     }
                 }
@@ -80,7 +94,13 @@ class SyncModule(
 
     private val anchorScope = scope
 
+    /** Queued uploads or drafts the server hasn't got. */
+    private suspend fun hasUnsynced(): Boolean =
+        db.getNextCrudTransaction() != null || db.get("SELECT count(*) FROM drafts") { it.getLong(0)!! } > 0
+
     private companion object {
         const val LAST_USER = "last_user_id"
+        const val SWITCH_REFUSED = "this phone still has changes from another account that haven't reached the server. " +
+            "sign out, then sign in with that account while online so they can sync first."
     }
 }

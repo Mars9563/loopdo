@@ -33,8 +33,9 @@ interface TodayUi {
     fun untick(h: HabitItem)
     fun decrement(h: HabitItem)
     fun toggleTask(t: TaskItem)
-    fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate)
-    fun appendJournal(text: String)
+    /** [onSaved] runs only once the text is safely stored; until then the add sheet keeps it. */
+    fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate, onSaved: () -> Unit)
+    fun appendJournal(text: String, onSaved: () -> Unit)
     fun undo(s: Snack)
     fun dismissSnack(id: Long)
     /** Debug builds only: a tick with a forged anchor signature (exit check 5). */
@@ -43,15 +44,15 @@ interface TodayUi {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TodayViewModel(
-    data: TodayData,
-    private val actions: Actions,
-    setAside: kotlinx.coroutines.flow.Flow<app.loopdo.android.sync.SetAside>,
+    rows: kotlinx.coroutines.flow.Flow<TodayRows>,
+    private val actions: TodayActions,
+    notices: app.loopdo.android.sync.SetAsideNotices,
     private val now: () -> Instant,
 ) : ViewModel(), TodayUi {
 
 
     /** Rebuilt whenever the data changes, every minute, and exactly at day end (the ticker). */
-    val state: StateFlow<TodayModel?> = data.rows().flatMapLatest { rows ->
+    val state: StateFlow<TodayModel?> = rows.flatMapLatest { rows ->
         if (rows.versions.isEmpty()) return@flatMapLatest flowOf(null)
         val dateAt = dateResolver(rows.versions)
         ticker(now) { dayEndAt(rows.versions, now()) }.map { t ->
@@ -69,7 +70,14 @@ class TodayViewModel(
     val snack: StateFlow<Snack?> = _snack.asStateFlow()
 
     init {
-        viewModelScope.launch { setAside.collect { _snack.value = Snack(it.message(), null) } }
+        viewModelScope.launch {
+            notices.pending.collect { list ->
+                if (list.isEmpty()) return@collect
+                val text = if (list.size == 1) list[0].message() else "${list.size} changes were refused by the server and undone."
+                _snack.value = Snack(text, null)
+                notices.consume(list)
+            }
+        }
     }
 
     override fun dismissSnack(id: Long) { _snack.compareAndSet(_snack.value?.takeIf { it.id == id }, null) }
@@ -78,6 +86,9 @@ class TodayViewModel(
         _snack.value = null
         s.undo?.let { u -> run { u() } }
     }
+
+    /** A plain message in the snackbar (e.g. sign-out refused offline). */
+    fun showMessage(text: String) { _snack.value = Snack(text, null) }
 
     private fun run(block: suspend () -> Unit) {
         viewModelScope.launch { attempt(block) }
@@ -125,8 +136,9 @@ class TodayViewModel(
         }
     }
 
-    override fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate) = run {
+    override fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate, onSaved: () -> Unit) = run {
         actions.addTask(title, due, time, listId?.let(UUID::fromString))
+        onSaved()
         val where = when {
             due == today -> "today"
             due == today.plusDays(1) -> "tomorrow"
@@ -142,8 +154,9 @@ class TodayViewModel(
         if (actions.debugForgedTick(UUID.fromString(h.id)) != null) _snack.value = Snack("debug: forged tick sent", null)
     }
 
-    override fun appendJournal(text: String) = run {
+    override fun appendJournal(text: String, onSaved: () -> Unit) = run {
         actions.appendJournalLine(text)
+        onSaved()
         _snack.value = Snack("added to today's journal", null)
     }
 }

@@ -64,12 +64,14 @@ private enum class When { TODAY, TOMORROW, PICKED, NONE }
 fun AddSheet(
     today: LocalDate,
     lists: List<Pair<String, String>>,
+    text: String,
+    onText: (String) -> Unit,
+    journal: Boolean,
+    onJournal: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onAddTask: (title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?) -> Unit,
     onAddJournal: (String) -> Unit,
 ) {
-    var journal by rememberSaveable { mutableStateOf(false) }
-    var text by rememberSaveable { mutableStateOf("") }
     var whenChoice by rememberSaveable { mutableStateOf(When.TODAY) }
     var picked by rememberSaveable { mutableStateOf<LocalDate?>(null) }
     var time by rememberSaveable { mutableStateOf<LocalTime?>(null) }
@@ -108,8 +110,8 @@ fun AddSheet(
                 .padding(16.dp),
         ) {
             BracketRow(
-                BracketItem("task", primary = !journal, idle = journal) { journal = false },
-                BracketItem("journal line", primary = journal, idle = !journal) { journal = true },
+                BracketItem("task", primary = !journal, idle = journal) { onJournal(false) },
+                BracketItem("journal line", primary = journal, idle = !journal) { onJournal(true) },
             )
             DashedRule(Modifier.padding(bottom = 10.dp))
             Box(
@@ -122,7 +124,7 @@ fun AddSheet(
                     style = LoopDoType.body.copy(color = LoopDoColors.done),
                 )
                 BasicTextField(
-                    value = text, onValueChange = { text = it }, singleLine = true,
+                    value = text, onValueChange = onText, singleLine = true,
                     textStyle = LoopDoType.body, cursorBrush = SolidColor(LoopDoColors.accent),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { submit() }),

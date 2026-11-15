@@ -56,15 +56,15 @@ class UploaderTest {
         val tx = FakeTx(2, listOf(journalOp))
         uploader(FakeApi { HttpResult(422, """{"code":"BAD_OP","opIndex":0}""") }, drafts).upload(tx)
         assertTrue(tx.completed) // discarded from the queue...
-        assertEquals(listOf(Draft("journal_entries.text", "pizza was good", "BAD_OP")), drafts.saved) // ...but the words are kept
+        assertTrue(Draft("journal_entries.text", "pizza was good", "BAD_OP") in drafts.saved) // ...but the words are kept
     }
 
     @Test
-    fun rejectionWithoutTypedTextSavesNoDraft() = runTest {
+    fun rejectionWithoutTypedTextKeepsOnlyTheTransaction() = runTest {
         val drafts = MemoryDrafts()
         val tick = PendingOp("PUT", "habit_logs", "l-1", mapOf("count" to 1L, "evidence" to "{}"))
         uploader(FakeApi { HttpResult(422, """{"code":"BACKDATED","opIndex":0}""") }, drafts).upload(FakeTx(3, listOf(tick)))
-        assertTrue(drafts.saved.isEmpty())
+        assertEquals(listOf("transaction"), drafts.saved.map { it.kind }) // no text draft, but the tick itself is kept
     }
 
     @Test
@@ -87,7 +87,8 @@ class UploaderTest {
         now = now.plus(Duration.ofHours(2))
         uploader(api, drafts, state).upload(tx) // a day on: set aside so the queue moves
         assertTrue(tx.completed)
-        assertEquals("SERVER_ERROR", drafts.saved.single().reason)
+        assertEquals(setOf("SERVER_ERROR"), drafts.saved.map { it.reason }.toSet())
+        assertEquals(listOf("journal_entries.text", "transaction"), drafts.saved.map { it.kind })
     }
 
     @Test
@@ -121,5 +122,33 @@ class UploaderTest {
             SetAside("BACKDATED", keptDraft = true).message(),
         )
         assertEquals("the server refused a change (BAD_OP), so it was undone.", SetAside("BAD_OP", keptDraft = false).message())
+    }
+
+    @Test
+    fun setAsideKeepsTheWholeTransaction() = runTest {
+        // A tick has no typed text, but it must never vanish without a trace.
+        val drafts = MemoryDrafts()
+        val tick = PendingOp("PATCH", "habit_logs", "l-1", mapOf("count" to 1L, "evidence" to "{}"))
+        val tx = FakeTx(7, listOf(tick))
+        uploader(FakeApi { HttpResult(422, """{"code":"INVALID_EVIDENCE","opIndex":0}""") }, drafts).upload(tx)
+        assertEquals(listOf(Draft("transaction", OpMapper.batch(tx).toString(), "INVALID_EVIDENCE")), drafts.saved)
+    }
+
+    @Test
+    fun noticeWaitsUntilSomeoneShowsIt() {
+        val notices = SetAsideNotices()
+        notices.add(SetAside("INVALID_EVIDENCE", keptDraft = false)) // nobody is listening yet
+        notices.add(SetAside("BACKDATED", keptDraft = true))
+        assertEquals(2, notices.pending.value.size)
+        notices.consume(notices.pending.value)
+        assertEquals(emptyList(), notices.pending.value)
+    }
+
+    @Test
+    fun accountSwitchNeverDropsUnsyncedChanges() {
+        assertEquals(SwitchAction.CONNECT, accountSwitch(lastUser = null, newUser = "a", unsyncedChanges = false))
+        assertEquals(SwitchAction.CONNECT, accountSwitch(lastUser = "a", newUser = "a", unsyncedChanges = true))
+        assertEquals(SwitchAction.CLEAR_THEN_CONNECT, accountSwitch(lastUser = "a", newUser = "b", unsyncedChanges = false))
+        assertEquals(SwitchAction.REFUSE, accountSwitch(lastUser = "a", newUser = "b", unsyncedChanges = true))
     }
 }

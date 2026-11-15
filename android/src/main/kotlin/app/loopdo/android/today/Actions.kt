@@ -18,13 +18,25 @@ import java.util.UUID
  * uploader sends it as one batch and a 422 undoes exactly it (API contract). "Today" is
  * judged on the trusted clock, never the phone's adjustable wall clock.
  */
+/** What the today view model asks of the database (a fake in JVM tests). */
+interface TodayActions {
+    suspend fun tickHabit(habitId: UUID): Pair<Int, Int>?
+    suspend fun untickHabit(habitId: UUID): Pair<Int, Int>?
+    suspend fun decrementHabit(habitId: UUID): Pair<Int, Int>?
+    suspend fun debugForgedTick(habitId: UUID): Pair<Int, Int>?
+    suspend fun completeTask(taskId: UUID): Boolean
+    suspend fun reopenTask(taskId: UUID): Boolean
+    suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID
+    suspend fun appendJournalLine(text: String)
+}
+
 class Actions(
     private val db: PowerSyncDatabase,
     private val clock: TrustedClock,
     private val evidence: EvidenceFactory,
     private val dateAt: suspend (Instant) -> LocalDate,
     private val userId: () -> UUID?,
-) {
+) : TodayActions {
     private class Moment(val now: TrustedNow, val today: LocalDate, val evidence: String) {
         val verified get() = if (now.verified) 1 else 0
     }
@@ -47,13 +59,13 @@ class Actions(
     }
 
     /** Yes/no: done. Count: +1 (no cap). Returns (before, after), or null if nothing changed. */
-    suspend fun tickHabit(habitId: UUID) = changeCount(habitId) { kind, c -> if (kind == COUNT) c + 1 else 1 }
+    override suspend fun tickHabit(habitId: UUID) = changeCount(habitId) { kind, c -> if (kind == COUNT) c + 1 else 1 }
 
     /** Yes/no only: back to not done (same day). */
-    suspend fun untickHabit(habitId: UUID) = changeCount(habitId) { kind, c -> if (kind == COUNT) c else 0 }
+    override suspend fun untickHabit(habitId: UUID) = changeCount(habitId) { kind, c -> if (kind == COUNT) c else 0 }
 
     /** Count only: the same-day −1 correction (spec 6.3), never below 0. */
-    suspend fun decrementHabit(habitId: UUID) = changeCount(habitId) { kind, c -> if (kind == COUNT) maxOf(0, c - 1) else c }
+    override suspend fun decrementHabit(habitId: UUID) = changeCount(habitId) { kind, c -> if (kind == COUNT) maxOf(0, c - 1) else c }
 
     /*
      * PowerSync's PATCH carries only the columns whose value changed, and the server refuses a
@@ -64,7 +76,7 @@ class Actions(
      * DEBUG BUILDS ONLY (exit check 5): a +1 tick whose anchor signature is forged, so the
      * server must answer 422 INVALID_EVIDENCE and the phone must undo exactly this tick.
      */
-    suspend fun debugForgedTick(habitId: UUID): Pair<Int, Int>? {
+    override suspend fun debugForgedTick(habitId: UUID): Pair<Int, Int>? {
         check(app.loopdo.android.BuildConfig.DEBUG) { "debug only" }
         return changeCount(habitId, forge = true) { kind, c -> if (kind == COUNT) c + 1 else 1 }
     }
@@ -95,7 +107,7 @@ class Actions(
     }
 
     /** Marks the task done today (a late task records its real completion day). False if already done. */
-    suspend fun completeTask(taskId: UUID): Boolean {
+    override suspend fun completeTask(taskId: UUID): Boolean {
         val m = moment()
         return db.writeTransaction { tx ->
             tx.getOptional("SELECT 1 FROM tasks WHERE id = ? AND completed_at IS NULL", listOf(taskId.toString())) { 1 }
@@ -112,7 +124,7 @@ class Actions(
      * Undoes a completion. A dated task only on the day it was done (with evidence); an
      * undated inbox task any day, without evidence (owner, 2026-11-15). False if refused.
      */
-    suspend fun reopenTask(taskId: UUID): Boolean {
+    override suspend fun reopenTask(taskId: UUID): Boolean {
         val m = moment()
         return db.writeTransaction { tx ->
             val (due, on) = tx.getOptional("SELECT due_date, completed_on FROM tasks WHERE id = ? AND completed_at IS NOT NULL", listOf(taskId.toString())) {
@@ -128,7 +140,7 @@ class Actions(
     }
 
     /** A new task at the end of the order. No date + no list = inbox. Returns its id. */
-    suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID {
+    override suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID {
         val t = title.trim()
         require(t.isNotEmpty()) { "type something first." }
         require(t.length <= MAX_TITLE) { "that's too long. keep it under $MAX_TITLE characters." }
@@ -145,7 +157,7 @@ class Actions(
     }
 
     /** Adds a line to today's journal entry (one entry per day, deterministic id). */
-    suspend fun appendJournalLine(text: String) {
+    override suspend fun appendJournalLine(text: String) {
         val line = text.trim()
         require(line.isNotEmpty()) { "type something first." }
         val user = userId() ?: throw IllegalStateException("not signed in")

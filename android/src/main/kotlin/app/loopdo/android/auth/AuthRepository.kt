@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.IOException
 import java.util.UUID
 
@@ -30,7 +32,14 @@ class AuthRepository(private val backend: AuthBackend, scope: CoroutineScope) {
     suspend fun resetWithCode(email: String, code: String, newPassword: String) =
         attempt { backend.resetPasswordWithCode(email.trim(), code.trim(), newPassword) }
     suspend fun signInWithGoogle(idToken: String, rawNonce: String) = attempt { backend.signInWithGoogleIdToken(idToken, rawNonce) }
-    suspend fun signOut() = backend.signOut()
+    /** Signing out needs the network (Supabase revokes the session); offline it is refused, never a crash. */
+    suspend fun signOut(): Result<Unit> = try {
+        backend.signOut(); Result.success(Unit)
+    } catch (e: BackendError) {
+        Result.failure(AuthProblem(readable(e)))
+    } catch (e: IOException) {
+        Result.failure(AuthProblem("no connection. signing out needs the network."))
+    }
 
     private suspend fun attempt(block: suspend () -> Unit): Result<Unit> = try {
         block(); Result.success(Unit)
@@ -44,9 +53,18 @@ class AuthRepository(private val backend: AuthBackend, scope: CoroutineScope) {
         BackendStatus.Loading -> AuthState.Loading
         BackendStatus.SignedOut -> AuthState.SignedOut
         is BackendStatus.SignedIn -> AuthState.SignedIn(userId, accessToken)
+        // Keep working offline with the stored session; uploads get 401 → retry until a refresh succeeds.
+        is BackendStatus.RefreshFailed -> storedAccessToken?.let { t -> userIdFromJwt(t)?.let { AuthState.SignedIn(it, t) } } ?: AuthState.SignedOut
     }
 
     companion object {
+        /** The `sub` claim of an access token (the signature is the server's business, not ours). */
+        fun userIdFromJwt(token: String): UUID? = runCatching {
+            val payload = String(java.util.Base64.getUrlDecoder().decode(token.split('.')[1]))
+            val sub = kotlinx.serialization.json.Json.parseToJsonElement(payload).jsonObject["sub"]!!.jsonPrimitive.content
+            UUID.fromString(sub)
+        }.getOrNull()
+
         /** Supabase error codes → the app's plain words. */
         fun readable(e: BackendError): String = when {
             e.code == "invalid_credentials" -> "wrong email or password. try again or [reset]."

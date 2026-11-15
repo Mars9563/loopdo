@@ -64,12 +64,17 @@ class MainActivity : ComponentActivity() {
                     DemoApp()
                     return@LoopDoTheme
                 }
+                val blocked by graph.sync.blocked.collectAsStateWithLifecycle()
+                blocked?.let { message ->
+                    SwitchRefused(message) { graph.scope.launch { graph.auth.signOut() } }
+                    return@LoopDoTheme
+                }
                 when (startState(session, hasSynced, hasSettings, onboarded)) {
                     StartState.Loading -> Unit // the tinted wallpaper for a moment while the saved session loads
                     StartState.SignedOut -> AuthFlow(graph.auth, graph.google)
                     StartState.SyncingFirstTime -> FirstSyncScreen(rows)
                     StartState.NeedsOnboarding -> OnboardingScreen(graph.onboarding, settingsAlreadySaved = hasSettings)
-                    StartState.Ready -> SignedInApp(graph, onSignOut = { graph.scope.launch { graph.auth.signOut() } })
+                    StartState.Ready -> SignedInApp(graph)
                 }
             }
         }
@@ -77,13 +82,15 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SignedInApp(graph: AppGraph, onSignOut: () -> Unit) {
+private fun SignedInApp(graph: AppGraph) {
     var tab by rememberSaveable { mutableStateOf(Tab.TODAY) }
     val todayVm = viewModel { graph.todayViewModel() }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
-                Tab.TODAY -> TodayScreen(todayVm, onSignOut)
+                Tab.TODAY -> TodayScreen(todayVm) {
+                    graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
+                }
                 else -> ComingSoon(tab)
             }
         }
@@ -102,5 +109,19 @@ private fun DemoApp() {
             ) else ComingSoon(tab)
         }
         LoopDoNavBar(selected = tab, onSelect = { tab = it })
+    }
+}
+
+/**
+ * A different account signed in while the previous one still has changes the server hasn't got.
+ * Nothing of the previous account is shown or uploaded under the new one; it waits until that
+ * account signs in again and syncs (review finding I1). Not mocked: a plain error state.
+ */
+@Composable
+private fun SwitchRefused(message: String, onSignOut: () -> Unit) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 22.dp)) {
+        Text("~/sync", style = LoopDoType.title.copy(color = LoopDoColors.accent), modifier = Modifier.padding(vertical = 12.dp))
+        Text(message, style = LoopDoType.body.copy(color = LoopDoColors.warn), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
+        BracketRow(BracketItem("sign out", primary = true, onClick = onSignOut))
     }
 }

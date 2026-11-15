@@ -1,5 +1,6 @@
 package app.loopdo.android.sync
 
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -135,6 +136,17 @@ fun SetAside.message(): String {
     return if (keptDraft) "$what your text is saved as a draft." else what
 }
 
+/**
+ * Set-aside notices waiting to be shown. Kept until the today screen shows them, so a refusal
+ * that happens while nobody is looking is still explained later (not dropped).
+ */
+class SetAsideNotices {
+    private val _pending = kotlinx.coroutines.flow.MutableStateFlow<List<SetAside>>(emptyList())
+    val pending: kotlinx.coroutines.flow.StateFlow<List<SetAside>> = _pending
+    fun add(n: SetAside) = _pending.update { it + n }
+    fun consume(shown: List<SetAside>) = _pending.update { it.drop(shown.size) }
+}
+
 class Uploader(
     private val api: UploadApi,
     private val drafts: DraftStore,
@@ -169,6 +181,8 @@ class Uploader(
                 if (text.isNotBlank()) { drafts.save("${op.table}.$f", text, reason); kept = true }
             }
         }
+        // The whole transaction too (ticks have no typed text): nothing vanishes without a trace.
+        drafts.save("transaction", OpMapper.batch(tx).toString(), reason)
         state.clear(tx.id)
         tx.complete() // the next sync checkpoint then restores the server's version locally
         onSetAside(SetAside(reason, kept))

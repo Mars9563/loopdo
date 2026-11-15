@@ -51,7 +51,7 @@ private class FakeBackend(initial: BackendStatus = BackendStatus.SignedOut) : Au
         password = newPassword; signedIn()
     }
     override suspend fun signInWithGoogleIdToken(idToken: String, rawNonce: String) { online(); signedIn() }
-    override suspend fun signOut() { status.value = BackendStatus.SignedOut }
+    override suspend fun signOut() { online(); status.value = BackendStatus.SignedOut }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -115,5 +115,34 @@ class AuthRepositoryTest {
         assertEquals(1, b.codesSent)
         assertEquals("a-long-password", b.password)
         assertTrue(auth.verifyCode("kaze@example.com", "999000").isSuccess)
+    }
+
+    /** A Supabase-style access token whose `sub` is [user] (signature not checked by the app). */
+    private fun jwt(user: UUID): String {
+        val b64 = { x: String -> java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(x.toByteArray()) }
+        return b64("""{"alg":"ES256"}""") + "." + b64("""{"sub":"$user","exp":1}""") + ".c2ln"
+    }
+
+    @Test
+    fun expiredSessionOfflineStaysSignedIn() = runTest(UnconfinedTestDispatcher()) {
+        // Offline for longer than the token lifetime: refresh fails, the stored session remains.
+        val user = UUID.randomUUID()
+        val token = jwt(user)
+        assertEquals(AuthState.SignedIn(user, token), repo(FakeBackend(BackendStatus.RefreshFailed(token)), this).session.value)
+    }
+
+    @Test
+    fun refreshFailedWithoutStoredSessionIsSignedOut() = runTest(UnconfinedTestDispatcher()) {
+        assertIs<AuthState.SignedOut>(repo(FakeBackend(BackendStatus.RefreshFailed(null)), this).session.value)
+        assertIs<AuthState.SignedOut>(repo(FakeBackend(BackendStatus.RefreshFailed("not-a-jwt")), this).session.value)
+    }
+
+    @Test
+    fun signOutOfflineIsReportedNotThrown() = runTest(UnconfinedTestDispatcher()) {
+        val b = FakeBackend(); val auth = repo(b, this)
+        auth.signIn("kaze@example.com", "correct-horse")
+        b.offline = true
+        assertEquals("no connection. signing out needs the network.", auth.signOut().exceptionOrNull()?.message)
+        assertIs<AuthState.SignedIn>(auth.session.value)
     }
 }

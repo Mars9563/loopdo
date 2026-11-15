@@ -71,6 +71,10 @@ fun TodayScreen(vm: TodayViewModel, onSignOut: () -> Unit) {
 @Composable
 fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -> Unit) {
     var adding by rememberSaveable { mutableStateOf(false) }
+    // The add sheet's words live here, not in the sheet: closing it (Back, a stray tap) or a failed
+    // save never throws typed text away. It is cleared only once the text is stored.
+    var draftText by rememberSaveable { mutableStateOf("") }
+    var draftJournal by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
@@ -135,12 +139,15 @@ fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -
         }
 
         if (adding) model?.let { m ->
+            val saved = { adding = false; draftText = "" }
             AddSheet(
                 today = m.date,
                 lists = m.lists.map { it.id to it.name },
+                text = draftText, onText = { draftText = it },
+                journal = draftJournal, onJournal = { draftJournal = it },
                 onDismiss = { adding = false },
-                onAddTask = { title, due, time, listId, listName -> adding = false; vm.addTask(title, due, time, listId, listName, m.date) },
-                onAddJournal = { text -> adding = false; vm.appendJournal(text) },
+                onAddTask = { title, due, time, listId, listName -> vm.addTask(title, due, time, listId, listName, m.date, saved) },
+                onAddJournal = { text -> vm.appendJournal(text, saved) },
             )
         }
     }

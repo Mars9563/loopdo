@@ -28,6 +28,8 @@ class SupabaseAuthBackend(supabase: SupabaseClient, scope: CoroutineScope) : Aut
                     if (id == null) BackendStatus.SignedOut else BackendStatus.SignedIn(UUID.fromString(id), s.session.accessToken)
                 }
                 SessionStatus.Initializing -> BackendStatus.Loading
+                // Offline past the token's lifetime: still the same person, still signed in.
+                is SessionStatus.RefreshFailure -> BackendStatus.RefreshFailed(auth.sessionManager.loadSessionOrNull()?.accessToken)
                 else -> BackendStatus.SignedOut
             }
         }

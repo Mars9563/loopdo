@@ -54,8 +54,8 @@ object DemoUi : TodayUi {
     override fun untick(h: HabitItem) = Unit
     override fun decrement(h: HabitItem) = Unit
     override fun toggleTask(t: TaskItem) = Unit
-    override fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate) = Unit
-    override fun appendJournal(text: String) = Unit
+    override fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate, onSaved: () -> Unit) = Unit
+    override fun appendJournal(text: String, onSaved: () -> Unit) = Unit
     override fun undo(s: Snack) = Unit
     override fun dismissSnack(id: Long) = Unit
 }

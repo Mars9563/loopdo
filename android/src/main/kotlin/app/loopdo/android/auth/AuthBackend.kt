@@ -7,6 +7,11 @@ sealed interface BackendStatus {
     data object Loading : BackendStatus
     data object SignedOut : BackendStatus
     data class SignedIn(val userId: UUID, val accessToken: String) : BackendStatus
+    /**
+     * The token could not be refreshed (offline, or the auth server is down). The stored
+     * session is still on the phone ([storedAccessToken]) and the library keeps retrying.
+     */
+    data class RefreshFailed(val storedAccessToken: String?) : BackendStatus
 }
 
 /** An auth server error: Supabase's error code (e.g. invalid_credentials) and HTTP status. */

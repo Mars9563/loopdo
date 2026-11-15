@@ -13,7 +13,11 @@ import kotlinx.coroutines.Dispatchers
 
 /** Manual dependency graph: one of each, alive for the app's lifetime. */
 class AppGraph(context: android.content.Context) {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // A failure in a background job is logged, never a crash (e.g. a network call that throws).
+    val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default +
+            kotlinx.coroutines.CoroutineExceptionHandler { _, e -> android.util.Log.e("loopdo", "background job failed", e) },
+    )
     val supabase = createSupabaseClient(AppConfig.supabaseUrl, AppConfig.publishableKey) { install(Auth) }
     val auth = AuthRepository(SupabaseAuthBackend(supabase, scope), scope)
     val google = GoogleSignIn(AppConfig.googleWebClientId)
@@ -26,7 +30,9 @@ class AppGraph(context: android.content.Context) {
     }
     private val token = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.accessToken }
     private val timeApi = app.loopdo.android.time.KtorTimeApi(http, token)
-    val sync = app.loopdo.android.sync.SyncModule(context, auth, scope, app.loopdo.android.time.AnchorRefresher(timeApi, anchorStore, clocks))
+    val sync = app.loopdo.android.sync.SyncModule(
+        context, auth, scope, app.loopdo.android.time.AnchorRefresher(timeApi, anchorStore, clocks),
+    ) { trustedClock.now().instant }
     val onboarding = app.loopdo.android.onboarding.Onboarding(
         app.loopdo.android.onboarding.KtorSettingsApi(http, token),
         app.loopdo.android.onboarding.PowerSyncProfileWriter(sync.db) { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
@@ -38,7 +44,7 @@ class AppGraph(context: android.content.Context) {
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
         userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
     )
-    fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData, actions, sync.setAside) { trustedClock.now().instant }
+    fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
 }
 
 class LoopDoApp : Application() {
