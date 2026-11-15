@@ -121,12 +121,18 @@ class Applier(
         return mapOf("verified" to verified.toString())
     }
 
-    /** Completing or un-completing a task is a tick on the completion day. */
+    /**
+     * Completing a task is a tick on the completion day. Un-completing a dated task is
+     * only possible on that same day; an undated (inbox) task has no lock and can be
+     * reopened any time (owner, 2026-11-15).
+     */
     private fun taskRules(i: Int, id: UUID, data: JsonObject): Map<String, String?> {
         if ("completed_at" !in data) return emptyMap()
-        val existingOn = queryOne("select completed_on from public.tasks where id = ?::uuid", id.toString()) {
-            it.getObject(1, LocalDate::class.java)
+        val existing = queryOne("select completed_on, due_date from public.tasks where id = ?::uuid", id.toString()) {
+            it.getObject(1, LocalDate::class.java) to it.getObject(2, LocalDate::class.java)
         }
+        val existingOn = existing?.first
+        val undated = if ("due_date" in data) data["due_date"] is JsonNull else existing?.second == null
         val completing = data["completed_at"] !is JsonNull
         return if (completing) {
             val claimed = evidenceOf(i, data).claimedDate
@@ -134,7 +140,7 @@ class Applier(
             val verified = checkTick(i, data, claimed)
             mapOf("completed_on" to claimed.toString(), "verified" to verified.toString())
         } else {
-            if (existingOn == null) return mapOf("completed_on" to null, "verified" to null)
+            if (existingOn == null || undated) return mapOf("completed_on" to null, "verified" to null)
             checkTick(i, data, existingOn) // only on the day it was completed
             mapOf("completed_on" to null, "verified" to null)
         }

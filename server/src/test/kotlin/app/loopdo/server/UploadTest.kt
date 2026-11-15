@@ -249,4 +249,33 @@ class UploadTest {
         val r = upload(a, op("PUT", "habits", h, habit()), op("PUT", "habit_logs", UUID.randomUUID(), log(h, "2026-11-14", 1, ev)))
         assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
     }
+
+    private fun task(due: String?) = buildJsonObject { put("title", "t-${UUID.randomUUID()}"); if (due != null) put("due_date", due) }
+
+    private fun completion(ev: JsonObject) = buildJsonObject {
+        put("completed_at", ev["wallClock"]!!.jsonPrimitive.content); put("evidence", ev)
+    }
+
+    private val reopen = buildJsonObject { put("completed_at", kotlinx.serialization.json.JsonNull) }
+
+    @Test
+    fun undatedTaskCanBeReopenedOnALaterDay() = app { // owner 2026-11-15: inbox tasks have no lock
+        val t = UUID.randomUUID()
+        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "tasks", t, task(null)), op("PATCH", "tasks", t, completion(eveningTick(a)))).status)
+        assertEquals("2026-11-14", TestDb.scalar("select completed_on from public.tasks where id = '$t'"))
+        // Sunday: reopen without any evidence.
+        val r = upload(a, op("PATCH", "tasks", t, reopen))
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        assertEquals("", TestDb.scalar("select coalesce(completed_on::text, '') from public.tasks where id = '$t'"))
+    }
+
+    @Test
+    fun datedTaskCannotBeReopenedOnALaterDay() = app {
+        val t = UUID.randomUUID()
+        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "tasks", t, task("2026-11-14")), op("PATCH", "tasks", t, completion(eveningTick(a)))).status)
+        // Sunday: reopening Saturday's completion needs Saturday evidence -> refused.
+        val sundayEv = evidence(a, "2026-11-15", "2026-11-15T03:00:00Z", "2026-11-15T02:30:00Z", 1_000_000, 5, 1_100_000, 5)
+        val r = upload(a, op("PATCH", "tasks", t, buildJsonObject { put("completed_at", kotlinx.serialization.json.JsonNull); put("evidence", sundayEv) }))
+        assertRejected(r.bodyAsText(), "BACKDATED", 0)
+    }
 }
