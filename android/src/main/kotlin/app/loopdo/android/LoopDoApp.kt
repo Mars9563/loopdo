@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import androidx.glance.appwidget.updateAll
 import app.loopdo.android.onboarding.hasDaySettings
@@ -77,11 +78,13 @@ class AppGraph(context: android.content.Context) {
         // Changes that arrive while no widget session is open (sync, the app) still reach the widget.
         @OptIn(kotlinx.coroutines.FlowPreview::class)
         scope.launch { todayData.rows().debounce(500).collect { runCatching { redrawWidget() } } }
+        // Sign-in/out: show (or hide) the data even when no widget session is open.
+        scope.launch { auth.session.drop(1).collect { runCatching { redrawWidget() } } }
     }
 
     /** Live widget state: the database's changes plus explicit redraws. */
     fun widgetStates() = app.loopdo.android.widget.widgetStates(
-        kotlinx.coroutines.flow.merge(todayData.rows().map { }, widgetRefresh),
+        app.loopdo.android.widget.widgetTriggers(todayData.rows(), auth.session, widgetRefresh),
     ) { widgetSnapshot() }
 
     val widgetCommands by lazy { app.loopdo.android.widget.WidgetCommands(actions) { redrawWidget() } }

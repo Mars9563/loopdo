@@ -96,3 +96,11 @@ fun fitRows(habits: Int, tasks: Int, slots: Int): Fit {
 fun rowSlots(heightDp: Float, fontScale: Float): Int =
     ((heightDp - 92f - 88f * fontScale) / ROW_DP).toInt().coerceAtLeast(0)
 
+/**
+ * Everything that must redraw the widget: database changes, sign-in/out (signing out keeps the
+ * local rows, so the database alone never fires) and explicit redraws.
+ */
+fun widgetTriggers(
+    rows: kotlinx.coroutines.flow.Flow<*>, session: kotlinx.coroutines.flow.Flow<*>, refresh: kotlinx.coroutines.flow.Flow<Unit>,
+): kotlinx.coroutines.flow.Flow<Unit> = kotlinx.coroutines.flow.merge(rows.map { }, session.map { }, refresh)
+

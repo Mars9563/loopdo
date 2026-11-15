@@ -24,4 +24,19 @@ class WidgetStatesTest {
         assertEquals(listOf(WidgetState.Restoring, WidgetState.SignedOut), seen)
         job.cancel()
     }
+
+    /** Signing out keeps the local rows, so the database alone never redraws the widget (M4 Task 8 bug). */
+    @Test
+    fun signInAndOutRedrawTheWidget() = runTest(UnconfinedTestDispatcher()) {
+        val rows = MutableSharedFlow<Int>()
+        val session = MutableSharedFlow<String>()
+        val refresh = MutableSharedFlow<Unit>()
+        var fired = 0
+        val job = launch { widgetTriggers(rows, session, refresh).collect { fired++ } }
+        session.emit("SignedOut")
+        assertEquals(1, fired)
+        rows.emit(1); refresh.emit(Unit)
+        assertEquals(3, fired)
+        job.cancel()
+    }
 }
