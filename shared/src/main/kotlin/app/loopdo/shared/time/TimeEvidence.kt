@@ -1,8 +1,6 @@
 package app.loopdo.shared.time
 
 import app.loopdo.shared.Limits
-import app.loopdo.shared.day.DaySettings
-import app.loopdo.shared.day.loopDoDate
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -44,24 +42,26 @@ sealed interface ClaimResult {
 }
 
 /**
- * Server-side check of an (often offline) tick. [s] = the day settings in force
- * for the claimed date. Offline ticks are accepted on the day they really happened;
- * a changed phone clock cannot move a tick into a closed day.
+ * Server-side check of an (often offline) tick. [dateAt] gives the user's LoopDo
+ * date at any instant under the settings in force at that instant (e.g.
+ * `{ currentLoopDoDate(state, it) }`), so a time-zone change between the tick and
+ * the sync doesn't misjudge an honest tick. Offline ticks are accepted on the day
+ * they really happened; a changed phone clock cannot move a tick into a closed day.
  */
-fun validateClaim(e: TickEvidence, s: DaySettings, serverNow: Instant): ClaimResult {
-    if (e.claimedDate > loopDoDate(serverNow, s)) return ClaimResult.Rejected(RejectReason.FUTURE)
+fun validateClaim(e: TickEvidence, dateAt: (Instant) -> LocalDate, serverNow: Instant): ClaimResult {
+    if (e.claimedDate > dateAt(serverNow)) return ClaimResult.Rejected(RejectReason.FUTURE)
 
     val est = estimateTime(e.networkTime, e.anchor, e.elapsedAtTickMs, e.bootCountAtTick)
     if (est != null) {
         val slack = Duration.ofSeconds(Limits.TAMPER_TOLERANCE_SECONDS)
-        val fits = e.claimedDate == loopDoDate(est.minus(slack), s) || e.claimedDate == loopDoDate(est.plus(slack), s)
+        val fits = e.claimedDate == dateAt(est.minus(slack)) || e.claimedDate == dateAt(est.plus(slack))
         return if (fits) ClaimResult.Accepted(true, est) else ClaimResult.Rejected(RejectReason.BACKDATED)
     }
 
     // No trustworthy clock (rebooted while offline): owner chose "accept, mark unverified",
     // but never earlier than the last day the phone saw from the server.
-    if (loopDoDate(e.wallClock, s) != e.claimedDate) return ClaimResult.Rejected(RejectReason.BACKDATED)
-    if (e.anchor != null && e.claimedDate < loopDoDate(e.anchor.serverTime, s)) {
+    if (dateAt(e.wallClock) != e.claimedDate) return ClaimResult.Rejected(RejectReason.BACKDATED)
+    if (e.anchor != null && e.claimedDate < dateAt(e.anchor.serverTime)) {
         return ClaimResult.Rejected(RejectReason.BEFORE_LAST_ANCHOR)
     }
     return ClaimResult.Accepted(false, null)
