@@ -23,7 +23,7 @@ spec:
       terminationGracePeriodSeconds: 20
       containers:
         - name: loopdo-api
-          image: ghcr.io/mars9563/loopdo-api:9ad8c881a1eb99c94c42fec3991a35753cc3444a
+          image: ghcr.io/mars9563/loopdo-api:d7773b0423821bf4d3a5745ccd5807b1f917d07a
           ports:
             - containerPort: 8080
           env:
