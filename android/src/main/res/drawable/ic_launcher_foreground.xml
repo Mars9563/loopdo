@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brand mark: the accent-blue cursor underscore of loopdo_ with a dim "l". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#DBE6F5" android:pathData="M42,34h6v34h-6z" />
+    <path android:fillColor="#9CC4FF" android:pathData="M52,62h16v6h-16z" />
+</vector>
