@@ -24,10 +24,10 @@ class WidgetFitTest {
 
     @Test
     fun slotsFromTheWidgetHeight() {
-        // 660 dp tall at font scale 1: fixed parts ~180 dp, rows 40 dp → 12 slots.
-        assertEquals(12, rowSlots(heightDp = 660f, fontScale = 1f))
+        // 660 dp tall at font scale 1: fixed parts ~180 dp, rows 48 dp (owner, 2026-11-16) → 10 slots.
+        assertEquals(10, rowSlots(heightDp = 660f, fontScale = 1f))
         // Bigger text takes more room for the header lines.
-        assertEquals(11, rowSlots(heightDp = 660f, fontScale = 1.3f))
+        assertEquals(9, rowSlots(heightDp = 660f, fontScale = 1.3f))
         assertEquals(0, rowSlots(heightDp = 150f, fontScale = 1f))
     }
 }

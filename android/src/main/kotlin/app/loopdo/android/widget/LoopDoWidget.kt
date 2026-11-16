@@ -52,8 +52,8 @@ internal val WARN = Color(0xFFFF8A80)
 internal val SEPARATOR = Color(0xFF3F4B5E)
 internal val RULE = Color(0x2EBED7FF)
 
-/** Height of a habit/task row; the checkbox and `[+1]` fill it. Tuned against the locked mockup. */
-internal const val ROW_DP = 40
+/** Height of a habit/task row; the checkbox and `[+1]` fill it. 48 dp = a full finger-sized target (owner, 2026-11-16). */
+internal const val ROW_DP = 48
 private val PAD = 16.dp
 
 class LoopDoWidget : GlanceAppWidget() {
@@ -180,7 +180,7 @@ private fun RowView(r: WidgetRow, date: LocalDate, inner: Dp) {
     val scale = LocalContext.current.resources.configuration.fontScale
     val charDp = BODY_SP * 0.6f * scale // JetBrains Mono advance ≈ 0.6 em
     val rightDp = if (r.right.isEmpty()) 0f else (r.right.length + 1) * charDp
-    val titleMax = (inner.value - 40 - rightDp - if (r.plusOne) 48 else 0).coerceAtLeast(40f).dp
+    val titleMax = (inner.value - 48 - rightDp - if (r.plusOne) 48 else 0).coerceAtLeast(40f).dp
     val ctx = LocalContext.current
     fun tap(kind: TapKind) = actionSendBroadcast(
         Intent(ctx, WidgetTapReceiver::class.java).setData(Uri.parse(WidgetTap(kind, r.id, date, r.done).toUri())),
@@ -191,7 +191,7 @@ private fun RowView(r: WidgetRow, date: LocalDate, inner: Dp) {
         else -> tap(TapKind.TICK)
     }
     Row(GlanceModifier.fillMaxWidth().height(ROW_DP.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(GlanceModifier.width(40.dp).fillMaxHeight().clickable(check), contentAlignment = Alignment.CenterStart) {
+        Box(GlanceModifier.width(48.dp).fillMaxHeight().clickable(check), contentAlignment = Alignment.CenterStart) {
             MonoText(if (r.done) "[x]" else "[ ]", color)
         }
         Box(GlanceModifier.defaultWeight().fillMaxHeight().clickable(openApp), contentAlignment = Alignment.CenterStart) {
