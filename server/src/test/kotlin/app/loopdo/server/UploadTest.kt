@@ -219,10 +219,11 @@ class UploadTest {
     }
 
     @Test
-    fun archivingInThePastIsMovedToToday() = app {
+    fun archivingInThePastIsMovedToTomorrow() = app {
+        // M5 (owner, 2026-11-16): archiving takes effect tomorrow at the earliest, so it can't dodge today.
         val h = UUID.randomUUID()
         assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "habits", h, habit()), op("PATCH", "habits", h, buildJsonObject { put("archived_on", "2020-01-01") })).status)
-        assertEquals("2026-11-15", TestDb.scalar("select archived_on from public.habits where id = '$h'"))
+        assertEquals("2026-11-16", TestDb.scalar("select archived_on from public.habits where id = '$h'"))
     }
 
     @Test

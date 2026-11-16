@@ -20,9 +20,11 @@ val TABLES: Map<String, TableSpec> = listOf(
         "display_name" to Col.TEXT, "onboarded_at" to Col.TIMESTAMPTZ, "settings" to Col.JSONB)),
     TableSpec("habits", ALL, mapOf(
         "title" to Col.TEXT, "kind" to Col.TEXT, "target" to Col.INT, "reminder_time" to Col.TIME,
-        "archived_on" to Col.DATE, "sort_order" to Col.INT)),
+        "archived_on" to Col.DATE, "sort_order" to Col.INT,
+        "step" to Col.INT, "unit" to Col.TEXT, "deleted_at" to Col.TIMESTAMPTZ)),
     TableSpec("habit_schedules", setOf("PUT", "DELETE"), mapOf(
-        "habit_id" to Col.UUID, "valid_from" to Col.DATE, "recurrence" to Col.TEXT, "weekdays" to Col.SMALLINT_ARRAY)),
+        "habit_id" to Col.UUID, "valid_from" to Col.DATE, "recurrence" to Col.TEXT, "weekdays" to Col.SMALLINT_ARRAY,
+        "target" to Col.INT, "evidence" to Col.JSONB)),
     TableSpec("habit_logs", setOf("PUT", "PATCH"), mapOf(
         "habit_id" to Col.UUID, "loopdo_date" to Col.DATE, "count" to Col.INT,
         "completed_at" to Col.TIMESTAMPTZ, "evidence" to Col.JSONB)),
@@ -31,7 +33,7 @@ val TABLES: Map<String, TableSpec> = listOf(
         "list_id" to Col.UUID, "title" to Col.TEXT, "notes" to Col.TEXT, "due_date" to Col.DATE,
         "due_time" to Col.TIME, "repeat_rule" to Col.JSONB, "template_id" to Col.UUID,
         "occurrence_date" to Col.DATE, "completed_at" to Col.TIMESTAMPTZ, "evidence" to Col.JSONB,
-        "sort_order" to Col.INT)),
+        "sort_order" to Col.INT, "generated_through" to Col.DATE)),
     TableSpec("subtasks", ALL, mapOf(
         "task_id" to Col.UUID, "title" to Col.TEXT, "done" to Col.BOOL, "sort_order" to Col.INT)),
     TableSpec("journal_entries", ALL, mapOf("loopdo_date" to Col.DATE, "text" to Col.TEXT, "mood" to Col.INT)),
@@ -41,4 +43,4 @@ val TABLES: Map<String, TableSpec> = listOf(
 ).associateBy { it.name }
 
 /** Server-decided columns, written alongside the client's. */
-val SERVER_COLUMNS: Map<String, Col> = mapOf("verified" to Col.BOOL, "completed_on" to Col.DATE)
+val SERVER_COLUMNS: Map<String, Col> = mapOf("verified" to Col.BOOL, "completed_on" to Col.DATE, "late_since" to Col.DATE)

@@ -79,11 +79,18 @@ object TestDb {
 
     fun jdbcUrl(): String = "jdbc:postgresql://${container.host}:${container.getMappedPort(5432)}/postgres"
 
-    /** A pool logged in as loopdo_api, exactly like production. */
-    fun apiDataSource(): HikariDataSource = HikariDataSource(HikariConfig().apply {
-        jdbcUrl = jdbcUrl()
-        username = "loopdo_api"
-        password = "test"
-        maximumPoolSize = 3
-    })
+    /**
+     * A pool logged in as loopdo_api, exactly like production. One pool for the whole test run:
+     * a new pool per test (never closed) ran the container out of connection slots.
+     */
+    private val sharedPool: HikariDataSource by lazy {
+        HikariDataSource(HikariConfig().apply {
+            jdbcUrl = jdbcUrl()
+            username = "loopdo_api"
+            password = "test"
+            maximumPoolSize = 3
+        })
+    }
+
+    fun apiDataSource(): HikariDataSource = sharedPool
 }

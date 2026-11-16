@@ -82,7 +82,7 @@ class Applier(
             val p = when (spec.name) {
                 "habits" -> habitRules(i, op.op, id, data)
                 "habit_logs" -> Prepared(data, habitLogRules(i, op.op, id, data))
-                "tasks" -> Prepared(data, taskRules(i, id, data))
+                "tasks" -> taskRules(i, op.op, id, data)
                 "habit_schedules" -> scheduleRules(i, op.op, id, data)
                 "journal_photos" -> { photoRules(i, op.op, data); Prepared(data) }
                 else -> Prepared(data)
@@ -126,7 +126,46 @@ class Applier(
      * only possible on that same day; an undated (inbox) task has no lock and can be
      * reopened any time (owner, 2026-11-15).
      */
-    private fun taskRules(i: Int, id: UUID, data: JsonObject): Map<String, String?> {
+    /**
+     * M5 task rules, then the completion rules below:
+     * - a deleted occurrence of a repeating task is never created again (its date is at or before
+     *   the template's generated_through), even by a device that hasn't seen the delete;
+     * - generated_through only moves forward;
+     * - moving a task that is already late records the first date it was late (late_since,
+     *   server-owned), so the miss stays on record (spec 6.5).
+     */
+    private fun taskRules(i: Int, op: String, id: UUID, data: JsonObject): Prepared {
+        if (op == "DELETE") return Prepared(data)
+        val existing = queryOne("select due_date, completed_at, late_since from public.tasks where id = ?::uuid", id.toString()) {
+            Triple(it.getObject(1, LocalDate::class.java), it.getObject(2, java.time.OffsetDateTime::class.java), it.getObject(3, LocalDate::class.java))
+        }
+        val template = data.text("template_id")
+        val occurrence = data.date("occurrence_date")
+        if (op == "PUT" && existing == null && template != null && occurrence != null) {
+            val generatedThrough = queryOne("select generated_through from public.tasks where id = ?::uuid", template) {
+                it.getObject(1, LocalDate::class.java)
+            }
+            if (generatedThrough != null && occurrence <= generatedThrough) return Prepared(data, skip = true)
+        }
+        var d = data
+        data.date("generated_through")?.let { g ->
+            val current = queryOne("select generated_through from public.tasks where id = ?::uuid", id.toString()) {
+                it.getObject(1, LocalDate::class.java)
+            }
+            if (current != null && current > g) d = d.with("generated_through", current.toString())
+        }
+        val extra = mutableMapOf<String, String?>()
+        if ("due_date" in data && existing != null) {
+            val (oldDue, completedAt, lateSince) = existing
+            if (completedAt == null && lateSince == null && oldDue != null && oldDue < today(i) && data.date("due_date") != oldDue) {
+                extra["late_since"] = oldDue.toString()
+            }
+        }
+        extra += completionRules(i, id, data)
+        return Prepared(d, extra)
+    }
+
+    private fun completionRules(i: Int, id: UUID, data: JsonObject): Map<String, String?> {
         if ("completed_at" !in data) return emptyMap()
         val existing = queryOne("select completed_on, due_date from public.tasks where id = ?::uuid", id.toString()) {
             it.getObject(1, LocalDate::class.java) to it.getObject(2, LocalDate::class.java)
@@ -172,13 +211,33 @@ class Applier(
             "select 1 from public.habit_schedules where habit_id = ?::uuid and id <> ?::uuid limit 1", habitId, id.toString(),
         ) { true } ?: false
         val earliest = if (hasOther) today.plusDays(1) else today
-        return if (from < earliest) Prepared(data.with("valid_from", earliest.toString())) else Prepared(data)
+        // M5: a version proved (verified time evidence) to have been made before its first day keeps
+        // its date, e.g. a pause set offline at the airport and synced days later.
+        val provenDay = if (data["evidence"] is JsonObject) runCatching { verifiedDay(i, data) }.getOrNull() else null
+        if (provenDay != null && from > provenDay) return Prepared(data)
+        if (from >= earliest) return Prepared(data)
+        // Clamped: never onto a day another version already starts (a pause's resume version moves on a day).
+        var at = earliest
+        while (queryOne(
+                "select 1 from public.habit_schedules where habit_id = ?::uuid and valid_from = ?::date and id <> ?::uuid",
+                habitId, at.toString(), id.toString(),
+            ) { true } != null
+        ) at = at.plusDays(1)
+        return Prepared(data.with("valid_from", at.toString()))
+    }
+
+    /** The day the evidence proves the change was made, or null if it isn't verified. */
+    private fun verifiedDay(i: Int, data: JsonObject): LocalDate? {
+        val e = evidenceOf(i, data)
+        val r = validateClaim(e, dateAt(i), now)
+        return if (r is ClaimResult.Accepted && r.verified) e.claimedDate else null
     }
 
     /**
      * A habit's kind and target are frozen once it has logs: changing them would re-judge
-     * past days (e.g. target 8 -> 1 turns partial days into successes). Archiving can't be
-     * backdated; an earlier date is moved up to today.
+     * past days (e.g. target 8 -> 1 turns partial days into successes); a target change is a
+     * new schedule version instead (M5). Archiving can't be backdated; an earlier date is moved
+     * up to tomorrow.
      */
     private fun habitRules(i: Int, op: String, id: UUID, data: JsonObject): Prepared {
         if (op == "DELETE") return Prepared(data)
@@ -194,8 +253,9 @@ class Applier(
             }
         }
         val archived = data.date("archived_on") ?: return Prepared(data)
-        val today = today(i)
-        return if (archived < today) Prepared(data.with("archived_on", today.toString())) else Prepared(data)
+        // Archiving takes effect from tomorrow at the earliest, so it can't dodge today (M5).
+        val tomorrow = today(i).plusDays(1)
+        return if (archived < tomorrow) Prepared(data.with("archived_on", tomorrow.toString())) else Prepared(data)
     }
 
     private fun photoRules(i: Int, op: String, data: JsonObject) {
