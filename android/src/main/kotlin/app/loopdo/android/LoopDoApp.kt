@@ -81,6 +81,8 @@ class AppGraph(context: android.content.Context) {
         // Sign-in/out: show (or hide) the data even when no widget session is open.
         scope.launch { auth.session.drop(1).collect { runCatching { redrawWidget() } } }
         scope.launch { sync.blocked.drop(1).collect { runCatching { redrawWidget() } } }
+        // Background sync every ~15 min while online (owner, 2026-11-16).
+        runCatching { app.loopdo.android.sync.SyncWorker.schedule(appContext) }
     }
 
     /** Live widget state: the database's changes plus explicit redraws. */
