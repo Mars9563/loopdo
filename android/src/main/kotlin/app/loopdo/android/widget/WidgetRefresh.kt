@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import app.loopdo.android.LoopDoApp
@@ -20,7 +21,19 @@ fun widgetAlarms(now: Instant, dayEndAt: Instant): List<Instant> =
     (listOf(now.plus(REFRESH_EVERY)) + listOfNotNull(dayEndAt.plusSeconds(1).takeIf { it > now })).sorted()
 
 /**
- * Schedules the widget's two alarms, each with Android's smallest inexact window (10 min), so no
+ * [widgetAlarms] as boot-clock times (SystemClock.elapsedRealtime): each target's distance from
+ * trusted "now", added to the boot clock. The wall clock plays no part, so a hand-set clock can't
+ * shift the alarms or make them re-arm in the past (final review I1).
+ */
+fun elapsedAlarms(trustedNow: Instant, elapsedNowMs: Long, dayEndAt: Instant): List<Long> =
+    widgetAlarms(trustedNow, dayEndAt).map { toElapsed(trustedNow, elapsedNowMs, it) }
+
+/** [target] (a trusted instant) as a boot-clock time. */
+fun toElapsed(trustedNow: Instant, elapsedNowMs: Long, target: Instant): Long =
+    elapsedNowMs + Duration.between(trustedNow, target).toMillis()
+
+/**
+ * Schedules the widget's two boot-clock alarms, each with Android's smallest inexact window (10 min), so no
  * exact-alarm permission is needed. Plain set()/setAndAllowWhileIdle() got windows of up to 1 h
  * on the A55. The day-end alarm may wake the phone. The 15-minute one is RTC: it never wakes the
  * phone and fires when the screen is next on. A stale tap is refused and redraws anyway (Task 2).
@@ -33,12 +46,13 @@ class WidgetRefresher(private val context: Context) {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    suspend fun schedule(dayEndAt: Instant?, now: Instant = Instant.now()) {
+    suspend fun schedule(dayEndAt: Instant?, trustedNow: Instant) {
         if (GlanceAppWidgetManager(context).getGlanceIds(LoopDoWidget::class.java).isEmpty()) return cancel()
-        alarms.setWindow(AlarmManager.RTC, now.plus(REFRESH_EVERY).toEpochMilli(), WINDOW_MS, pending(CODE_REFRESH))
-        if (dayEndAt != null && dayEndAt.plusSeconds(1) > now) {
-            alarms.setWindow(AlarmManager.RTC_WAKEUP, dayEndAt.plusSeconds(1).toEpochMilli(), WINDOW_MS, pending(CODE_DAY_END))
-        }
+        val elapsed = SystemClock.elapsedRealtime()
+        alarms.setWindow(AlarmManager.ELAPSED_REALTIME, elapsed + REFRESH_EVERY.toMillis(), WINDOW_MS, pending(CODE_REFRESH))
+        val dayEndAlarm = dayEndAt?.plusSeconds(1)?.takeIf { it > trustedNow }?.let { toElapsed(trustedNow, elapsed, it) }
+        if (dayEndAlarm != null) alarms.setWindow(AlarmManager.ELAPSED_REALTIME_WAKEUP, dayEndAlarm, WINDOW_MS, pending(CODE_DAY_END))
+        else alarms.cancel(pending(CODE_DAY_END))
     }
 
     private fun cancel() {

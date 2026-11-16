@@ -16,4 +16,16 @@ class WidgetRefreshTest {
         // Day end already passed: only the 15-minute refresh.
         assertEquals(listOf(t("2026-11-14T22:45:00Z")), widgetAlarms(t("2026-11-14T22:30:00Z"), t("2026-11-14T22:29:59Z")))
     }
+
+    /**
+     * Alarms run on the boot clock (elapsed realtime), measured from trusted time, so a wrong or
+     * hand-set wall clock can neither shift them nor make them re-arm in the past (final review I1).
+     */
+    @Test
+    fun alarmsAreDelaysOnTheBootClock() {
+        val trustedNow = t("2026-11-14T22:20:00Z")
+        assertEquals(listOf(1_000_000L + 601_000, 1_000_000L + 900_000), elapsedAlarms(trustedNow, 1_000_000L, t("2026-11-14T22:30:00Z")))
+        // Day end already passed by trusted time: only the refresh, never a target in the past.
+        assertEquals(listOf(5_000L + 900_000), elapsedAlarms(trustedNow, 5_000L, t("2026-11-14T22:19:00Z")))
+    }
 }
