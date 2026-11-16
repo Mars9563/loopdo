@@ -94,8 +94,8 @@ class WidgetCommandsTest {
     @Test
     fun plusOneTwiceCountsTwo() = runBlocking {
         val h = habit("count", 8)
-        commands.plusOne(h, today)
-        commands.plusOne(h, today)
+        commands.plus(h, today, 1)
+        commands.plus(h, today, 1)
         assertEquals(2L, count(h))
         assertEquals(2, db.getCrudBatch(100)!!.crud.filter { it.table == "habit_logs" }.map { it.transactionId }.distinct().size)
     }

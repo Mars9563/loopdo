@@ -18,7 +18,9 @@ enum class Tone { TEXT, DIM, WARN }
 /** One widget row: `[ ] title ... right`. [plusOne] = a count habit's `[+1]`. */
 data class WidgetRow(
     val id: String, val isHabit: Boolean, val title: String, val done: Boolean,
-    val right: String, val rightTone: Tone, val plusOne: Boolean,
+    val right: String, val rightTone: Tone,
+    /** An open count habit's [+step] (e.g. 5 for vocab); null = no plus button. */
+    val plusStep: Int?,
 )
 
 /** Everything the locked widget shows (docs/design/widget/README.md), built only from the today rules. */
@@ -40,14 +42,14 @@ fun widgetModel(t: TodayModel, dayEndAt: Instant): WidgetModel {
     val habits = (t.habitsOpen + t.habitsDone).map { h ->
         val done = h.count >= h.target
         when {
-            done -> WidgetRow(h.id, true, h.title, true, "${h.streak}d", Tone.TEXT, plusOne = false)
-            h.kind == HabitKind.COUNT -> WidgetRow(h.id, true, h.title, false, "${h.count}/${h.target}", Tone.TEXT, plusOne = true)
-            else -> WidgetRow(h.id, true, h.title, false, h.reminderTime?.let { "@$it" }.orEmpty(), Tone.DIM, plusOne = false)
+            done -> WidgetRow(h.id, true, h.title, true, "${h.streak}d", Tone.TEXT, plusStep = null)
+            h.kind == HabitKind.COUNT -> WidgetRow(h.id, true, h.title, false, "${h.count}/${h.target}" + h.unit.orEmpty().let { if (it.isEmpty()) "" else " $it" }, Tone.TEXT, plusStep = h.step)
+            else -> WidgetRow(h.id, true, h.title, false, h.reminderTime?.let { "@$it" }.orEmpty(), Tone.DIM, plusStep = null)
         }
     }
-    val late = t.late.map { WidgetRow(it.id, false, it.title, false, "!late " + it.lateSince!!.compact(), Tone.WARN, plusOne = false) }
+    val late = t.late.map { WidgetRow(it.id, false, it.title, false, "!late " + it.lateSince!!.compact(), Tone.WARN, plusStep = null) }
     val dueToday = t.dueToday.sortedBy { it.done }.map {
-        WidgetRow(it.id, false, it.title, it.done, if (it.done) "" else it.dueTime?.let { tm -> "@$tm" }.orEmpty(), Tone.DIM, plusOne = false)
+        WidgetRow(it.id, false, it.title, it.done, if (it.done) "" else it.dueTime?.let { tm -> "@$tm" }.orEmpty(), Tone.DIM, plusStep = null)
     }
     return WidgetModel(
         date = t.date, dateLabel = t.date.short(), countdown = t.endsIn.countdown(), dayEndAt = dayEndAt,

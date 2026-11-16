@@ -22,11 +22,13 @@ private class FakeActions : TodayActions {
     var fail: String? = null
     var staleTicks = false
     private fun maybeFail() { fail?.let { throw IllegalArgumentException(it) } }
-    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? {
+    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?, by: Int): Pair<Int, Int>? {
         if (staleTicks) throw StaleDayException(LocalDate.of(2026, 11, 15))
         return 0 to 1
     }
     override suspend fun untickHabit(habitId: UUID, shownDate: LocalDate?) = 1 to 0
+    override suspend fun setHabitCount(habitId: UUID, count: Int, shownDate: LocalDate?): Pair<Int, Int>? = 0 to count
+    override suspend fun completeHabit(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? = 0 to 1
     override suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate?) = 1 to 0
     override suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate?) = 0 to 1
     override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String?) = maybeFail()

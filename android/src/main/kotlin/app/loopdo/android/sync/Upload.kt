@@ -78,11 +78,11 @@ object OpMapper {
         "habit_logs" to setOf("evidence"),
         "tasks" to setOf("evidence", "repeat_rule"),
         "profiles" to setOf("settings"),
-        "habit_schedules" to setOf("weekdays"),
+        "habit_schedules" to setOf("weekdays", "evidence"),
     )
 
     /** Decided by the server (from the token or its own rules); never sent, or the API refuses the op. */
-    private val serverOwned = setOf("user_id", "verified", "completed_on", "created_at", "updated_at")
+    private val serverOwned = setOf("user_id", "verified", "completed_on", "late_since", "created_at", "updated_at")
 
     fun toJson(op: PendingOp): JsonObject = buildJsonObject {
         put("op", op.op)

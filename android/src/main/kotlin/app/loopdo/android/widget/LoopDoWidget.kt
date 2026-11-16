@@ -180,14 +180,15 @@ private fun RowView(r: WidgetRow, date: LocalDate, inner: Dp) {
     val scale = LocalContext.current.resources.configuration.fontScale
     val charDp = BODY_SP * 0.6f * scale // JetBrains Mono advance ≈ 0.6 em
     val rightDp = if (r.right.isEmpty()) 0f else (r.right.length + 1) * charDp
-    val titleMax = (inner.value - 48 - rightDp - if (r.plusOne) 48 else 0).coerceAtLeast(40f).dp
+    val titleMax = (inner.value - 48 - rightDp - if (r.plusStep != null) 56 else 0).coerceAtLeast(40f).dp
     val ctx = LocalContext.current
     fun tap(kind: TapKind) = actionSendBroadcast(
-        Intent(ctx, WidgetTapReceiver::class.java).setData(Uri.parse(WidgetTap(kind, r.id, date, r.done).toUri())),
+        Intent(ctx, WidgetTapReceiver::class.java).setData(Uri.parse(WidgetTap(kind, r.id, date, r.done, r.plusStep ?: 1).toUri())),
     )
     val check = when {
         !r.isHabit -> tap(TapKind.TASK)
         r.done -> tap(TapKind.UNTICK)
+        r.plusStep != null -> tap(TapKind.COMPLETE) // [ ] on a count habit = all done (M5)
         else -> tap(TapKind.TICK)
     }
     Row(GlanceModifier.fillMaxWidth().height(ROW_DP.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -198,8 +199,10 @@ private fun RowView(r: WidgetRow, date: LocalDate, inner: Dp) {
             MonoText(r.title, color, maxWidth = titleMax)
         }
         if (r.right.isNotEmpty()) MonoText(r.right, when (r.rightTone) { Tone.WARN -> WARN; Tone.DIM -> DIM; Tone.TEXT -> if (r.done) DONE else TEXT })
-        if (r.plusOne) Box(GlanceModifier.width(48.dp).fillMaxHeight().clickable(tap(TapKind.PLUS)), contentAlignment = Alignment.CenterEnd) {
-            MonoText("[+1]", ACCENT)
+        r.plusStep?.let { step ->
+            Box(GlanceModifier.width(56.dp).fillMaxHeight().clickable(tap(TapKind.PLUS)), contentAlignment = Alignment.CenterEnd) {
+                MonoText("[+$step]", ACCENT)
+            }
         }
     }
 }

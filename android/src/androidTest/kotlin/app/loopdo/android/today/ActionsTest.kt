@@ -179,4 +179,31 @@ class ActionsTest {
         val id = uuidV5(user, "journal:2026-11-14").toString()
         assertEquals("walk\ncalled mom\nand gym", db.get("SELECT text FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0)!! })
     }
+
+    @Test
+    fun setCountAndCompleteAreOneTransactionWithEvidence() = runBlocking {
+        val h = habit("count", 35) // "japanese vocab", 35 words
+        val before = ops().size
+        actions.tickHabit(h, today, by = 5)
+        actions.setHabitCount(h, 20, today)
+        actions.completeHabit(h, today)
+        val id = instanceId(h, today).toString()
+        assertEquals(35L, db.get("SELECT count FROM habit_logs WHERE id = ?", listOf(id)) { it.getLong(0)!! })
+        val logOps = ops().drop(before).filter { it.table == "habit_logs" }
+        assertEquals(3, logOps.map { it.transactionId }.distinct().size) // one transaction each
+        assertTrue(logOps.all { it.opData?.get("evidence") != null }) // every count change carries its own evidence
+    }
+
+    @Test
+    fun completeUsesTheTargetOfToday() = runBlocking {
+        // kanji raised to 60 from today (a version made earlier): "all done" means 60, not the habit's old 50.
+        val h = habit("count", 50)
+        db.execute(
+            "INSERT INTO habit_schedules (id, habit_id, valid_from, recurrence, target) VALUES (?, ?, ?, 'daily', 60)",
+            listOf(UUID.randomUUID().toString(), h.toString(), today.toString()),
+        )
+        actions.completeHabit(h, today)
+        assertEquals(60L, db.get("SELECT count FROM habit_logs WHERE id = ?", listOf(instanceId(h, today).toString())) { it.getLong(0)!! })
+    }
 }
+

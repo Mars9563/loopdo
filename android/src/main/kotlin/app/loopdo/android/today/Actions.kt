@@ -6,6 +6,7 @@ import app.loopdo.android.time.TrustedNow
 import app.loopdo.shared.habit.HabitSchedule
 import app.loopdo.shared.habit.Recurrence
 import app.loopdo.shared.habit.isDue
+import app.loopdo.shared.habit.scheduleOn
 import app.loopdo.shared.task.instanceId
 import app.loopdo.shared.task.uuidV5
 import com.powersync.PowerSyncDatabase
@@ -30,7 +31,12 @@ class StaleDayException(val today: LocalDate) : Exception("the day has ended.")
  * [StaleDayException] and write nothing, so a stale screen can never tick the wrong day.
  */
 interface TodayActions {
-    suspend fun tickHabit(habitId: UUID, shownDate: LocalDate? = null): Pair<Int, Int>?
+    /** Yes/no: done. Count: + [by] (the habit's step from the [+step] button). */
+    suspend fun tickHabit(habitId: UUID, shownDate: LocalDate? = null, by: Int = 1): Pair<Int, Int>?
+    /** Count: set the exact number (long-press → type), never below 0. Yes/no: >0 = done. */
+    suspend fun setHabitCount(habitId: UUID, count: Int, shownDate: LocalDate? = null): Pair<Int, Int>?
+    /** "All done": a count habit jumps to today's target (the [ ] on a count habit). */
+    suspend fun completeHabit(habitId: UUID, shownDate: LocalDate? = null): Pair<Int, Int>?
     suspend fun untickHabit(habitId: UUID, shownDate: LocalDate? = null): Pair<Int, Int>?
     suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate? = null): Pair<Int, Int>?
     suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate? = null): Pair<Int, Int>?
@@ -75,13 +81,20 @@ class Actions(
     }
 
     /** Yes/no: done. Count: +1 (no cap). Returns (before, after), or null if nothing changed. */
-    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?) = changeCount(habitId, shownDate) { kind, c -> if (kind == COUNT) c + 1 else 1 }
+    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?, by: Int) =
+        changeCount(habitId, shownDate) { kind, c, _ -> if (kind == COUNT) c + maxOf(1, by) else 1 }
+
+    override suspend fun setHabitCount(habitId: UUID, count: Int, shownDate: LocalDate?) =
+        changeCount(habitId, shownDate) { kind, _, _ -> if (kind == COUNT) maxOf(0, count) else if (count > 0) 1 else 0 }
+
+    override suspend fun completeHabit(habitId: UUID, shownDate: LocalDate?) =
+        changeCount(habitId, shownDate) { kind, c, target -> if (kind == COUNT) maxOf(c, target) else 1 }
 
     /** Yes/no only: back to not done (same day). */
-    override suspend fun untickHabit(habitId: UUID, shownDate: LocalDate?) = changeCount(habitId, shownDate) { kind, c -> if (kind == COUNT) c else 0 }
+    override suspend fun untickHabit(habitId: UUID, shownDate: LocalDate?) = changeCount(habitId, shownDate) { kind, c, _ -> if (kind == COUNT) c else 0 }
 
     /** Count only: the same-day −1 correction (spec 6.3), never below 0. */
-    override suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate?) = changeCount(habitId, shownDate) { kind, c -> if (kind == COUNT) maxOf(0, c - 1) else c }
+    override suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate?) = changeCount(habitId, shownDate) { kind, c, _ -> if (kind == COUNT) maxOf(0, c - 1) else c }
 
     /*
      * PowerSync's PATCH carries only the columns whose value changed, and the server refuses a
@@ -94,28 +107,30 @@ class Actions(
      */
     override suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? {
         check(app.loopdo.android.BuildConfig.DEBUG) { "debug only" }
-        return changeCount(habitId, shownDate, forge = true) { kind, c -> if (kind == COUNT) c + 1 else 1 }
+        return changeCount(habitId, shownDate, forge = true) { kind, c, _ -> if (kind == COUNT) c + 1 else 1 }
     }
 
-    private suspend fun changeCount(habitId: UUID, shownDate: LocalDate?, forge: Boolean = false, next: (String, Int) -> Int): Pair<Int, Int>? {
+    private suspend fun changeCount(habitId: UUID, shownDate: LocalDate?, forge: Boolean = false, next: (kind: String, count: Int, target: Int) -> Int): Pair<Int, Int>? {
         val m = moment().let { if (forge) it.forged() else it }
         if (shownDate != null && shownDate != m.today) throw StaleDayException(m.today)
         val id = instanceId(habitId, m.today).toString()
         return db.writeTransaction { tx ->
-            val (kind, archivedOn) = tx.getOptional("SELECT kind, archived_on FROM habits WHERE id = ?", listOf(habitId.toString())) {
-                it.getString(0)!! to it.getString(1)?.let { d -> LocalDate.parse(d.take(10)) }
+            val (kind, archivedOn, habitTarget) = tx.getOptional("SELECT kind, archived_on, target FROM habits WHERE id = ?", listOf(habitId.toString())) {
+                Triple(it.getString(0)!!, it.getString(1)?.let { d -> LocalDate.parse(d.take(10)) }, (it.getLong(2) ?: 1L).toInt())
             } ?: return@writeTransaction null
             // Only today's copy of a habit that is due today (shared rule), never an archived one.
-            val schedules = tx.getAll("SELECT valid_from, recurrence, weekdays FROM habit_schedules WHERE habit_id = ?", listOf(habitId.toString())) {
+            val schedules = tx.getAll("SELECT valid_from, recurrence, weekdays, target FROM habit_schedules WHERE habit_id = ?", listOf(habitId.toString())) {
                 HabitSchedule(
                     LocalDate.parse(it.getString(0)!!.take(10)),
-                    if (it.getString(1) == "weekdays") Recurrence.WEEKDAYS else Recurrence.DAILY,
+                    parseRecurrence(it.getString(1)),
                     parseWeekdays(it.getString(2)),
+                    it.getLong(3)?.toInt(),
                 )
             }
             if ((archivedOn != null && m.today >= archivedOn) || !isDue(schedules, m.today)) return@writeTransaction null
             val old = tx.getOptional("SELECT count FROM habit_logs WHERE id = ?", listOf(id)) { it.getLong(0)?.toInt() ?: 0 }
-            val new = next(kind, old ?: 0)
+            val target = scheduleOn(schedules, m.today)?.target ?: habitTarget // the target of today (shared rule)
+            val new = next(kind, old ?: 0, target)
             if (new == (old ?: 0)) return@writeTransaction null
             val completedAt = if (new > 0) m.now.instant.toString() else null
             if (old == null) {

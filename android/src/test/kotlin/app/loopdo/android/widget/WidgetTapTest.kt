@@ -37,4 +37,14 @@ class WidgetTapTest {
         assertNull(parseWidgetTap("loopdo-widget://tap/explode/a?date=2026-11-14&done=false"))
         assertNull(parseWidgetTap("loopdo-widget://tap/tick/a?date=not-a-date&done=false"))
     }
+
+    @Test
+    fun completeAndStepRoundTrip() {
+        val complete = WidgetTap(TapKind.COMPLETE, "k", sat, done = false)
+        assertEquals(complete, parseWidgetTap(complete.toUri()))
+        val plus5 = WidgetTap(TapKind.PLUS, "k", sat, done = false, step = 5)
+        assertEquals(plus5, parseWidgetTap(plus5.toUri()))
+        assertNotEquals(plus5.toUri(), WidgetTap(TapKind.PLUS, "k", sat, done = false, step = 1).toUri())
+    }
 }
+

@@ -35,6 +35,13 @@ internal fun parseInstant(s: String): Instant {
 }
 
 /** smallint[] as JSON ("[1,3]") or Postgres ("{1,3}") text; ISO weekday numbers. */
+/** habit_schedules.recurrence: "daily" | "weekdays" | "paused" (M5). */
+internal fun parseRecurrence(s: String?): Recurrence = when (s) {
+    "weekdays" -> Recurrence.WEEKDAYS
+    "paused" -> Recurrence.PAUSED
+    else -> Recurrence.DAILY
+}
+
 internal fun parseWeekdays(s: String?): Set<DayOfWeek> =
     Regex("\\d+").findAll(s.orEmpty()).map { DayOfWeek.of(it.value.toInt()) }.toSet()
 
@@ -67,12 +74,13 @@ class TodayData(private val db: PowerSyncDatabase) {
         val flows: List<Flow<List<Any>>> = listOf(
             db.watch(versionsSql) { version(it) },
             db.watch("SELECT onboarded_at FROM profiles WHERE onboarded_at IS NOT NULL") { parseInstant(it.str(0)!!) },
-            db.watch("SELECT id, title, kind, target, reminder_time, archived_on, sort_order FROM habits") {
+            db.watch("SELECT id, title, kind, target, reminder_time, archived_on, sort_order, step, unit, deleted_at FROM habits") {
                 HabitRow(it.str(0)!!, it.str(1)!!, if (it.str(2) == "count") HabitKind.COUNT else HabitKind.YES_NO,
-                    it.int(3).coerceAtLeast(1), it.time(4), it.date(5), it.int(6))
+                    it.int(3).coerceAtLeast(1), it.time(4), it.date(5), it.int(6),
+                    step = it.int(7).coerceAtLeast(1), unit = it.str(8)?.takeIf { u -> u.isNotBlank() }, deletedAt = it.str(9)?.let(::parseInstant))
             },
-            db.watch("SELECT habit_id, valid_from, recurrence, weekdays FROM habit_schedules") {
-                ScheduleRow(it.str(0)!!, it.date(1)!!, if (it.str(2) == "weekdays") Recurrence.WEEKDAYS else Recurrence.DAILY, parseWeekdays(it.str(3)))
+            db.watch("SELECT habit_id, valid_from, recurrence, weekdays, target FROM habit_schedules") {
+                ScheduleRow(it.str(0)!!, it.date(1)!!, parseRecurrence(it.str(2)), parseWeekdays(it.str(3)), it.getLong(4)?.toInt())
             },
             db.watch("SELECT habit_id, loopdo_date, count, verified FROM habit_logs") {
                 LogRow(it.str(0)!!, it.date(1)!!, it.int(2), it.getLong(3) != 0L)

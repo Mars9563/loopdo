@@ -16,10 +16,10 @@ class WidgetModelTest {
     fun habitsOpenThenDoneWithTheRightColumn() {
         assertEquals(listOf("water", "gym", "meditate", "japanese 20m"), m.habits.map { it.title })
         val (water, gym, med, jp) = m.habits
-        assertEquals(WidgetRow("water", true, "water", false, "5/8", Tone.TEXT, plusOne = true), water)
-        assertEquals(WidgetRow("gym", true, "gym", false, "@18:00", Tone.DIM, plusOne = false), gym)
+        assertEquals(WidgetRow("water", true, "water", false, "5/8", Tone.TEXT, plusStep = 1), water)
+        assertEquals(WidgetRow("gym", true, "gym", false, "@18:00", Tone.DIM, plusStep = null), gym)
         val streaks = today.habitsDone.associate { it.id to it.streak }
-        assertEquals(WidgetRow("med", true, "meditate", true, "${streaks["med"]}d", Tone.TEXT, plusOne = false), med)
+        assertEquals(WidgetRow("med", true, "meditate", true, "${streaks["med"]}d", Tone.TEXT, plusStep = null), med)
         assertTrue(jp.done)
         assertEquals(2 to 4, m.habitsDone to m.habitsTotal)
     }
@@ -28,9 +28,9 @@ class WidgetModelTest {
     fun tasksLateFirstThenTodayThenDone() {
         assertEquals(
             listOf(
-                WidgetRow("rent", false, "pay rent", false, "!late 13nov", Tone.WARN, plusOne = false),
-                WidgetRow("apply", false, "apply: 2 jobs", false, "", Tone.DIM, plusOne = false), // no list tag in the widget
-                WidgetRow("call", false, "call home", true, "", Tone.DIM, plusOne = false),
+                WidgetRow("rent", false, "pay rent", false, "!late 13nov", Tone.WARN, plusStep = null),
+                WidgetRow("apply", false, "apply: 2 jobs", false, "", Tone.DIM, plusStep = null), // no list tag in the widget
+                WidgetRow("call", false, "call home", true, "", Tone.DIM, plusStep = null),
             ),
             m.tasks,
         )

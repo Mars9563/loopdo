@@ -31,6 +31,10 @@ interface TodayUi {
     fun tick(h: HabitItem)
     fun untick(h: HabitItem)
     fun decrement(h: HabitItem)
+    /** "All done": a count habit jumps to today's target. */
+    fun complete(h: HabitItem)
+    /** The exact count (long-press → type), or a correction. */
+    fun setCount(h: HabitItem, count: Int)
     fun toggleTask(t: TaskItem)
     /** [onSaved] runs only once the text is safely stored; until then the add sheet keeps it. */
     fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate, onSaved: () -> Unit)
@@ -103,9 +107,20 @@ class TodayViewModel(
     /** Tap on an open habit (or [+1]). */
     override fun tick(h: HabitItem) = run {
         val id = UUID.fromString(h.id)
-        if (actions.tickHabit(id, shownDate()) != null) {
-            _snack.value = Snack("ticked", undo = { if (h.kind == HabitKind.COUNT) actions.decrementHabit(id, shownDate()) else actions.untickHabit(id, shownDate()) })
-        }
+        val r = actions.tickHabit(id, shownDate(), by = if (h.kind == HabitKind.COUNT) h.step else 1) ?: return@run
+        _snack.value = Snack(if (h.kind == HabitKind.COUNT) "+${r.second - r.first}" else "ticked", undo = { actions.setHabitCount(id, r.first, shownDate()) })
+    }
+
+    override fun complete(h: HabitItem) = run {
+        val id = UUID.fromString(h.id)
+        val r = actions.completeHabit(id, shownDate()) ?: return@run
+        _snack.value = Snack("all done", undo = { actions.setHabitCount(id, r.first, shownDate()) })
+    }
+
+    override fun setCount(h: HabitItem, count: Int) = run {
+        val id = UUID.fromString(h.id)
+        val r = actions.setHabitCount(id, count, shownDate()) ?: return@run
+        _snack.value = Snack("set to ${r.second}", undo = { actions.setHabitCount(id, r.first, shownDate()) })
     }
 
     /** Tap on a done yes/no habit. */

@@ -117,4 +117,29 @@ class TodayModelTest {
         assertTrue(with(setOf(d(14))).journalToday)
         assertTrue(!with(setOf(d(13))).journalToday)
     }
+
+    @Test
+    fun countRowShowsUnitStepAndTheTargetOfToday() {
+        val vocab = HabitRow("vocab", "japanese vocab", HabitKind.COUNT, 35, null, null, 9, step = 5, unit = "words")
+        val m = buildToday(
+            now = now, dateAt = istAt, dayEndAt = dayEndInstant(d(14), ist), since = since,
+            habits = listOf(vocab), schedules = listOf(daily("vocab"), ScheduleRow("vocab", d(14), Recurrence.DAILY, emptySet(), target = 40)),
+            logs = listOf(LogRow("vocab", d(14), 20)), tasks = emptyList(), lists = emptyList(), journalDays = emptySet(), activeDays = emptySet(),
+        )
+        val item = m.habitsOpen.single()
+        assertEquals(Triple(20, 40, 5), Triple(item.count, item.target, item.step))
+        assertEquals("words", item.unit)
+    }
+
+    @Test
+    fun hiddenHabitIsNotShownTodayButStillCounts() {
+        val hidden = habits.map { if (it.id == "gym") it.copy(deletedAt = Instant.parse("2026-11-14T10:00:00Z")) else it }
+        val m = buildToday(
+            now = now, dateAt = istAt, dayEndAt = dayEndInstant(d(14), ist), since = since,
+            habits = hidden, schedules = schedules, logs = logs, tasks = tasks, lists = lists, journalDays = emptySet(), activeDays = setOf(d(14)),
+        )
+        assertTrue((m.habitsOpen + m.habitsDone).none { it.id == "gym" })
+        assertEquals(build().streaks.perfect, m.streaks.perfect) // the hidden gym still counts for perfect days
+    }
 }
+

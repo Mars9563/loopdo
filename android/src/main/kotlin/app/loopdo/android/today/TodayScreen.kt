@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -174,15 +175,19 @@ private fun TodaySections(m: TodayModel, vm: TodayUi) {
     val total = m.habitsOpen.size + m.habitsDone.size
     Label("HABITS", right = "${m.habitsDone.size}/$total")
     if (total == 0) Hint("no habits due today.")
+    var countSheet by remember { mutableStateOf<HabitItem?>(null) }
+    countSheet?.let { h -> CountSheet(h, vm) { countSheet = null } }
     m.habitsOpen.forEach { h ->
+        val isCount = h.kind == HabitKind.COUNT
         CheckRow(
-            false, h.title, onClick = { vm.tick(h) },
-            onLongClick = if (h.kind == HabitKind.COUNT && h.count > 0) ({ vm.decrement(h) }) else null,
+            // A count habit's [ ] means "all done" (M5: no 35 taps); long-press sets the exact count.
+            false, h.title, onClick = { if (isCount) vm.complete(h) else vm.tick(h) },
+            onLongClick = if (isCount) ({ countSheet = h }) else null,
         ) {
             when {
-                h.kind == HabitKind.COUNT -> {
-                    Text("${h.count}/${h.target}", style = LoopDoType.small)
-                    Bracket("+1", primary = true) { vm.tick(h) }
+                isCount -> {
+                    Text("${h.count}/${h.target}" + h.unit.orEmpty().let { if (it.isEmpty()) "" else " $it" }, style = LoopDoType.small)
+                    Bracket("+${h.step}", primary = true) { vm.tick(h) }
                 }
                 h.reminderTime != null -> Text("@" + h.reminderTime, style = LoopDoType.small.copy(color = LoopDoColors.dim))
             }
@@ -197,7 +202,7 @@ private fun TodaySections(m: TodayModel, vm: TodayUi) {
                 CheckRow(
                     true, h.title,
                     onClick = { if (h.kind == HabitKind.COUNT) vm.tick(h) else vm.untick(h) },
-                    onLongClick = if (h.kind == HabitKind.COUNT) ({ vm.decrement(h) }) else null,
+                    onLongClick = if (h.kind == HabitKind.COUNT) ({ countSheet = h }) else null,
                 ) {
                     if (h.kind == HabitKind.COUNT) Text("${h.count}/${h.target}", style = LoopDoType.small.copy(color = LoopDoColors.done))
                 }
@@ -277,3 +282,55 @@ private fun CheckRow(done: Boolean, title: String, onClick: () -> Unit, onLongCl
         trailing()
     }
 }
+
+/**
+ * Long-press a count habit (locked habits-tasks-v1 screen 1): step back or forward, type the
+ * exact number, or "all done". Each choice is one action with undo.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun CountSheet(h: HabitItem, vm: TodayUi, onClose: () -> Unit) {
+    var typed by remember { mutableStateOf("") }
+    val none = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    androidx.compose.ui.window.Popup(onDismissRequest = onClose, properties = androidx.compose.ui.window.PopupProperties(focusable = true)) {
+        Box(
+            Modifier.fillMaxSize().background(Color(0x8C000000)).clickable(none, indication = null, onClick = onClose),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            val shape = RoundedCornerShape(24.dp)
+            Column(
+                Modifier.padding(14.dp).fillMaxWidth().background(Color(0xF0101826), shape)
+                    .border(1.dp, Color(0x33BED7FF), shape).clickable(none, indication = null) {}.padding(16.dp),
+            ) {
+                Text(
+                    "${h.title}: ${h.count}/${h.target}" + h.unit.orEmpty().let { if (it.isEmpty()) "" else " $it" },
+                    style = LoopDoType.body,
+                )
+                fun act(block: () -> Unit) { block(); onClose() }
+                androidx.compose.foundation.layout.FlowRow {
+                    if (h.step > 1) Bracket("−${h.step}", idle = true) { act { vm.setCount(h, (h.count - h.step).coerceAtLeast(0)) } }
+                    Bracket("−1", idle = true) { act { vm.setCount(h, (h.count - 1).coerceAtLeast(0)) } }
+                    Bracket("+1") { act { vm.setCount(h, h.count + 1) } }
+                    if (h.step > 1) Bracket("+${h.step}") { act { vm.setCount(h, h.count + h.step) } }
+                    Bracket("all ${h.target} ✓", primary = true) { act { vm.complete(h) } }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.weight(1f).border(1.dp, LoopDoColors.accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        if (typed.isEmpty()) Text("type the count", style = LoopDoType.body.copy(color = LoopDoColors.done))
+                        androidx.compose.foundation.text.BasicTextField(
+                            typed, { v -> typed = v.filter { it.isDigit() }.take(5) }, singleLine = true, textStyle = LoopDoType.body,
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(LoopDoColors.accent),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Bracket("set", primary = true, enabled = typed.isNotEmpty()) { act { vm.setCount(h, typed.toInt()) } }
+                }
+            }
+        }
+    }
+}
+

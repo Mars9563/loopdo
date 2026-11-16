@@ -26,8 +26,10 @@ private class FakeActions : TodayActions {
     var fail: String? = null
     val journalSaves = mutableListOf<Triple<LocalDate, String, Int?>>()
     private fun maybeFail() { fail?.let { throw IllegalArgumentException(it) } }
-    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?) = null
+    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?, by: Int) = null
     override suspend fun untickHabit(habitId: UUID, shownDate: LocalDate?) = null
+    override suspend fun setHabitCount(habitId: UUID, count: Int, shownDate: LocalDate?): Pair<Int, Int>? = 0 to count
+    override suspend fun completeHabit(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? = 0 to 1
     override suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate?) = null
     override suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate?) = null
     override suspend fun completeTask(taskId: UUID) = false

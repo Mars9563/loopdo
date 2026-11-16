@@ -23,7 +23,9 @@ class WidgetCommands(
     private val redraw: suspend () -> Unit,
 ) {
     suspend fun tickHabit(id: UUID, shownDate: LocalDate) = run { actions.tickHabit(id, shownDate) }
-    suspend fun plusOne(id: UUID, shownDate: LocalDate) = run { actions.tickHabit(id, shownDate) }
+    suspend fun plus(id: UUID, shownDate: LocalDate, step: Int) = run { actions.tickHabit(id, shownDate, by = step) }
+    /** `[ ]` on an open count habit: all done (today's target). */
+    suspend fun complete(id: UUID, shownDate: LocalDate) = run { actions.completeHabit(id, shownDate) }
     /** `[x]` on a done habit: yes/no back to open (same day); a count habit is unchanged (−1 is in the app). */
     suspend fun untickHabit(id: UUID, shownDate: LocalDate) = run { actions.untickHabit(id, shownDate) }
     suspend fun toggleTask(id: UUID, done: Boolean) = run { if (done) actions.reopenTask(id) else actions.completeTask(id) }
@@ -38,7 +40,8 @@ class WidgetCommands(
         val id = UUID.fromString(tap.id)
         when (tap.kind) {
             TapKind.TICK -> tickHabit(id, tap.date)
-            TapKind.PLUS -> plusOne(id, tap.date)
+            TapKind.PLUS -> plus(id, tap.date, tap.step)
+            TapKind.COMPLETE -> complete(id, tap.date)
             TapKind.UNTICK -> untickHabit(id, tap.date)
             TapKind.TASK -> toggleTask(id, tap.done)
         }
@@ -57,12 +60,12 @@ class WidgetCommands(
     }
 }
 
-enum class TapKind(val path: String) { TICK("tick"), PLUS("plus"), UNTICK("untick"), TASK("task") }
+enum class TapKind(val path: String) { TICK("tick"), PLUS("plus"), UNTICK("untick"), TASK("task"), COMPLETE("complete") }
 
 /** One widget tap target: what to do to which item, as shown on [date] ([done] = the row showed it done). */
-data class WidgetTap(val kind: TapKind, val id: String, val date: LocalDate, val done: Boolean) {
+data class WidgetTap(val kind: TapKind, val id: String, val date: LocalDate, val done: Boolean, val step: Int = 1) {
     /** Android identifies a widget PendingIntent by its data, so each item gets its own (final review C1). */
-    fun toUri(): String = "$SCHEME://tap/${kind.path}/$id?date=$date&done=$done"
+    fun toUri(): String = "$SCHEME://tap/${kind.path}/$id?date=$date&done=$done" + if (step != 1) "&step=$step" else ""
 }
 
 private const val SCHEME = "loopdo-widget"
@@ -72,7 +75,7 @@ fun parseWidgetTap(uri: String?): WidgetTap? = runCatching {
     require(u.scheme == SCHEME && u.host == "tap")
     val (kind, id) = u.path.trim('/').split('/').let { TapKind.entries.first { k -> k.path == it[0] } to it[1] }
     val q = u.query.split('&').associate { it.substringBefore('=') to it.substringAfter('=') }
-    WidgetTap(kind, id, LocalDate.parse(q.getValue("date")), q.getValue("done").toBooleanStrict())
+    WidgetTap(kind, id, LocalDate.parse(q.getValue("date")), q.getValue("done").toBooleanStrict(), q["step"]?.toInt() ?: 1)
 }.getOrNull()
 
 /** Receives the widget's taps (not exported: only the widget's own PendingIntents reach it). */

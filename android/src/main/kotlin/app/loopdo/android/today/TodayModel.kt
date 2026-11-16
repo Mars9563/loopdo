@@ -10,6 +10,7 @@ import app.loopdo.shared.habit.habitOutcomes
 import app.loopdo.shared.habit.isDue
 import app.loopdo.shared.habit.journalOutcomes
 import app.loopdo.shared.habit.perfectDayOutcomes
+import app.loopdo.shared.habit.targetOn
 import app.loopdo.shared.streak.computeStreak
 import app.loopdo.shared.task.TaskState
 import app.loopdo.shared.task.lateSince
@@ -21,15 +22,23 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 // Rows as read from the phone's database.
-data class HabitRow(val id: String, val title: String, val kind: HabitKind, val target: Int, val reminderTime: LocalTime?, val archivedOn: LocalDate?, val sortOrder: Int)
-data class ScheduleRow(val habitId: String, val validFrom: LocalDate, val recurrence: Recurrence, val weekdays: Set<DayOfWeek>)
+data class HabitRow(
+    val id: String, val title: String, val kind: HabitKind, val target: Int, val reminderTime: LocalTime?, val archivedOn: LocalDate?, val sortOrder: Int,
+    /** [+step] for count habits; unit as in "20/35 words"; deletedAt = "delete forever" (hidden, history still counts). */
+    val step: Int = 1, val unit: String? = null, val deletedAt: Instant? = null,
+)
+data class ScheduleRow(val habitId: String, val validFrom: LocalDate, val recurrence: Recurrence, val weekdays: Set<DayOfWeek>, val target: Int? = null)
 data class LogRow(val habitId: String, val date: LocalDate, val count: Int, val verified: Boolean = true)
 data class TaskRow(val id: String, val listId: String?, val title: String, val dueDate: LocalDate?, val dueTime: LocalTime?, val completedOn: LocalDate?, val sortOrder: Int)
 data class ListRow(val id: String, val name: String, val sortOrder: Int)
 
 // What the today screen shows (docs/design/app, screen 1).
 data class StreakLine(val journal: Int, val perfect: Int, val active: Int, val freezes: Int)
-data class HabitItem(val id: String, val title: String, val kind: HabitKind, val count: Int, val target: Int, val streak: Int, val reminderTime: LocalTime?)
+/** [target] = the target of today (a change applies from tomorrow); [step] = what [+n] adds. */
+data class HabitItem(
+    val id: String, val title: String, val kind: HabitKind, val count: Int, val target: Int, val streak: Int, val reminderTime: LocalTime?,
+    val step: Int = 1, val unit: String? = null,
+)
 data class TaskItem(val id: String, val title: String, val lateSince: LocalDate?, val listName: String?, val dueTime: LocalTime?, val done: Boolean)
 data class ListGroup(val id: String, val name: String, val items: List<TaskItem>)
 
@@ -71,18 +80,19 @@ fun buildToday(
     val shared = habits.map { h ->
         Habit(
             id = h.id, kind = h.kind, target = h.target, archivedOn = h.archivedOn,
-            schedules = schedulesBy[h.id].orEmpty().map { HabitSchedule(it.validFrom, it.recurrence, it.weekdays) },
+            schedules = schedulesBy[h.id].orEmpty().map { HabitSchedule(it.validFrom, it.recurrence, it.weekdays, it.target) },
         )
     }
     val sharedLogs = logsBy.mapValues { (_, l) -> l.map { HabitLog(it.date, it.count, it.verified) } }
 
     val dueToday = habits.zip(shared).filter { (row, h) ->
-        (row.archivedOn == null || today < row.archivedOn) && isDue(h.schedules, today)
+        // Hidden ("delete forever") habits leave the screen, but [shared] keeps them for perfect days.
+        row.deletedAt == null && (row.archivedOn == null || today < row.archivedOn) && isDue(h.schedules, today)
     }.sortedWith(compareBy({ it.first.sortOrder }, { it.first.title }))
     val items = dueToday.map { (row, h) ->
         val count = logsBy[row.id].orEmpty().filter { it.date == today }.maxOfOrNull { it.count } ?: 0
         val streak = computeStreak(habitOutcomes(h, sharedLogs[row.id].orEmpty(), today)).current
-        HabitItem(row.id, row.title, row.kind, count, row.target, streak, row.reminderTime)
+        HabitItem(row.id, row.title, row.kind, count, targetOn(h, today), streak, row.reminderTime, row.step, row.unit)
     }
 
     val listNames = lists.associate { it.id to it.name }

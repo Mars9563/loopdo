@@ -10,8 +10,10 @@ import kotlin.test.assertEquals
 
 private class CountingActions : TodayActions {
     var calls = 0
-    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? { calls++; return 0 to 1 }
+    override suspend fun tickHabit(habitId: UUID, shownDate: LocalDate?, by: Int): Pair<Int, Int>? { calls++; return 0 to 1 }
     override suspend fun untickHabit(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? { calls++; return 1 to 0 }
+    override suspend fun setHabitCount(habitId: UUID, count: Int, shownDate: LocalDate?): Pair<Int, Int>? = 0 to count
+    override suspend fun completeHabit(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? = 0 to 1
     override suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? { calls++; return null }
     override suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? = null
     override suspend fun completeTask(taskId: UUID): Boolean { calls++; return true }
