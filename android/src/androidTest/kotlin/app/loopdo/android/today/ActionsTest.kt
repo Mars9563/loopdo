@@ -169,4 +169,14 @@ class ActionsTest {
         val future = runCatching { actions.saveJournal(LocalDate.of(2026, 11, 16), "x", null) }.exceptionOrNull()
         assertTrue("a day that hasn't started is refused, got $future", future is IllegalArgumentException)
     }
+
+    @Test
+    fun saveJournalMergesTextAddedSinceTheDraftStarted() = runBlocking {
+        val sat = LocalDate.of(2026, 11, 14)
+        actions.saveJournal(sat, "walk", null)
+        actions.appendJournalLine("called mom") // e.g. [+ add] while the journal pop-up held a draft
+        actions.saveJournal(sat, "walk and gym", 4, base = "walk")
+        val id = uuidV5(user, "journal:2026-11-14").toString()
+        assertEquals("walk\ncalled mom\nand gym", db.get("SELECT text FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0)!! })
+    }
 }

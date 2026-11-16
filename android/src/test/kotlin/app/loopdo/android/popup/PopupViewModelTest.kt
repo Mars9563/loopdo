@@ -18,6 +18,7 @@ import kotlin.test.assertEquals
 private class MemoryDrafts : PopupDrafts {
     val map = mutableMapOf<String, String>()
     override fun load(key: String) = map[key].orEmpty()
+    override fun keys(): Set<String> = map.keys
     override fun save(key: String, text: String) { if (text.isEmpty()) map.remove(key) else map[key] = text }
 }
 
@@ -33,7 +34,7 @@ private class FakeActions : TodayActions {
     override suspend fun reopenTask(taskId: UUID) = false
     override suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID { maybeFail(); return UUID.randomUUID() }
     override suspend fun appendJournalLine(text: String) = maybeFail()
-    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?) { maybeFail(); journalSaves += Triple(date, text, mood) }
+    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String?) { maybeFail(); journalSaves += Triple(date, text, mood) }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

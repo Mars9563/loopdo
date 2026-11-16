@@ -39,10 +39,14 @@ class JournalPopupActivity : ComponentActivity() {
                 finish()
                 return@launch
             }
-            val date = today.date
-            val key = PopupViewModel.journalKey(date)
+            // Unsaved text from an earlier day reopens on that day (it stays editable), never stranded.
+            val date = journalDateToOpen(today.date, vm.journalDraftDates())
             val entry = graph.todayData.journalOn(date)
-            val startText = vm.draft(key).ifEmpty { entry?.text.orEmpty() }
+            val current = entry?.text.orEmpty()
+            // A draft is replayed on top of the entry as it is now (owner: merge, never overwrite).
+            val startText = vm.journalDraft(date)?.let { (draft, base) -> mergeJournal(current, base, draft) } ?: current
+            vm.keepJournalDraft(date, startText, current)
+            val notice = if (date != today.date) "unsaved text from ${date.short()}: save it or clear it." else null
             setContent {
                 LoopDoTheme(backdrop = false) {
                     var text by rememberSaveable { mutableStateOf(startText) }
@@ -50,9 +54,9 @@ class JournalPopupActivity : ComponentActivity() {
                     val error by vm.error.collectAsStateWithLifecycle()
                     JournalSheet(
                         dateLabel = date.short(), streak = today.streaks.journal,
-                        text = text, onText = { text = it; vm.keepDraft(key, it) },
+                        text = text, onText = { text = it; vm.keepJournalDraft(date, it, current) },
                         mood = mood, onMood = { mood = it },
-                        error = error,
+                        error = error, notice = notice,
                         onOpenApp = {
                             startActivity(
                                 Intent(this@JournalPopupActivity, MainActivity::class.java)
@@ -60,7 +64,7 @@ class JournalPopupActivity : ComponentActivity() {
                             )
                             finish()
                         },
-                        onSave = { vm.saveJournal(date, text, mood) { finish() } },
+                        onSave = { vm.saveJournal(date, text, mood, base = current) { finish() } },
                         onDismiss = { finish() },
                     )
                 }

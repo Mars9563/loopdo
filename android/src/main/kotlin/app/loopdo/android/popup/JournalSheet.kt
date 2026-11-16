@@ -56,6 +56,7 @@ fun JournalSheet(
     mood: Int?,
     onMood: (Int?) -> Unit,
     error: String?,
+    notice: String? = null,
     onOpenApp: () -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit,
@@ -82,6 +83,7 @@ fun JournalSheet(
                 Text(" $dateLabel", style = LoopDoType.body, modifier = Modifier.weight(1f))
                 Text("🔥 ${streak}d", style = LoopDoType.small.copy(color = LoopDoColors.dim))
             }
+            notice?.let { Text(it, style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(top = 6.dp)) }
             Text("MOOD", style = LoopDoType.label, modifier = Modifier.padding(top = 12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 MOODS.forEachIndexed { i, face ->

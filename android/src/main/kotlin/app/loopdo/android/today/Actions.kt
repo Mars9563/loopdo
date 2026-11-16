@@ -38,8 +38,12 @@ interface TodayActions {
     suspend fun reopenTask(taskId: UUID): Boolean
     suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID
     suspend fun appendJournalLine(text: String)
-    /** Replaces the text and mood of [date]'s entry (past entries stay editable; future days can't be written). */
-    suspend fun saveJournal(date: LocalDate, text: String, mood: Int?)
+    /**
+     * Stores [text] and [mood] as [date]'s entry (past entries stay editable; future days can't be
+     * written). [base] = the entry text the edit started from: if the entry changed since, the edit is
+     * merged on top (mergeJournal), never overwriting newer text.
+     */
+    suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String? = null)
 }
 
 class Actions(
@@ -201,21 +205,22 @@ class Actions(
         }
     }
 
-    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?) {
+    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String?) {
         val user = userId() ?: throw IllegalStateException("not signed in")
         val today = dateAt(clock.now().instant)
         require(date <= today) { "that day hasn't started yet." }
         require(mood == null || mood in app.loopdo.shared.Limits.MOOD_RANGE) { "pick one of the five moods." }
-        require(text.length <= MAX_JOURNAL) { "today's entry is full ($MAX_JOURNAL characters)." }
         val id = uuidV5(user, "journal:$date").toString()
         db.writeTransaction { tx ->
-            val exists = tx.getOptional("SELECT 1 FROM journal_entries WHERE id = ?", listOf(id)) { 1 } != null
-            if (exists) {
-                tx.execute("UPDATE journal_entries SET text = ?, mood = ? WHERE id = ?", listOf(text, mood, id))
+            val current = tx.getOptional("SELECT text FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0).orEmpty() }
+            val merged = if (base != null && current != null && current != base) app.loopdo.android.popup.mergeJournal(current, base, text) else text
+            require(merged.length <= MAX_JOURNAL) { "today's entry is full ($MAX_JOURNAL characters)." }
+            if (current != null) {
+                tx.execute("UPDATE journal_entries SET text = ?, mood = ? WHERE id = ?", listOf(merged, mood, id))
             } else {
                 tx.execute(
                     "INSERT INTO journal_entries (id, user_id, loopdo_date, text, mood) VALUES (?, ?, ?, ?, ?)",
-                    listOf(id, user.toString(), date.toString(), text, mood),
+                    listOf(id, user.toString(), date.toString(), merged, mood),
                 )
             }
         }

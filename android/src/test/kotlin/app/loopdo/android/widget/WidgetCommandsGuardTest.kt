@@ -18,7 +18,7 @@ private class CountingActions : TodayActions {
     override suspend fun reopenTask(taskId: UUID): Boolean { calls++; return true }
     override suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?) = UUID.randomUUID()
     override suspend fun appendJournalLine(text: String) = Unit
-    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?) = Unit
+    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String?) = Unit
 }
 
 /** A tap acts only if, at tap time, the app is ready on the day the row showed (final review I5). */
