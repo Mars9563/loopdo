@@ -2,9 +2,9 @@ package app.loopdo.android.widget
 
 import android.content.Context
 import android.util.Log
-import androidx.glance.GlanceId
-import androidx.glance.action.ActionParameters
-import androidx.glance.appwidget.action.ActionCallback
+import android.content.BroadcastReceiver
+import android.content.Intent
+import kotlinx.coroutines.launch
 import app.loopdo.android.LoopDoApp
 import app.loopdo.android.today.StaleDayException
 import app.loopdo.android.today.TodayActions
@@ -23,6 +23,16 @@ class WidgetCommands(private val actions: TodayActions, private val redraw: susp
     suspend fun untickHabit(id: UUID, shownDate: LocalDate) = run { actions.untickHabit(id, shownDate) }
     suspend fun toggleTask(id: UUID, done: Boolean) = run { if (done) actions.reopenTask(id) else actions.completeTask(id) }
 
+    suspend fun handle(tap: WidgetTap) {
+        val id = UUID.fromString(tap.id)
+        when (tap.kind) {
+            TapKind.TICK -> tickHabit(id, tap.date)
+            TapKind.PLUS -> plusOne(id, tap.date)
+            TapKind.UNTICK -> untickHabit(id, tap.date)
+            TapKind.TASK -> toggleTask(id, tap.done)
+        }
+    }
+
     private suspend fun run(block: suspend () -> Unit) {
         try {
             block()
@@ -36,30 +46,36 @@ class WidgetCommands(private val actions: TodayActions, private val redraw: susp
     }
 }
 
-internal val IdKey = ActionParameters.Key<String>("id")
-internal val DateKey = ActionParameters.Key<String>("shownDate")
-internal val DoneKey = ActionParameters.Key<Boolean>("done")
+enum class TapKind(val path: String) { TICK("tick"), PLUS("plus"), UNTICK("untick"), TASK("task") }
 
-private fun Context.commands() = (applicationContext as LoopDoApp).graph.widgetCommands
-private fun ActionParameters.id() = UUID.fromString(this[IdKey]!!)
-private fun ActionParameters.date() = LocalDate.parse(this[DateKey]!!)
-
-class TickHabit : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
-        context.commands().tickHabit(parameters.id(), parameters.date())
+/** One widget tap target: what to do to which item, as shown on [date] ([done] = the row showed it done). */
+data class WidgetTap(val kind: TapKind, val id: String, val date: LocalDate, val done: Boolean) {
+    /** Android identifies a widget PendingIntent by its data, so each item gets its own (final review C1). */
+    fun toUri(): String = "$SCHEME://tap/${kind.path}/$id?date=$date&done=$done"
 }
 
-class PlusOne : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
-        context.commands().plusOne(parameters.id(), parameters.date())
-}
+private const val SCHEME = "loopdo-widget"
 
-class UntickHabit : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
-        context.commands().untickHabit(parameters.id(), parameters.date())
-}
+fun parseWidgetTap(uri: String?): WidgetTap? = runCatching {
+    val u = java.net.URI(uri!!)
+    require(u.scheme == SCHEME && u.host == "tap")
+    val (kind, id) = u.path.trim('/').split('/').let { TapKind.entries.first { k -> k.path == it[0] } to it[1] }
+    val q = u.query.split('&').associate { it.substringBefore('=') to it.substringAfter('=') }
+    WidgetTap(kind, id, LocalDate.parse(q.getValue("date")), q.getValue("done").toBooleanStrict())
+}.getOrNull()
 
-class ToggleTask : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) =
-        context.commands().toggleTask(parameters.id(), parameters[DoneKey] ?: false)
+/** Receives the widget's taps (not exported: only the widget's own PendingIntents reach it). */
+class WidgetTapReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val tap = parseWidgetTap(intent.dataString) ?: return
+        val graph = (context.applicationContext as LoopDoApp).graph
+        val done = goAsync()
+        graph.scope.launch {
+            try {
+                graph.widgetCommands.handle(tap)
+            } finally {
+                done.finish()
+            }
+        }
+    }
 }

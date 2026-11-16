@@ -15,13 +15,14 @@ import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.action.Action
-import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.actionRunCallback
+import android.content.Intent
+import android.net.Uri
+import androidx.glance.appwidget.action.actionSendBroadcast
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
@@ -180,11 +181,14 @@ private fun RowView(r: WidgetRow, date: LocalDate, inner: Dp) {
     val charDp = BODY_SP * 0.6f * scale // JetBrains Mono advance ≈ 0.6 em
     val rightDp = if (r.right.isEmpty()) 0f else (r.right.length + 1) * charDp
     val titleMax = (inner.value - 40 - rightDp - if (r.plusOne) 48 else 0).coerceAtLeast(40f).dp
-    val params = actionParametersOf(IdKey to r.id, DateKey to date.toString(), DoneKey to r.done)
+    val ctx = LocalContext.current
+    fun tap(kind: TapKind) = actionSendBroadcast(
+        Intent(ctx, WidgetTapReceiver::class.java).setData(Uri.parse(WidgetTap(kind, r.id, date, r.done).toUri())),
+    )
     val check = when {
-        !r.isHabit -> actionRunCallback<ToggleTask>(params)
-        r.done -> actionRunCallback<UntickHabit>(params)
-        else -> actionRunCallback<TickHabit>(params)
+        !r.isHabit -> tap(TapKind.TASK)
+        r.done -> tap(TapKind.UNTICK)
+        else -> tap(TapKind.TICK)
     }
     Row(GlanceModifier.fillMaxWidth().height(ROW_DP.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(GlanceModifier.width(40.dp).fillMaxHeight().clickable(check), contentAlignment = Alignment.CenterStart) {
@@ -194,7 +198,7 @@ private fun RowView(r: WidgetRow, date: LocalDate, inner: Dp) {
             MonoText(r.title, color, maxWidth = titleMax)
         }
         if (r.right.isNotEmpty()) MonoText(r.right, when (r.rightTone) { Tone.WARN -> WARN; Tone.DIM -> DIM; Tone.TEXT -> if (r.done) DONE else TEXT })
-        if (r.plusOne) Box(GlanceModifier.width(48.dp).fillMaxHeight().clickable(actionRunCallback<PlusOne>(params)), contentAlignment = Alignment.CenterEnd) {
+        if (r.plusOne) Box(GlanceModifier.width(48.dp).fillMaxHeight().clickable(tap(TapKind.PLUS)), contentAlignment = Alignment.CenterEnd) {
             MonoText("[+1]", ACCENT)
         }
     }

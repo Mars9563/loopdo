@@ -53,6 +53,11 @@
                 android:resource="@xml/loopdo_widget_info" />
         </receiver>
 
+        <!-- Widget taps: each tap's data names its item (not exported; only the widget's PendingIntents). -->
+        <receiver
+            android:name=".widget.WidgetTapReceiver"
+            android:exported="false" />
+
         <!-- Widget refresh: our alarms (day end, every 15 min), clock/zone change, boot, app update. -->
         <receiver
             android:name=".widget.WidgetRefreshReceiver"
