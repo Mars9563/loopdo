@@ -43,7 +43,7 @@ class AppGraph(context: android.content.Context) {
     private val http = io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
         install(io.ktor.client.plugins.HttpTimeout) { requestTimeoutMillis = 15_000 }
     }
-    private val token = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.accessToken }
+    private val token: suspend () -> String? = { auth.freshToken() }
     private val timeApi = app.loopdo.android.time.KtorTimeApi(http, token)
     val sync = app.loopdo.android.sync.SyncModule(
         context, auth, scope, app.loopdo.android.time.AnchorRefresher(timeApi, anchorStore, clocks),

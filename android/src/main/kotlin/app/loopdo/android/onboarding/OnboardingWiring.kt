@@ -14,7 +14,7 @@ import java.io.IOException
 import java.time.Instant
 import java.util.UUID
 
-class KtorSettingsApi(private val http: HttpClient, private val token: () -> String?) : SettingsApi {
+class KtorSettingsApi(private val http: HttpClient, private val token: suspend () -> String?) : SettingsApi {
     override suspend fun setDaySettings(timeZone: String, dayEnd: String) {
         val t = token() ?: throw IOException("not signed in")
         val r = try {

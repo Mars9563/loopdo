@@ -113,7 +113,7 @@ class EvidenceFactory(private val clocks: DeviceClocks, private val anchors: Anc
 }
 
 /** GET {api}/api/time with the user's token. */
-class KtorTimeApi(private val http: io.ktor.client.HttpClient, private val token: () -> String?) : TimeApi {
+class KtorTimeApi(private val http: io.ktor.client.HttpClient, private val token: suspend () -> String?) : TimeApi {
     override suspend fun time(): Pair<Instant, String> {
         val t = token() ?: throw java.io.IOException("not signed in")
         val body = http.get("${app.loopdo.android.config.AppConfig.apiUrl}/api/time") { bearerAuth(t) }.bodyAsText()

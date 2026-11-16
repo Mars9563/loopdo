@@ -20,7 +20,11 @@ sealed interface AuthState {
 /** A problem worded for the person, as in the locked sign-in mockup. */
 class AuthProblem(message: String) : Exception(message)
 
-class AuthRepository(private val backend: AuthBackend, scope: CoroutineScope) {
+class AuthRepository(
+    private val backend: AuthBackend,
+    scope: CoroutineScope,
+    private val clock: () -> java.time.Instant = java.time.Instant::now,
+) {
     /**
      * Once signed in, a later "loading" is not a sign-out: supabase-kt's Android lifecycle hook
      * reports "Initializing" whenever the app goes to the background. Only a real sign-out (or a
@@ -39,6 +43,19 @@ class AuthRepository(private val backend: AuthBackend, scope: CoroutineScope) {
     suspend fun resetWithCode(email: String, code: String, newPassword: String) =
         attempt { backend.resetPasswordWithCode(email.trim(), code.trim(), newPassword) }
     suspend fun signInWithGoogle(idToken: String, rawNonce: String) = attempt { backend.signInWithGoogleIdToken(idToken, rawNonce) }
+    /**
+     * The access token to send, refreshed first if it expires within a minute. With supabase-kt's
+     * lifecycle hook off, a night in deep sleep can leave an expired token that the library still
+     * calls valid (final review I2). Offline, the stored token is returned: the server's 401 makes
+     * the upload retry later, and nothing is lost.
+     */
+    suspend fun freshToken(): String? {
+        val s = session.value as? AuthState.SignedIn ?: return null
+        val exp = expiryOf(s.accessToken)
+        if (exp == null || exp.isAfter(clock().plusSeconds(60))) return s.accessToken
+        return runCatching { backend.refreshSession() }.getOrNull() ?: s.accessToken
+    }
+
     /** Signing out needs the network (Supabase revokes the session); offline it is refused, never a crash. */
     suspend fun signOut(): Result<Unit> = try {
         backend.signOut(); Result.success(Unit)
@@ -65,6 +82,12 @@ class AuthRepository(private val backend: AuthBackend, scope: CoroutineScope) {
     }
 
     companion object {
+        /** The `exp` claim of an access token, or null if it can't be read. */
+        fun expiryOf(token: String): java.time.Instant? = runCatching {
+            val payload = String(java.util.Base64.getUrlDecoder().decode(token.split('.')[1]))
+            java.time.Instant.ofEpochSecond(kotlinx.serialization.json.Json.parseToJsonElement(payload).jsonObject["exp"]!!.jsonPrimitive.content.toLong())
+        }.getOrNull()
+
         /** The `sub` claim of an access token (the signature is the server's business, not ours). */
         fun userIdFromJwt(token: String): UUID? = runCatching {
             val payload = String(java.util.Base64.getUrlDecoder().decode(token.split('.')[1]))

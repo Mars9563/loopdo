@@ -67,6 +67,11 @@ class SupabaseAuthBackend(supabase: SupabaseClient, scope: CoroutineScope) : Aut
 
     override suspend fun signOut() = call { auth.signOut() }
 
+    override suspend fun refreshSession(): String? = call {
+        auth.refreshCurrentSession()
+        auth.currentSessionOrNull()?.accessToken
+    }
+
     /** Server errors → BackendError with Supabase's error code; network failures stay IOExceptions. */
     private suspend fun <T> call(block: suspend () -> T): T = try {
         block()

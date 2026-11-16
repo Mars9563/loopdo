@@ -52,6 +52,9 @@ private class FakeBackend(initial: BackendStatus = BackendStatus.SignedOut) : Au
     }
     override suspend fun signInWithGoogleIdToken(idToken: String, rawNonce: String) { online(); signedIn() }
     override suspend fun signOut() { online(); status.value = BackendStatus.SignedOut }
+    var refreshes = 0
+    var refreshedToken = "refreshed-token"
+    override suspend fun refreshSession(): String? { online(); refreshes++; return refreshedToken }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -157,4 +160,38 @@ class AuthRepositoryTest {
         b.status.value = BackendStatus.SignedOut // a real sign-out still signs out
         assertIs<AuthState.SignedOut>(auth.session.value)
     }
+
+    private fun jwtExpiring(user: UUID, exp: java.time.Instant): String {
+        val b64 = { x: String -> java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(x.toByteArray()) }
+        return b64("""{"alg":"ES256"}""") + "." + b64("""{"sub":"$user","exp":${exp.epochSecond}}""") + ".c2ln"
+    }
+    private val now = java.time.Instant.parse("2026-11-16T06:00:00Z")
+
+    /** After a night in deep sleep the stored token can be expired while the library still says "signed in" (final review I2). */
+    @Test
+    fun freshTokenRefreshesAnExpiringToken() = runTest(UnconfinedTestDispatcher()) {
+        val b = FakeBackend(); val user = UUID.randomUUID()
+        b.status.value = BackendStatus.SignedIn(user, jwtExpiring(user, now.plusSeconds(30)))
+        assertEquals("refreshed-token", AuthRepository(b, backgroundScope) { now }.freshToken())
+        assertEquals(1, b.refreshes)
+    }
+
+    @Test
+    fun freshTokenKeepsAValidToken() = runTest(UnconfinedTestDispatcher()) {
+        val b = FakeBackend(); val user = UUID.randomUUID()
+        val token = jwtExpiring(user, now.plusSeconds(3600))
+        b.status.value = BackendStatus.SignedIn(user, token)
+        assertEquals(token, AuthRepository(b, backgroundScope) { now }.freshToken())
+        assertEquals(0, b.refreshes)
+    }
+
+    @Test
+    fun freshTokenOfflineFallsBackToTheStoredToken() = runTest(UnconfinedTestDispatcher()) {
+        val b = FakeBackend(); val user = UUID.randomUUID()
+        val token = jwtExpiring(user, now.minusSeconds(600))
+        b.status.value = BackendStatus.SignedIn(user, token)
+        b.offline = true // the server answers 401 → the upload retries later; nothing is lost
+        assertEquals(token, AuthRepository(b, backgroundScope) { now }.freshToken())
+    }
 }
+

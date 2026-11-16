@@ -51,7 +51,7 @@ class PowerSyncUploadState(private val db: PowerSyncDatabase) : UploadState {
 }
 
 /** POST /api/sync/upload with the signed-in user's token. Network failures surface as IOException. */
-class KtorUploadApi(private val http: HttpClient, private val token: () -> String?) : UploadApi {
+class KtorUploadApi(private val http: HttpClient, private val token: suspend () -> String?) : UploadApi {
     override suspend fun upload(body: JsonObject): HttpResult {
         val t = token() ?: throw IOException("not signed in")
         val r = try {
@@ -72,7 +72,9 @@ class KtorUploadApi(private val http: HttpClient, private val token: () -> Strin
 /** PowerSync ↔ LoopDo: downloads with the Supabase token; uploads one transaction at a time to our API. */
 class LoopDoConnector(private val auth: AuthRepository, private val uploader: Uploader) : PowerSyncBackendConnector() {
     override suspend fun fetchCredentials(): PowerSyncCredentials? =
-        (auth.session.value as? AuthState.SignedIn)?.let { PowerSyncCredentials(AppConfig.powerSyncUrl, it.accessToken, it.userId.toString()) }
+        (auth.session.value as? AuthState.SignedIn)?.let { s ->
+            PowerSyncCredentials(AppConfig.powerSyncUrl, auth.freshToken() ?: s.accessToken, s.userId.toString())
+        }
 
     override suspend fun uploadData(database: PowerSyncDatabase) {
         while (true) {

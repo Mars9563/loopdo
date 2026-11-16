@@ -37,7 +37,7 @@ class SyncModule(
     val blocked: kotlinx.coroutines.flow.StateFlow<String?> = blockedState
     private val http = HttpClient(OkHttp) { install(HttpTimeout) { requestTimeoutMillis = 15_000 } }
     private val uploader = Uploader(
-        KtorUploadApi(http) { (auth.session.value as? AuthState.SignedIn)?.accessToken },
+        KtorUploadApi(http) { auth.freshToken() },
         PowerSyncDraftStore(db),
         PowerSyncUploadState(db),
         notices::add,
