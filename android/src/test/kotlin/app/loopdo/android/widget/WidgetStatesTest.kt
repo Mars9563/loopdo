@@ -31,12 +31,15 @@ class WidgetStatesTest {
         val rows = MutableSharedFlow<Int>()
         val session = MutableSharedFlow<String>()
         val refresh = MutableSharedFlow<Unit>()
+        val blocked = MutableSharedFlow<String?>()
         var fired = 0
-        val job = launch { widgetTriggers(rows, session, refresh).collect { fired++ } }
+        val job = launch { widgetTriggers(rows, session, blocked, refresh).collect { fired++ } }
         session.emit("SignedOut")
         assertEquals(1, fired)
         rows.emit(1); refresh.emit(Unit)
         assertEquals(3, fired)
+        blocked.emit("another account has unsynced changes") // final review I5: hide the old account's rows at once
+        assertEquals(4, fired)
         job.cancel()
     }
 }

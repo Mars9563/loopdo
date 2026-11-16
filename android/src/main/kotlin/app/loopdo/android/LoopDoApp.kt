@@ -80,14 +80,20 @@ class AppGraph(context: android.content.Context) {
         scope.launch { todayData.rows().debounce(500).collect { runCatching { redrawWidget() } } }
         // Sign-in/out: show (or hide) the data even when no widget session is open.
         scope.launch { auth.session.drop(1).collect { runCatching { redrawWidget() } } }
+        scope.launch { sync.blocked.drop(1).collect { runCatching { redrawWidget() } } }
     }
 
     /** Live widget state: the database's changes plus explicit redraws. */
     fun widgetStates() = app.loopdo.android.widget.widgetStates(
-        app.loopdo.android.widget.widgetTriggers(todayData.rows(), auth.session, widgetRefresh),
+        app.loopdo.android.widget.widgetTriggers(todayData.rows(), auth.session, sync.blocked, widgetRefresh),
     ) { widgetSnapshot() }
 
-    val widgetCommands by lazy { app.loopdo.android.widget.WidgetCommands(actions) { redrawWidget() } }
+    val widgetCommands by lazy {
+        app.loopdo.android.widget.WidgetCommands(
+            actions,
+            readyOn = { (widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready)?.model?.date },
+        ) { redrawWidget() }
+    }
 
     /** What the widget shows right now: nothing tickable until the app is ready (M3 start rules). */
     suspend fun widgetSnapshot(): app.loopdo.android.widget.WidgetState {

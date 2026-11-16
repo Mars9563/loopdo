@@ -98,9 +98,10 @@ fun rowSlots(heightDp: Float, fontScale: Float): Int =
 
 /**
  * Everything that must redraw the widget: database changes, sign-in/out (signing out keeps the
- * local rows, so the database alone never fires) and explicit redraws.
+ * local rows, so the database alone never fires), an account switch being refused, and explicit redraws.
  */
 fun widgetTriggers(
-    rows: kotlinx.coroutines.flow.Flow<*>, session: kotlinx.coroutines.flow.Flow<*>, refresh: kotlinx.coroutines.flow.Flow<Unit>,
-): kotlinx.coroutines.flow.Flow<Unit> = kotlinx.coroutines.flow.merge(rows.map { }, session.map { }, refresh)
+    rows: kotlinx.coroutines.flow.Flow<*>, session: kotlinx.coroutines.flow.Flow<*>, blocked: kotlinx.coroutines.flow.Flow<*>,
+    refresh: kotlinx.coroutines.flow.Flow<Unit>,
+): kotlinx.coroutines.flow.Flow<Unit> = kotlinx.coroutines.flow.merge(rows.map { }, session.map { }, blocked.map { }, refresh)
 

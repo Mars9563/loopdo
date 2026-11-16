@@ -16,7 +16,12 @@ import java.util.UUID
  * transaction each), then always a redraw. After a refused stale tap the redraw is how a
  * widget still showing yesterday heals itself.
  */
-class WidgetCommands(private val actions: TodayActions, private val redraw: suspend () -> Unit) {
+class WidgetCommands(
+    private val actions: TodayActions,
+    /** The day the app is ready on right now, or null when it isn't (signed out, blocked, restoring). */
+    private val readyOn: suspend () -> LocalDate?,
+    private val redraw: suspend () -> Unit,
+) {
     suspend fun tickHabit(id: UUID, shownDate: LocalDate) = run { actions.tickHabit(id, shownDate) }
     suspend fun plusOne(id: UUID, shownDate: LocalDate) = run { actions.tickHabit(id, shownDate) }
     /** `[x]` on a done habit: yes/no back to open (same day); a count habit is unchanged (−1 is in the app). */
@@ -24,6 +29,12 @@ class WidgetCommands(private val actions: TodayActions, private val redraw: susp
     suspend fun toggleTask(id: UUID, done: Boolean) = run { if (done) actions.reopenTask(id) else actions.completeTask(id) }
 
     suspend fun handle(tap: WidgetTap) {
+        // The row may be older than the app's state (sign-out, a refused account switch, day end):
+        // act only if the app is ready on the very day the row showed, else just redraw (final review I5).
+        if (runCatching { readyOn() }.getOrNull() != tap.date) {
+            runCatching { redraw() }
+            return
+        }
         val id = UUID.fromString(tap.id)
         when (tap.kind) {
             TapKind.TICK -> tickHabit(id, tap.date)

@@ -33,6 +33,7 @@ class WidgetCommandsTest {
     private lateinit var db: PowerSyncDatabase
     private lateinit var commands: WidgetCommands
     private var redraws = 0
+    private var readyDay: LocalDate? = LocalDate.of(2026, 11, 14)
     private val user = UUID.fromString("0b5c4f0e-6d1a-4c55-9d8e-3f0a1b2c3d4e")
     private val now = Instant.parse("2026-11-14T19:12:00Z") // LoopDo sat 14 nov
     private val today = LocalDate.of(2026, 11, 14)
@@ -54,7 +55,7 @@ class WidgetCommandsTest {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         db = PowerSyncDatabase(DatabaseDriverFactory(ctx), LoopDoSchema.schema, dbFilename = "test-${UUID.randomUUID()}.db")
         val actions = Actions(db, TrustedClock(clocks, anchors), EvidenceFactory(clocks, anchors), { loopDoDate(it, ist) }, { user })
-        commands = WidgetCommands(actions) { redraws++ }
+        commands = WidgetCommands(actions, readyOn = { readyDay }) { redraws++ }
     }
 
     @After
