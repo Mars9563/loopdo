@@ -84,3 +84,14 @@ fun lateSince(dueDate: LocalDate?, completedOn: LocalDate?, today: LocalDate): L
         TaskState.LATE, TaskState.DONE_LATE -> dueDate
         else -> null
     }
+
+/**
+ * The occurrence dates of a repeating task that still need their own task: those in
+ * [start]..[today] after [generatedThrough] (the last date already created). Running it again,
+ * or on another device with the same synced [generatedThrough], creates nothing twice.
+ */
+fun instancesToCreate(rule: RepeatRule, start: LocalDate, generatedThrough: LocalDate?, today: LocalDate): List<LocalDate> {
+    val from = if (generatedThrough != null && generatedThrough >= start) generatedThrough.plusDays(1) else start
+    return occurrences(rule, from, today)
+}
+

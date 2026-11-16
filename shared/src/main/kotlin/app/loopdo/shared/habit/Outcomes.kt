@@ -32,8 +32,11 @@ private fun days(start: LocalDate, endInclusive: LocalDate): Sequence<LocalDate>
 
 private fun Habit.activeOn(date: LocalDate) = archivedOn == null || date < archivedOn
 
+/** The target that applies on [date]: the schedule version of that day, else the habit's own (M5: target from tomorrow). */
+fun targetOn(habit: Habit, date: LocalDate): Int = scheduleOn(habit.schedules, date)?.target ?: habit.target
+
 private fun Habit.doneOn(date: LocalDate, countsByDate: Map<LocalDate, Int>) =
-    (countsByDate[date] ?: 0) >= target
+    (countsByDate[date] ?: 0) >= targetOn(this, date)
 
 private fun countsByDate(logs: List<HabitLog>): Map<LocalDate, Int> =
     logs.groupBy { it.date }.mapValues { (_, l) -> l.maxOf { it.count } }
