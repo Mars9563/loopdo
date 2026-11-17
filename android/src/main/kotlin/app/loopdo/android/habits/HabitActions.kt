@@ -1,5 +1,6 @@
 package app.loopdo.android.habits
 
+import app.loopdo.android.sync.oneTransaction
 import app.loopdo.android.time.EvidenceFactory
 import app.loopdo.android.time.TrustedClock
 import app.loopdo.android.today.parseRecurrence
@@ -11,7 +12,6 @@ import app.loopdo.shared.habit.nextVersionValidFrom
 import app.loopdo.shared.habit.pauseVersions
 import app.loopdo.shared.habit.scheduleOn
 import com.powersync.PowerSyncDatabase
-import com.powersync.PowerSyncException
 import com.powersync.db.internal.PowerSyncTransaction
 import java.time.Instant
 import java.time.LocalDate
@@ -220,15 +220,7 @@ class HabitActions(
 
     // --- inside a transaction ------------------------------------------------
 
-    /**
-     * One local transaction. PowerSync wraps what the block throws; the rule's own exception (with
-     * its plain message for the editor) is thrown again as it was.
-     */
-    private suspend fun <R> write(block: (PowerSyncTransaction) -> R): R = try {
-        db.writeTransaction { block(it) }
-    } catch (e: PowerSyncException) {
-        throw (e.cause as? IllegalStateException) ?: (e.cause as? IllegalArgumentException) ?: e
-    }
+    private suspend fun <R> write(block: (PowerSyncTransaction) -> R): R = db.oneTransaction(block)
 
     private fun PowerSyncTransaction.habit(id: UUID): HabitRow =
         getOptional("SELECT kind, target, archived_on FROM habits WHERE id = ?", listOf(id.toString())) {

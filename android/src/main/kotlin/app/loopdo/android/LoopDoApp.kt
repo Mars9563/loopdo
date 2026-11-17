@@ -66,8 +66,31 @@ class AppGraph(context: android.content.Context) {
 
     private val widgetRefresher = app.loopdo.android.widget.WidgetRefresher(appContext)
 
-    /** Rebuilds an open widget session now, starts a closed one, and re-arms the day-end and 15-minute alarms. */
+    val taskActions = app.loopdo.android.tasks.TaskActions(
+        sync.db,
+        userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+        dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
+        clock = trustedClock,
+    )
+
+    /**
+     * Creates repeating tasks' occurrences up to today. Only once the app is ready (signed in,
+     * synced, this account's data): before the first sync a series would look new. A no-op when
+     * nothing is due, so the redraw it causes ends there.
+     */
+    private suspend fun ensureInstances() {
+        val ready = widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready ?: return
+        runCatching { taskActions.ensureInstances(ready.model.date) }
+            .onFailure { android.util.Log.w("loopdo_tasks", "creating repeating tasks failed", it) }
+    }
+
+    /**
+     * Rebuilds an open widget session now, starts a closed one, and re-arms the day-end and 15-minute alarms.
+     * It runs at app start, at day end, every ~15 minutes and after every change, so repeating tasks'
+     * occurrences are created here first (M5).
+     */
     suspend fun redrawWidget() {
+        ensureInstances()
         widgetRefresh.tryEmit(Unit)
         app.loopdo.android.widget.LoopDoWidget().updateAll(appContext)
         val ready = widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready
