@@ -216,6 +216,14 @@ class Applier(
         val provenDay = if (data["evidence"] is JsonObject) runCatching { verifiedDay(i, data) }.getOrNull() else null
         if (provenDay != null && from > provenDay) return Prepared(data)
         if (from >= earliest) return Prepared(data)
+        // M5 restore: the archived stretch becomes a pause from the archive day. Those days were already
+        // unjudged (archived), so keeping the past date changes nothing that was judged.
+        if (data.text("recurrence") == "paused") {
+            val archivedOn = queryOne("select archived_on from public.habits where id = ?::uuid", habitId) {
+                it.getObject(1, LocalDate::class.java)
+            }
+            if (archivedOn != null && archivedOn == from && archivedOn <= today) return Prepared(data)
+        }
         // Clamped: never onto a day another version already starts (a pause's resume version moves on a day).
         var at = earliest
         while (queryOne(

@@ -164,6 +164,32 @@ class UploadM5Test {
     }
 
     @Test
+    fun restorePauseOnTheArchiveDayIsKept() = app(monMorning) {
+        // Archived since 10 nov, restored on mon 16 nov: the archived stretch becomes a pause that starts
+        // on the archive day (already unjudged, so nothing in the past changes) and it is due from tomorrow.
+        val h = fixtureHabit()
+        TestDb.admin("update public.habits set archived_on = '2026-11-10' where id = '$h'")
+        val r = upload(
+            a,
+            op("PUT", "habit_schedules", UUID.randomUUID(), schedule(h, "2026-11-10", "paused")),
+            op("PUT", "habit_schedules", UUID.randomUUID(), schedule(h, "2026-11-17", "daily")),
+            op("PATCH", "habits", h, buildJsonObject { put("archived_on", JsonNull) }),
+        )
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        assertEquals("2026-11-01:daily,2026-11-10:paused,2026-11-17:daily", versions(h))
+        assertEquals("t", TestDb.scalar("select archived_on is null from public.habits where id = '$h'"))
+    }
+
+    @Test
+    fun pastPauseOffTheArchiveDayIsStillClamped() = app(monMorning) {
+        val h = fixtureHabit()
+        TestDb.admin("update public.habits set archived_on = '2026-11-10' where id = '$h'")
+        upload(a, op("PUT", "habit_schedules", UUID.randomUUID(), schedule(h, "2026-11-12", "paused")))
+        upload(a, op("PUT", "habit_schedules", UUID.randomUUID(), schedule(h, "2026-11-09", "daily", target = 1)))
+        assertEquals("2026-11-01:daily,2026-11-17:paused,2026-11-18:daily", versions(h))
+    }
+
+    @Test
     fun lateSinceIsKeptAndServerOwned() = app(monMorning) {
         val t = UUID.randomUUID()
         upload(a, op("PUT", "tasks", t, buildJsonObject { put("title", "fix bike brake"); put("due_date", "2026-11-14") }))
