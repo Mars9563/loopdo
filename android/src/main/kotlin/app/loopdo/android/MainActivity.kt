@@ -127,17 +127,20 @@ private fun linkOf(intent: android.content.Intent?): Link? {
 @Composable
 private fun SignedInApp(graph: AppGraph, link: Link?) {
     var tab by rememberSaveable { mutableStateOf(link?.tab ?: Tab.TODAY) }
-    androidx.compose.runtime.LaunchedEffect(link) { link?.tab?.let { tab = it } }
+    // A link is handed to its tab once; the tab clears it when it has opened it, so switching tabs
+    // and coming back doesn't open the same task or habit again.
+    var pending by remember { mutableStateOf<Link?>(null) }
+    androidx.compose.runtime.LaunchedEffect(link) { link?.let { tab = it.tab ?: tab; pending = it } }
     val todayVm = viewModel { graph.todayViewModel() }
     val habitsVm = viewModel { graph.habitsViewModel() }
     val tasksVm = viewModel { graph.tasksViewModel() }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
-                Tab.TODAY -> TodayScreen(todayVm, tasksVm, link?.task?.let { app.loopdo.android.today.OpenTask(it, link.nonce) }) {
+                Tab.TODAY -> TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = { pending = null }) {
                     graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
                 }
-                Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, link?.habit, link?.nonce ?: 0L)
+                Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, pending?.habit, pending?.nonce ?: 0L) { pending = null }
                 else -> ComingSoon(tab)
             }
         }

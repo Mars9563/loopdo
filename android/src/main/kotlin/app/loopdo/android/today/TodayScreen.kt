@@ -73,7 +73,7 @@ class TodayExtras(
 
 /** Locked screen 1 (docs/design/app/app-screens-v2.html), plus the task editor, quick menu and lists (M5). [openTask] = a deep link. */
 @Composable
-fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onSignOut: () -> Unit) {
+fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onLinkHandled: () -> Unit = {}, onSignOut: () -> Unit) {
     val model by vm.state.collectAsStateWithLifecycle()
     val snack by vm.snack.collectAsStateWithLifecycle()
     val templates by tasks.templates.collectAsStateWithLifecycle()
@@ -82,7 +82,7 @@ fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewMod
     /** "today", "task:<id>" or "lists"; saved across rotation. */
     var route by rememberSaveable { mutableStateOf("today") }
     var menu by remember { mutableStateOf<TaskItem?>(null) }
-    LaunchedEffect(openTask) { openTask?.let { route = "task:${it.id}" } }
+    LaunchedEffect(openTask) { openTask?.let { route = "task:${it.id}"; onLinkHandled() } }
     androidx.activity.compose.BackHandler(enabled = route != "today") { route = "today" }
     val today = model?.date
     Box(Modifier.fillMaxSize()) {

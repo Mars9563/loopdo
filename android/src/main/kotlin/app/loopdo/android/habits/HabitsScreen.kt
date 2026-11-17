@@ -84,11 +84,11 @@ private fun route(s: String): Route = when {
 
 /** The habits tab. [openHabit] (a deep link) opens that habit's detail. */
 @Composable
-fun HabitsTab(vm: HabitsViewModel, openHabit: String? = null, linkNonce: Long = 0L) {
+fun HabitsTab(vm: HabitsViewModel, openHabit: String? = null, linkNonce: Long = 0L, onLinkHandled: () -> Unit = {}) {
     val data by vm.data.collectAsStateWithLifecycle()
     val snack by vm.message.collectAsStateWithLifecycle()
     var saved by rememberSaveable { mutableStateOf(openHabit?.let { Route.Detail(it).save() } ?: "list") }
-    LaunchedEffect(openHabit, linkNonce) { openHabit?.let { saved = Route.Detail(it).save() } }
+    LaunchedEffect(openHabit, linkNonce) { openHabit?.let { saved = Route.Detail(it).save(); onLinkHandled() } }
     val at = route(saved)
     val go = { r: Route -> saved = r.save() }
     BackHandler(enabled = at != Route.List) {
