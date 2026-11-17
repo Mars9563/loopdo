@@ -58,6 +58,7 @@ class AppGraph(context: android.content.Context) {
         sync.db, trustedClock, evidence,
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
         userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+        series = { draft -> taskActions.saveTask(null, draft) },
     )
     private val appContext = context.applicationContext
 
@@ -144,6 +145,8 @@ class AppGraph(context: android.content.Context) {
     )
 
     fun habitsViewModel() = app.loopdo.android.habits.HabitsViewModel(todayData.rows(), habitActions) { trustedClock.now().instant }
+
+    fun tasksViewModel() = app.loopdo.android.tasks.TasksViewModel(app.loopdo.android.tasks.TaskData(sync.db), taskActions)
 
     fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
 }

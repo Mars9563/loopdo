@@ -1,4 +1,12 @@
 package app.loopdo.android.today
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -15,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,17 +60,66 @@ import app.loopdo.shared.habit.HabitKind
 import kotlinx.coroutines.delay
 
 
-/** Locked screen 1 (docs/design/app/app-screens-v2.html). */
+/**
+ * What the today screen offers beyond ticking (M5): a task's name opens its editor, a long-press
+ * opens the quick menu, list headers open the lists screen, and the REPEATING section.
+ */
+class TodayExtras(
+    val repeating: List<app.loopdo.android.tasks.RepeatingRow>,
+    val onOpenTask: (String) -> Unit,
+    val onTaskMenu: (TaskItem) -> Unit,
+    val onOpenLists: () -> Unit,
+)
+
+/** Locked screen 1 (docs/design/app/app-screens-v2.html), plus the task editor, quick menu and lists (M5). [openTask] = a deep link. */
 @Composable
-fun TodayScreen(vm: TodayViewModel, onSignOut: () -> Unit) {
+fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onSignOut: () -> Unit) {
     val model by vm.state.collectAsStateWithLifecycle()
     val snack by vm.snack.collectAsStateWithLifecycle()
-    TodayContent(model, snack, vm, onSignOut)
+    val templates by tasks.templates.collectAsStateWithLifecycle()
+    val lists by tasks.lists.collectAsStateWithLifecycle()
+    val taskSnack by tasks.message.collectAsStateWithLifecycle()
+    /** "today", "task:<id>" or "lists"; saved across rotation. */
+    var route by rememberSaveable { mutableStateOf("today") }
+    var menu by remember { mutableStateOf<TaskItem?>(null) }
+    LaunchedEffect(openTask) { openTask?.let { route = "task:${it.id}" } }
+    androidx.activity.compose.BackHandler(enabled = route != "today") { route = "today" }
+    val today = model?.date
+    Box(Modifier.fillMaxSize()) {
+        when {
+            route.startsWith("task:") && today != null -> app.loopdo.android.tasks.TaskEditorScreen(
+                route.removePrefix("task:"), today, tasks, onClose = { route = "today" }, onOpenLists = { route = "lists" },
+            )
+            route == "lists" -> app.loopdo.android.tasks.ListsScreen(tasks) { route = "today" }
+            else -> TodayContent(
+                model, snack, vm, onSignOut,
+                TodayExtras(
+                    repeating = today?.let { app.loopdo.android.tasks.repeatingRows(templates, it) }.orEmpty(),
+                    onOpenTask = { route = "task:$it" }, onTaskMenu = { menu = it }, onOpenLists = { route = "lists" },
+                ),
+            )
+        }
+        taskSnack?.let { s ->
+            LaunchedEffect(s.id) { delay(3_500); tasks.dismiss(s.id) }
+            Text(
+                s.text, style = LoopDoType.small,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth()
+                    .shadow(10.dp, RoundedCornerShape(12.dp)).background(Color(0xF51E283A), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+            )
+        }
+    }
+    menu?.let { t ->
+        if (today != null) app.loopdo.android.tasks.TaskMenuSheet(t, today, lists, tasks, onEdit = { route = "task:${t.id}" }, onClose = { menu = null })
+    }
 }
+
+/** A deep link to one task (the widget's task name); [nonce] makes the same link work twice. */
+data class OpenTask(val id: String, val nonce: Long = System.nanoTime())
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -> Unit) {
+fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -> Unit, extras: TodayExtras? = null) {
     var adding by rememberSaveable { mutableStateOf(false) }
     // The add sheet's words live here, not in the sheet: closing it (Back, a stray tap) or a failed
     // save never throws typed text away. It is cleared only once the text is stored.
@@ -87,12 +145,15 @@ fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -
                 model?.let { Text("⏳ " + it.endsIn.countdown(), style = LoopDoType.small.copy(color = LoopDoColors.dim)) }
                 Bracket("⚙", idle = !settingsOpen) { settingsOpen = !settingsOpen }
             }
-            // Until the M9 settings screen, [⚙] only offers sign out (locked auth-onboarding-v1).
+            // Until the M9 settings screen, [⚙] offers sign out, and lists (M5).
             if (settingsOpen) BracketRow(
-                BracketItem("sign out", primary = true) { settingsOpen = false; onSignOut() },
-                BracketItem("cancel", idle = true) { settingsOpen = false },
+                *listOfNotNull(
+                    extras?.let { e -> BracketItem("lists") { settingsOpen = false; e.onOpenLists() } },
+                    BracketItem("sign out", primary = true) { settingsOpen = false; onSignOut() },
+                    BracketItem("cancel", idle = true) { settingsOpen = false },
+                ).toTypedArray(),
             )
-            model?.let { TodaySections(it, vm) }
+            model?.let { TodaySections(it, vm, extras) }
             Spacer(Modifier.height(if (snack != null) 140.dp else 88.dp)) // room for [+ add] and the snackbar
         }
 
@@ -138,7 +199,7 @@ fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -
                 text = draftText, onText = { draftText = it },
                 journal = draftJournal, onJournal = { draftJournal = it },
                 onDismiss = { adding = false },
-                onAddTask = { title, due, time, listId, listName -> vm.addTask(title, due, time, listId, listName, m.date, saved) },
+                onAddTask = { title, due, time, listId, listName, repeat -> vm.addTask(title, due, time, listId, listName, m.date, repeat, saved) },
                 onAddJournal = { text -> vm.appendJournal(text, saved) },
             )
         }
@@ -146,7 +207,7 @@ fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -
 }
 
 @Composable
-private fun TodaySections(m: TodayModel, vm: TodayUi) {
+private fun TodaySections(m: TodayModel, vm: TodayUi, extras: TodayExtras?) {
     val s = m.streaks
     Text(
         buildAnnotatedString {
@@ -166,7 +227,7 @@ private fun TodaySections(m: TodayModel, vm: TodayUi) {
     if (m.late.isNotEmpty()) {
         Label("LATE ${m.late.size}", color = LoopDoColors.warn)
         m.late.forEach { t ->
-            CheckRow(false, t.title, onClick = { vm.toggleTask(t) }) {
+            TaskRow(t, vm, extras) {
                 Text("since " + t.lateSince!!.short().substringAfter(' '), style = LoopDoType.small.copy(color = LoopDoColors.warn))
             }
         }
@@ -213,35 +274,85 @@ private fun TodaySections(m: TodayModel, vm: TodayUi) {
 
     Label("TODAY", right = "${m.dueToday.count { !it.done }} left")
     if (m.dueToday.isEmpty()) Hint("nothing due today.")
-    m.dueToday.forEach { t -> TaskLine(t, vm) }
+    m.dueToday.forEach { t -> TaskLine(t, vm, extras) }
 
     var inboxOpen by rememberSaveable { mutableStateOf(true) }
     Label("INBOX ${m.inbox.size}", right = if (inboxOpen) "[v]" else "[>]", rightColor = LoopDoColors.accent, onClick = { inboxOpen = !inboxOpen })
-    if (inboxOpen) m.inbox.forEach { t -> TaskLine(t, vm) }
+    if (inboxOpen) m.inbox.forEach { t -> TaskLine(t, vm, extras) }
 
     if (m.lists.isNotEmpty()) {
         DashedRule(Modifier.padding(vertical = 8.dp))
         m.lists.forEach { g ->
             var open by rememberSaveable(g.id) { mutableStateOf(false) }
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { open = !open },
+                // Long-press a list header → the lists screen (rename, delete).
+                Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .combinedClickable(role = Role.Button, onClick = { open = !open }, onLongClick = extras?.onOpenLists),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("# ${g.name}", style = LoopDoType.body.copy(color = LoopDoColors.dim), modifier = Modifier.weight(1f))
                 Text("${g.items.size} " + if (open) "[v]" else "[>]", style = LoopDoType.small.copy(color = LoopDoColors.dim))
             }
-            if (open) g.items.forEach { t -> TaskLine(t, vm) }
+            if (open) g.items.forEach { t -> TaskLine(t, vm, extras) }
+        }
+    }
+
+    // Repeating tasks live here, collapsed: each with its next date; tap → the series in the editor.
+    if (extras != null && extras.repeating.isNotEmpty()) {
+        var open by rememberSaveable { mutableStateOf(false) }
+        DashedRule(Modifier.padding(vertical = 8.dp))
+        Label("↻ REPEATING ${extras.repeating.size}", right = if (open) "[v]" else "[>]", rightColor = LoopDoColors.accent, onClick = { open = !open })
+        if (open) extras.repeating.forEach { r ->
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { extras.onOpenTask(r.id) }, verticalAlignment = Alignment.CenterVertically) {
+                Text("↻ " + r.line, style = LoopDoType.body.copy(color = LoopDoColors.dim), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }
 
 @Composable
-private fun TaskLine(t: TaskItem, vm: TodayUi) {
-    CheckRow(t.done, t.title, onClick = { vm.toggleTask(t) }) {
+private fun TaskLine(t: TaskItem, vm: TodayUi, extras: TodayExtras?) {
+    TaskRow(t, vm, extras) {
         if (!t.done) {
             val tag = listOfNotNull(t.dueTime?.let { "@$it" }, t.listName?.let { "# $it" }).joinToString(" ")
             if (tag.isNotEmpty()) Text(tag, style = LoopDoType.small.copy(color = LoopDoColors.dim), maxLines = 1)
         }
+    }
+}
+
+/**
+ * A task: `[ ]` ticks it; the name opens the editor; a long-press anywhere opens the quick menu
+ * (README screen 1: "tap a name to edit; long-press to reschedule or move to a list"). Without
+ * [extras] (the debug demo) the whole row ticks, as before.
+ */
+@Composable
+private fun TaskRow(t: TaskItem, vm: TodayUi, extras: TodayExtras?, trailing: @Composable RowScope.() -> Unit) {
+    if (extras == null) return CheckRow(t.done, t.title, onClick = { vm.toggleTask(t) }, trailing = trailing)
+    val color = if (t.done) LoopDoColors.done else LoopDoColors.text
+    val tick by androidx.compose.runtime.rememberUpdatedState({ vm.toggleTask(t) })
+    val open by androidx.compose.runtime.rememberUpdatedState({ extras.onOpenTask(t.id) })
+    val menu by androidx.compose.runtime.rememberUpdatedState({ extras.onTaskMenu(t) })
+    Row(
+        // Looks exactly like the other rows; the first 48 dp (the [ ] and its gap) ticks, the rest opens the editor.
+        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { if (it.x < 48.dp.toPx()) tick() else open() },
+                    onLongPress = { menu() },
+                )
+            }
+            .semantics(mergeDescendants = true) {
+                role = Role.Checkbox
+                onClick(label = "edit") { open(); true }
+                onLongClick(label = "move or delete") { menu(); true }
+                customActions = listOf(CustomAccessibilityAction(if (t.done) "untick" else "tick") { tick(); true })
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(if (t.done) "[x]" else "[ ]", style = LoopDoType.body.copy(color = color))
+        Text(t.title, style = LoopDoType.body.copy(color = color), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        trailing()
     }
 }
 

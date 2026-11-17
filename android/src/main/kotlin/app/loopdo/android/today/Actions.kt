@@ -43,6 +43,9 @@ interface TodayActions {
     suspend fun completeTask(taskId: UUID): Boolean
     suspend fun reopenTask(taskId: UUID): Boolean
     suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID
+    /** The add sheet's [↻ repeat] (M5): a series from [due] (today if none), with its occurrences up to today. */
+    suspend fun addRepeatingTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?, repeat: app.loopdo.shared.task.RepeatRule): UUID =
+        throw IllegalStateException("repeating tasks can't be added here.")
     suspend fun appendJournalLine(text: String)
     /**
      * Stores [text] and [mood] as [date]'s entry (past entries stay editable; future days can't be
@@ -58,6 +61,8 @@ class Actions(
     private val evidence: EvidenceFactory,
     private val dateAt: suspend (Instant) -> LocalDate,
     private val userId: () -> UUID?,
+    /** Makes a repeating series (TaskActions.saveTask); set by the app graph. */
+    private val series: (suspend (app.loopdo.android.tasks.TaskDraft) -> UUID)? = null,
 ) : TodayActions {
     private class Moment(val now: TrustedNow, val today: LocalDate, val evidence: String) {
         val verified get() = if (now.verified) 1 else 0
@@ -196,6 +201,11 @@ class Actions(
             )
         }
         return id
+    }
+
+    override suspend fun addRepeatingTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?, repeat: app.loopdo.shared.task.RepeatRule): UUID {
+        val make = series ?: return super.addRepeatingTask(title, due, time, listId, repeat)
+        return make(app.loopdo.android.tasks.TaskDraft(title, null, due, time, listId, repeat))
     }
 
     /** Adds a line to today's journal entry (one entry per day, deterministic id). */

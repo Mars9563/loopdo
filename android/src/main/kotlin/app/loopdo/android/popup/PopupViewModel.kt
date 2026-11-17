@@ -26,8 +26,11 @@ class PopupViewModel(
     fun draft(key: String): String = drafts.load(key)
     fun keepDraft(key: String, text: String) = drafts.save(key, text)
 
-    fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, onSaved: () -> Unit) =
-        save(ADD, onSaved) { actions.addTask(title, due, time, listId?.let(UUID::fromString)) }
+    fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, repeat: app.loopdo.shared.task.RepeatRule? = null, onSaved: () -> Unit) =
+        save(ADD, onSaved) {
+            if (repeat != null) actions.addRepeatingTask(title, due, time, listId?.let(UUID::fromString), repeat)
+            else actions.addTask(title, due, time, listId?.let(UUID::fromString))
+        }
 
     fun appendJournal(text: String, onSaved: () -> Unit) = save(ADD, onSaved) { actions.appendJournalLine(text) }
 

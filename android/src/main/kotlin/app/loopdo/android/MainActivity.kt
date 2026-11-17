@@ -53,12 +53,24 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_TAB = "tab"
         /** Open the habits tab on one habit's detail (its id). */
         const val EXTRA_HABIT = "habit"
+        /** Open one task in the task editor (its id; the widget's task names). */
+        const val EXTRA_TASK = "task"
+    }
+
+    /** Where a launch asked to go (tab, habit, task). Also set by onNewIntent: the app may already be open. */
+    private val link = kotlinx.coroutines.flow.MutableStateFlow<Link?>(null)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        link.value = linkOf(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(SystemBarStyle.dark(AndroidColor.TRANSPARENT), SystemBarStyle.dark(AndroidColor.TRANSPARENT))
         super.onCreate(savedInstanceState)
         val graph = (application as LoopDoApp).graph
+        if (savedInstanceState == null) link.value = linkOf(intent)
         val demo = BuildConfig.DEBUG && intent.getBooleanExtra("demo", false)
         // Debug builds only: `am start ... --ez pinWidget true` asks the launcher to add the widget (the owner confirms).
         if (BuildConfig.DEBUG && intent.getBooleanExtra("pinWidget", false)) {
@@ -88,9 +100,8 @@ class MainActivity : ComponentActivity() {
                     StartState.SyncingFirstTime -> FirstSyncScreen(rows)
                     StartState.NeedsOnboarding -> OnboardingScreen(graph.onboarding, settingsAlreadySaved = hasSettings)
                     StartState.Ready -> {
-                        val habit = intent.getStringExtra(EXTRA_HABIT)
-                        val tab = if (habit != null) Tab.HABITS else Tab.entries.firstOrNull { it.name.equals(intent.getStringExtra(EXTRA_TAB), ignoreCase = true) } ?: Tab.TODAY
-                        SignedInApp(graph, initialTab = tab, openHabit = habit)
+                        val l by link.collectAsStateWithLifecycle()
+                        SignedInApp(graph, l)
                     }
                 }
             }
@@ -98,18 +109,35 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** A launch's destination; [nonce] makes the same link work again later. */
+data class Link(val tab: Tab?, val habit: String?, val task: String?, val nonce: Long = System.nanoTime())
+
+private fun linkOf(intent: android.content.Intent?): Link? {
+    intent ?: return null
+    val habit = intent.getStringExtra(MainActivity.EXTRA_HABIT)
+    val task = intent.getStringExtra(MainActivity.EXTRA_TASK)
+    val tab = when {
+        habit != null -> Tab.HABITS
+        task != null -> Tab.TODAY
+        else -> Tab.entries.firstOrNull { it.name.equals(intent.getStringExtra(MainActivity.EXTRA_TAB), ignoreCase = true) }
+    }
+    return if (tab == null) null else Link(tab, habit, task)
+}
+
 @Composable
-private fun SignedInApp(graph: AppGraph, initialTab: Tab = Tab.TODAY, openHabit: String? = null) {
-    var tab by rememberSaveable { mutableStateOf(initialTab) }
+private fun SignedInApp(graph: AppGraph, link: Link?) {
+    var tab by rememberSaveable { mutableStateOf(link?.tab ?: Tab.TODAY) }
+    androidx.compose.runtime.LaunchedEffect(link) { link?.tab?.let { tab = it } }
     val todayVm = viewModel { graph.todayViewModel() }
     val habitsVm = viewModel { graph.habitsViewModel() }
+    val tasksVm = viewModel { graph.tasksViewModel() }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
-                Tab.TODAY -> TodayScreen(todayVm) {
+                Tab.TODAY -> TodayScreen(todayVm, tasksVm, link?.task?.let { app.loopdo.android.today.OpenTask(it, link.nonce) }) {
                     graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
                 }
-                Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, openHabit)
+                Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, link?.habit, link?.nonce ?: 0L)
                 else -> ComingSoon(tab)
             }
         }

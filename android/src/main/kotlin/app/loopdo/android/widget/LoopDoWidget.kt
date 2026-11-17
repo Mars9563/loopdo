@@ -195,7 +195,13 @@ private fun RowView(r: WidgetRow, date: LocalDate, inner: Dp) {
         Box(GlanceModifier.width(48.dp).fillMaxHeight().clickable(check), contentAlignment = Alignment.CenterStart) {
             MonoText(if (r.done) "[x]" else "[ ]", color)
         }
-        Box(GlanceModifier.defaultWeight().fillMaxHeight().clickable(openApp), contentAlignment = Alignment.CenterStart) {
+        // The name opens that habit's detail or that task's editor (M5).
+        val open = actionStartActivity<MainActivity>(
+            androidx.glance.action.actionParametersOf(
+                androidx.glance.action.ActionParameters.Key<String>(if (r.isHabit) MainActivity.EXTRA_HABIT else MainActivity.EXTRA_TASK) to r.id,
+            ),
+        )
+        Box(GlanceModifier.defaultWeight().fillMaxHeight().clickable(open), contentAlignment = Alignment.CenterStart) {
             MonoText(r.title, color, maxWidth = titleMax)
         }
         if (r.right.isNotEmpty()) MonoText(r.right, when (r.rightTone) { Tone.WARN -> WARN; Tone.DIM -> DIM; Tone.TEXT -> if (r.done) DONE else TEXT })

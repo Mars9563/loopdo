@@ -47,7 +47,7 @@ class AddPopupActivity : ComponentActivity() {
                         journal = journal, onJournal = { journal = it },
                         error = error,
                         onDismiss = { finish() },
-                        onAddTask = { title, due, time, listId, _ -> vm.addTask(title, due, time, listId) { finish() } },
+                        onAddTask = { title, due, time, listId, _, repeat -> vm.addTask(title, due, time, listId, repeat) { finish() } },
                         onAddJournal = { t -> vm.appendJournal(t) { finish() } },
                     )
                 }

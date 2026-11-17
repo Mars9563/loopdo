@@ -37,7 +37,7 @@ interface TodayUi {
     fun setCount(h: HabitItem, count: Int)
     fun toggleTask(t: TaskItem)
     /** [onSaved] runs only once the text is safely stored; until then the add sheet keeps it. */
-    fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate, onSaved: () -> Unit)
+    fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate, repeat: app.loopdo.shared.task.RepeatRule? = null, onSaved: () -> Unit)
     fun appendJournal(text: String, onSaved: () -> Unit)
     fun undo(s: Snack)
     fun dismissSnack(id: Long)
@@ -146,7 +146,13 @@ class TodayViewModel(
         }
     }
 
-    override fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate, onSaved: () -> Unit) = run {
+    override fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, today: LocalDate, repeat: app.loopdo.shared.task.RepeatRule?, onSaved: () -> Unit) = run {
+        if (repeat != null) {
+            actions.addRepeatingTask(title, due, time, listId?.let(UUID::fromString), repeat)
+            onSaved()
+            _snack.value = Snack("added. ${app.loopdo.android.tasks.repeatLine(repeat, due ?: today)}. it's under ↻ repeating.", null)
+            return@run
+        }
         actions.addTask(title, due, time, listId?.let(UUID::fromString))
         onSaved()
         val where = when {

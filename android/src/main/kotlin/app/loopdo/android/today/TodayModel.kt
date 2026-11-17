@@ -39,7 +39,11 @@ data class HabitItem(
     val id: String, val title: String, val kind: HabitKind, val count: Int, val target: Int, val streak: Int, val reminderTime: LocalTime?,
     val step: Int = 1, val unit: String? = null,
 )
-data class TaskItem(val id: String, val title: String, val lateSince: LocalDate?, val listName: String?, val dueTime: LocalTime?, val done: Boolean)
+/** [listId] and [due] are for the long-press menu (M5). */
+data class TaskItem(
+    val id: String, val title: String, val lateSince: LocalDate?, val listName: String?, val dueTime: LocalTime?, val done: Boolean,
+    val listId: String? = null, val due: LocalDate? = null,
+)
 data class ListGroup(val id: String, val name: String, val items: List<TaskItem>)
 
 data class TodayModel(
@@ -96,7 +100,7 @@ fun buildToday(
     }
 
     val listNames = lists.associate { it.id to it.name }
-    fun item(t: TaskRow) = TaskItem(t.id, t.title, lateSince(t.dueDate, t.completedOn, today), t.listId?.let(listNames::get), t.dueTime, t.completedOn != null)
+    fun item(t: TaskRow) = TaskItem(t.id, t.title, lateSince(t.dueDate, t.completedOn, today), t.listId?.let(listNames::get), t.dueTime, t.completedOn != null, t.listId, t.dueDate)
     val ordered = tasks.sortedWith(compareBy({ it.sortOrder }, { it.title }))
     val states = ordered.associateWith { taskState(it.dueDate, it.completedOn, today) }
 

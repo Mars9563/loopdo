@@ -1,4 +1,9 @@
 package app.loopdo.android.today
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+
+import app.loopdo.shared.task.parseRepeatRule
+import app.loopdo.shared.task.toJson
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -58,7 +63,7 @@ import java.time.ZoneOffset
 
 private enum class When { TODAY, TOMORROW, PICKED, NONE }
 
-/** The widget's `[+ add]` card (locked widget-v4, pop-up 1), over the dimmed app. Repeat comes with M4. */
+/** The widget's `[+ add]` card (locked widget-v4, pop-up 1), over the dimmed app; `[↻ repeat]` cycles a repeat (M5, locked habits-tasks-v1 screen 8). */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddSheet(
@@ -70,13 +75,16 @@ fun AddSheet(
     onJournal: (Boolean) -> Unit,
     error: String? = null,
     onDismiss: () -> Unit,
-    onAddTask: (title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?) -> Unit,
+    onAddTask: (title: String, due: LocalDate?, time: LocalTime?, listId: String?, listName: String?, repeat: app.loopdo.shared.task.RepeatRule?) -> Unit,
     onAddJournal: (String) -> Unit,
 ) {
     var whenChoice by rememberSaveable { mutableStateOf(When.TODAY) }
     var picked by rememberSaveable { mutableStateOf<LocalDate?>(null) }
     var time by rememberSaveable { mutableStateOf<LocalTime?>(null) }
     var listId by rememberSaveable { mutableStateOf<String?>(null) }
+    /** The repeat as its JSON (rotation-safe), or null = once. */
+    var repeatJson by rememberSaveable { mutableStateOf<String?>(null) }
+    val repeat = repeatJson?.let(::parseRepeatRule)
     var pickingDate by remember { mutableStateOf(false) }
     var pickingTime by remember { mutableStateOf(false) }
     var pickingList by remember { mutableStateOf(false) }
@@ -93,7 +101,7 @@ fun AddSheet(
     val canAdd = text.isNotBlank()
     fun submit() {
         if (!canAdd) return
-        if (journal) onAddJournal(text) else onAddTask(text, due, time.takeIf { due != null }, listId, lists.firstOrNull { it.first == listId }?.second)
+        if (journal) onAddJournal(text) else onAddTask(text, due, time.takeIf { due != null }, listId, lists.firstOrNull { it.first == listId }?.second, repeat)
     }
 
     val none = remember { MutableInteractionSource() }
@@ -108,6 +116,8 @@ fun AddSheet(
                 .background(Brush.linearGradient(listOf(Color(0xEB162032), Color(0xEB080C14))), shape)
                 .border(1.dp, Color(0x33BED7FF), shape)
                 .clickable(none, indication = null) {} // taps on the card don't close it
+                // Scrolls when the keyboard leaves less room than the card needs (e.g. with the weekday row), never cut off.
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
             BracketRow(
@@ -154,6 +164,13 @@ fun AddSheet(
                             }
                         }
                     }
+                    Chip(app.loopdo.android.tasks.repeatChipLabel(repeat), repeat != null) {
+                        repeatJson = app.loopdo.android.tasks.repeatChipCycle(repeat, due ?: today)?.toJson()
+                    }
+                }
+                repeat?.let { r ->
+                    if (r is app.loopdo.shared.task.RepeatRule.Weekly) app.loopdo.android.tasks.RepeatDetails(r, due ?: today, showNext = false) { repeatJson = it.toJson() }
+                    Text("· " + app.loopdo.android.tasks.repeatLine(r, due ?: today), style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(bottom = 4.dp))
                 }
             }
             BracketRow(
