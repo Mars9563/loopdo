@@ -172,6 +172,11 @@ class AppGraph(context: android.content.Context) {
 
     fun tasksViewModel() = app.loopdo.android.tasks.TasksViewModel(app.loopdo.android.tasks.TaskData(sync.db), taskActions)
 
+    fun journalViewModel() = app.loopdo.android.journal.JournalViewModel(
+        todayData.rows(), app.loopdo.android.journal.JournalData(sync.db), journalActions, { trustedClock.now().instant },
+        photoFile = { id, path -> photoCache.file(id, path) }, uploadSoon = { uploadPhotosSoon() },
+    )
+
     fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
 }
 

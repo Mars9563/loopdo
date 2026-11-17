@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the camera's temporary folder is shared (journal photos taken in the app, M6). -->
+<paths>
+    <cache-path name="camera" path="camera/" />
+</paths>

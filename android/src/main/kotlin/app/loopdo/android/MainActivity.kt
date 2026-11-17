@@ -134,12 +134,14 @@ private fun SignedInApp(graph: AppGraph, link: Link?) {
     val todayVm = viewModel { graph.todayViewModel() }
     val habitsVm = viewModel { graph.habitsViewModel() }
     val tasksVm = viewModel { graph.tasksViewModel() }
+    val journalVm = viewModel { graph.journalViewModel() }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
                 Tab.TODAY -> TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = { pending = null }, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }) {
                     graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
                 }
+                Tab.JOURNAL -> app.loopdo.android.journal.JournalTab(journalVm)
                 Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, pending?.habit, pending?.nonce ?: 0L) { pending = null }
                 else -> ComingSoon(tab)
             }

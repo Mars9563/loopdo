@@ -27,7 +27,7 @@ class JournalActions(
     private val dateAt: suspend (Instant) -> LocalDate,
     private val settingsAt: suspend (Instant) -> DaySettings,
     private val userId: () -> UUID?,
-) {
+) : JournalCommands {
     private fun user(): UUID = userId() ?: throw IllegalStateException("not signed in")
     private fun entryId(date: LocalDate) = uuidV5(user(), "journal:$date").toString()
 
@@ -35,7 +35,7 @@ class JournalActions(
      * New lines for [date], each stamped. Only today, except an unsaved draft from an earlier day, saved
      * onto that day with the time it was last edited ([at]).
      */
-    suspend fun addLines(date: LocalDate, input: String, at: Instant? = null) {
+    override suspend fun addLines(date: LocalDate, input: String, at: Instant?) {
         val now = clock.now().instant
         val stampAt = at ?: now
         require(date == dateAt(now) || (at != null && dateAt(at) == date && date < dateAt(now))) { "new lines go on today." }
@@ -51,7 +51,7 @@ class JournalActions(
     }
 
     /** [old] (the line as stored) gets [newText]; its time stays. */
-    suspend fun editLine(date: LocalDate, old: String, newText: String) {
+    override suspend fun editLine(date: LocalDate, old: String, newText: String) {
         val text = newText.replace('\n', ' ').trim()
         require(text.isNotEmpty()) { "type something first, or delete the line." }
         val id = entryId(date)
@@ -63,7 +63,7 @@ class JournalActions(
         }
     }
 
-    suspend fun deleteLine(date: LocalDate, old: String) {
+    override suspend fun deleteLine(date: LocalDate, old: String) {
         val id = entryId(date)
         db.oneTransaction { tx ->
             val current = tx.entryText(id) ?: throw IllegalStateException("that line changed. try again.")
@@ -73,7 +73,7 @@ class JournalActions(
     }
 
     /** One mood per day (any day up to today; the journal stays editable). */
-    suspend fun setMood(date: LocalDate, mood: Int?) {
+    override suspend fun setMood(date: LocalDate, mood: Int?) {
         require(mood == null || mood in Limits.MOOD_RANGE) { "pick one of the five moods." }
         require(date <= dateAt(clock.now().instant)) { "that day hasn't started yet." }
         val id = entryId(date)
@@ -87,7 +87,7 @@ class JournalActions(
      * Adds [photo] to [date] (≤ 4 a day). Today's photo carries its time; a photo added to an earlier day has
      * none (it shows last). The file waits in the queue until it reaches R2.
      */
-    suspend fun addPhoto(date: LocalDate, photo: PreparedPhoto): UUID {
+    override suspend fun addPhoto(date: LocalDate, photo: PreparedPhoto): UUID {
         val now = clock.now().instant
         val today = dateAt(now)
         require(date <= today) { "that day hasn't started yet." }
@@ -110,7 +110,7 @@ class JournalActions(
     }
 
     /** Removes the photo from its day and this phone. Its copy in R2 stays (the phone never deletes there). */
-    suspend fun deletePhoto(id: UUID) {
+    override suspend fun deletePhoto(id: UUID) {
         val path: String? = db.oneTransaction { tx ->
             val p = tx.getOptional("SELECT path FROM photo_files WHERE id = ?", listOf(id.toString())) { it.getString(0) ?: "" }
             tx.execute("DELETE FROM journal_photos WHERE id = ?", listOf(id.toString()))

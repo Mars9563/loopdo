@@ -1,0 +1,58 @@
+package app.loopdo.android.journal
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+
+/** The journal tab's model (locked journal-log-v2): [today], [feed] with ON THIS DAY, the alt day bar. Today = sat 14 nov 2026. */
+class JournalViewModelTest {
+    private val ist = ZoneId.of("Asia/Kolkata")
+    private val today = LocalDate.of(2026, 11, 14)
+    private fun d(y: Int, m: Int, day: Int) = LocalDate.of(y, m, day)
+    private val entries = listOf(
+        EntryRow("e14", today, "[11:00] so i heard something funny today.\n[13:00] had this for lunch", 4),
+        EntryRow("e13", d(2026, 11, 13), "[19:05] long day at college.", 3),
+        EntryRow("e12", d(2026, 11, 12), "", null), // only a photo
+        EntryRow("old", d(2025, 11, 14), "[18:20] first snow on the way back. bought the A55 today.", 5),
+        EntryRow("empty", d(2026, 11, 10), "  ", null), // nothing in it: not a journal day
+    )
+    private val photos = listOf(
+        PhotoRow("p1", "e14", Instant.parse("2026-11-14T05:30:00Z"), "/files/photos/p1.webp"), // 11:00 IST
+        PhotoRow("p2", "e12", null, null),
+    )
+    private val model = buildJournal(entries, photos, today, ist, LocalTime.of(4, 0), streak = 34)
+
+    @Test
+    fun feedIsNewestFirstWithOnThisDay() {
+        assertEquals(listOf(today, d(2026, 11, 13), d(2026, 11, 12), d(2025, 11, 14)), model.feed.map { it.date }) // every day, newest first
+        assertEquals(listOf(d(2025, 11, 14)), model.onThisDay.map { it.date })
+        assertEquals(34, model.streak)
+    }
+
+    @Test
+    fun todayViewShowsOnlyToday() {
+        val t = model.today
+        assertEquals(today, t.date)
+        val items = t.blocks.flatMap { it.items }
+        assertEquals(listOf("so i heard something funny today.", "photo:p1", "had this for lunch"), items.map {
+            when (it) { is LogItem.Line -> it.line.text; is LogItem.Photo -> "photo:${it.id}" }
+        })
+        assertEquals("/files/photos/p1.webp", t.localPaths["p1"])
+        // A day with nothing written yet still has its bar.
+        val blank = buildJournal(emptyList(), emptyList(), today, ist, LocalTime.of(4, 0), streak = 0).today
+        assertTrue(blank.blocks.isEmpty())
+        assertNull(blank.mood)
+    }
+
+    @Test
+    fun dayBarShowsMoodAndToday() {
+        assertEquals(listOf("sat 14 nov", "🙂", "today"), model.feed[0].let { listOf(it.label, it.moodFace, it.dayTag) })
+        assertEquals(listOf("fri 13 nov", "😐", ""), model.feed[1].let { listOf(it.label, it.moodFace, it.dayTag) })
+        assertEquals("", model.feed[2].moodFace)
+    }
+}
