@@ -114,6 +114,14 @@ class AppGraph(context: android.content.Context) {
     suspend fun todayForPopup(): app.loopdo.android.today.TodayModel? =
         if (widgetSnapshot() is app.loopdo.android.widget.WidgetState.Ready) todayData.rows().first().toModel(trustedClock.now().instant)?.first else null
 
+    val habitActions = app.loopdo.android.habits.HabitActions(
+        sync.db, trustedClock, evidence,
+        dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
+        userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+    )
+
+    fun habitsViewModel() = app.loopdo.android.habits.HabitsViewModel(todayData.rows(), habitActions) { trustedClock.now().instant }
+
     fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
 }
 

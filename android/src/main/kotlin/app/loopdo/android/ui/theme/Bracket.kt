@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
  * target stays at least 48 dp (owner's design + Android's minimum).
  */
 @Composable
-fun Bracket(label: String, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, idle: Boolean = false, onClick: () -> Unit) {
+fun Bracket(label: String, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, idle: Boolean = false, danger: Boolean = false, onClick: () -> Unit) {
     Box(
         modifier
             .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
@@ -33,6 +33,7 @@ fun Bracket(label: String, modifier: Modifier = Modifier, primary: Boolean = fal
             style = LoopDoType.control.copy(
                 color = when {
                     !enabled -> LoopDoColors.done
+                    danger -> LoopDoColors.warn
                     primary -> LoopDoColors.accent
                     idle -> LoopDoColors.dim
                     else -> LoopDoColors.text
@@ -43,8 +44,8 @@ fun Bracket(label: String, modifier: Modifier = Modifier, primary: Boolean = fal
     }
 }
 
-/** [idle] = a not-selected choice (e.g. an inactive tab): shown dim, as in the locked design. */
-data class BracketItem(val label: String, val primary: Boolean = false, val enabled: Boolean = true, val idle: Boolean = false, val onClick: () -> Unit)
+/** [idle] = a not-selected choice (e.g. an inactive tab): shown dim, as in the locked design. [danger] = red ([archive], [delete]). */
+data class BracketItem(val label: String, val primary: Boolean = false, val enabled: Boolean = true, val idle: Boolean = false, val danger: Boolean = false, val onClick: () -> Unit)
 
 /** `[a] | [b] | [c]` with dim separators, spread across the row. */
 @Composable
@@ -52,7 +53,7 @@ fun BracketRow(vararg items: BracketItem, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
         items.forEachIndexed { i, item ->
             if (i > 0) Text("|", style = LoopDoType.control.copy(color = LoopDoColors.separator))
-            Bracket(item.label, primary = item.primary, enabled = item.enabled, idle = item.idle, onClick = item.onClick)
+            Bracket(item.label, primary = item.primary, enabled = item.enabled, idle = item.idle, danger = item.danger, onClick = item.onClick)
         }
     }
 }

@@ -27,13 +27,26 @@ import java.util.UUID
  * replaced or deleted. Every schedule row carries time evidence, so a change made offline
  * keeps its dates when it syncs later.
  */
+/** What the habits screens ask of the database (a fake in JVM tests). */
+interface HabitCommands {
+    suspend fun createHabit(draft: HabitDraft): UUID
+    suspend fun editHabit(id: UUID, draft: HabitDraft)
+    suspend fun pauseHabit(id: UUID, from: LocalDate, to: LocalDate)
+    suspend fun endPause(id: UUID)
+    suspend fun cancelPause(id: UUID)
+    suspend fun archiveHabit(id: UUID)
+    suspend fun restoreHabit(id: UUID)
+    suspend fun hideHabit(id: UUID)
+    suspend fun reorderHabits(ids: List<UUID>)
+}
+
 class HabitActions(
     private val db: PowerSyncDatabase,
     private val clock: TrustedClock,
     private val evidence: EvidenceFactory,
     private val dateAt: suspend (Instant) -> LocalDate,
     private val userId: () -> UUID?,
-) {
+) : HabitCommands {
     private class Moment(val now: Instant, val today: LocalDate, val evidence: String) {
         val tomorrow: LocalDate get() = nextVersionValidFrom(today)
     }
@@ -52,7 +65,7 @@ class HabitActions(
     }
 
     /** A new habit, due from today (its first version), at the end of the order. */
-    suspend fun createHabit(draft: HabitDraft): UUID {
+    override suspend fun createHabit(draft: HabitDraft): UUID {
         val d = checkDraft(draft)
         val m = moment()
         val id = UUID.randomUUID()
@@ -74,7 +87,7 @@ class HabitActions(
      * (an edit during a running pause applies when it ends). The type changes only while the
      * habit has no history.
      */
-    suspend fun editHabit(id: UUID, draft: HabitDraft) {
+    override suspend fun editHabit(id: UUID, draft: HabitDraft) {
         val d = checkDraft(draft)
         val m = moment()
         write { tx ->
@@ -101,7 +114,7 @@ class HabitActions(
                 m.tomorrow, d.recurrence, d.weekdays,
                 target = d.target.takeIf { d.kind == HabitKind.COUNT && it != habitTarget },
             )
-            val pause = currentPause(vs, m.today)
+            val pause = pauseIn(vs, m.today)
             val todays = scheduleOn(vs.filter { it.from <= m.today }.map { it.s }, m.today)
             val desired = buildList {
                 val pausedFrom = pause?.first?.from
@@ -114,14 +127,14 @@ class HabitActions(
     }
 
     /** Pauses from [from] (tomorrow at the earliest) through [to]; it is due again the day after. One pause at a time. */
-    suspend fun pauseHabit(id: UUID, from: LocalDate, to: LocalDate) {
+    override suspend fun pauseHabit(id: UUID, from: LocalDate, to: LocalDate) {
         val m = moment()
         require(from >= m.tomorrow) { "a pause starts tomorrow at the earliest." }
         require(to >= from) { "a pause ends on or after the day it starts." }
         write { tx ->
             check(tx.habit(id).archivedOn == null) { "restore the habit before pausing it." }
             val vs = tx.versions(id)
-            check(currentPause(vs, m.today) == null) { "this habit already has a pause. end or cancel it first." }
+            check(pauseIn(vs, m.today) == null) { "this habit already has a pause. end or cancel it first." }
             val resume = to.plusDays(1)
             // The pause absorbs pending versions inside it; the one in force on the resume day comes back after it.
             val base = scheduleOn(vs.map { it.s }, resume) ?: error("the habit has no schedule.")
@@ -131,11 +144,11 @@ class HabitActions(
     }
 
     /** A running pause ends: due again from tomorrow. A pause that hasn't started is cancelled. */
-    suspend fun endPause(id: UUID) {
+    override suspend fun endPause(id: UUID) {
         val m = moment()
         write { tx ->
             val vs = tx.versions(id)
-            val (paused, resume) = currentPause(vs, m.today) ?: return@write
+            val (paused, resume) = pauseIn(vs, m.today) ?: return@write
             if (paused.from > m.today) return@write tx.cancel(id, vs, paused, resume, m)
             if (resume != null && resume.from <= m.tomorrow) return@write
             val back = resume?.s ?: vs.lastOrNull { it.s.recurrence != Recurrence.PAUSED }?.s ?: return@write
@@ -145,18 +158,18 @@ class HabitActions(
     }
 
     /** Removes a pause that hasn't started. A running one is history up to today: end it instead. */
-    suspend fun cancelPause(id: UUID) {
+    override suspend fun cancelPause(id: UUID) {
         val m = moment()
         write { tx ->
             val vs = tx.versions(id)
-            val (paused, resume) = currentPause(vs, m.today) ?: return@write
+            val (paused, resume) = pauseIn(vs, m.today) ?: return@write
             check(paused.from > m.today) { "the pause has started. end it instead." }
             tx.cancel(id, vs, paused, resume, m)
         }
     }
 
     /** Archived from tomorrow (today still counts). Planned changes (pending versions, a pause) are dropped. */
-    suspend fun archiveHabit(id: UUID) {
+    override suspend fun archiveHabit(id: UUID) {
         val m = moment()
         write { tx ->
             if (tx.habit(id).archivedOn != null) return@write
@@ -170,7 +183,7 @@ class HabitActions(
      * neutral (the server keeps that one past date). The versions go first: the server checks them
      * against archived_on before it is cleared.
      */
-    suspend fun restoreHabit(id: UUID) {
+    override suspend fun restoreHabit(id: UUID) {
         val m = moment()
         write { tx ->
             val archivedOn = tx.habit(id).archivedOn ?: return@write
@@ -189,7 +202,7 @@ class HabitActions(
     }
 
     /** "Delete forever": hidden everywhere; its schedules and logs stay and keep counting in perfect and active days. */
-    suspend fun hideHabit(id: UUID) {
+    override suspend fun hideHabit(id: UUID) {
         val m = moment()
         write { tx ->
             tx.execute("UPDATE habits SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL", listOf(m.now.toString(), id.toString()))
@@ -197,7 +210,7 @@ class HabitActions(
     }
 
     /** [ids] top to bottom. Only rows whose place changes are written. */
-    suspend fun reorderHabits(ids: List<UUID>) {
+    override suspend fun reorderHabits(ids: List<UUID>) {
         write { tx ->
             ids.forEachIndexed { i, id ->
                 tx.execute("UPDATE habits SET sort_order = ? WHERE id = ? AND sort_order IS NOT ?", listOf(i, id.toString(), i))
@@ -266,12 +279,7 @@ class HabitActions(
 
     private companion object {
         /** The pause still running or ahead: (paused version, resume version). An ended pause is history. */
-        fun currentPause(vs: List<Version>, today: LocalDate): Pair<Version, Version?>? {
-            val i = vs.indexOfLast { it.s.recurrence == Recurrence.PAUSED }
-            if (i < 0) return null
-            val resume = vs.getOrNull(i + 1)
-            return if (resume == null || resume.from > today) vs[i] to resume else null
-        }
+        fun pauseIn(vs: List<Version>, today: LocalDate) = currentPause(vs, today) { it.s }
 
         /** Same days and same effective target (null = the habit's own). */
         fun HabitSchedule.sameAs(o: HabitSchedule, habitTarget: Int) =

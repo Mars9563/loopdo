@@ -51,6 +51,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** Open on a tab ("journal" from the journal pop-up's [open app ↗]). */
         const val EXTRA_TAB = "tab"
+        /** Open the habits tab on one habit's detail (its id). */
+        const val EXTRA_HABIT = "habit"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,7 +87,11 @@ class MainActivity : ComponentActivity() {
                     StartState.SignedOut -> AuthFlow(graph.auth, graph.google)
                     StartState.SyncingFirstTime -> FirstSyncScreen(rows)
                     StartState.NeedsOnboarding -> OnboardingScreen(graph.onboarding, settingsAlreadySaved = hasSettings)
-                    StartState.Ready -> SignedInApp(graph, initialTab = Tab.entries.firstOrNull { it.name.equals(intent.getStringExtra(EXTRA_TAB), ignoreCase = true) } ?: Tab.TODAY)
+                    StartState.Ready -> {
+                        val habit = intent.getStringExtra(EXTRA_HABIT)
+                        val tab = if (habit != null) Tab.HABITS else Tab.entries.firstOrNull { it.name.equals(intent.getStringExtra(EXTRA_TAB), ignoreCase = true) } ?: Tab.TODAY
+                        SignedInApp(graph, initialTab = tab, openHabit = habit)
+                    }
                 }
             }
         }
@@ -93,15 +99,17 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SignedInApp(graph: AppGraph, initialTab: Tab = Tab.TODAY) {
+private fun SignedInApp(graph: AppGraph, initialTab: Tab = Tab.TODAY, openHabit: String? = null) {
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     val todayVm = viewModel { graph.todayViewModel() }
+    val habitsVm = viewModel { graph.habitsViewModel() }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
                 Tab.TODAY -> TodayScreen(todayVm) {
                     graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
                 }
+                Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, openHabit)
                 else -> ComingSoon(tab)
             }
         }
