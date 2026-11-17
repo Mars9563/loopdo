@@ -68,10 +68,14 @@ class TaskActions(
                 tx.template(t)?.let { tx.createInstances(it, today, user()) }
                 return@oneTransaction t
             }
-            val (isTemplate, isInstance) = tx.getOptional("SELECT repeat_rule IS NOT NULL, template_id IS NOT NULL FROM tasks WHERE id = ?", listOf(id.toString())) {
-                (it.getLong(0) == 1L) to (it.getLong(1) == 1L)
-            } ?: throw IllegalStateException("that task is gone.")
-            check(!isTemplate) { "edit the whole series with \"this and future\"." }
+            val row = tx.getOptional(
+                "SELECT repeat_rule IS NOT NULL, template_id IS NOT NULL, completed_at IS NOT NULL, due_date, due_time FROM tasks WHERE id = ?", listOf(id.toString()),
+            ) { Existing(it.getLong(0) == 1L, it.getLong(1) == 1L, it.getLong(2) == 1L, it.getString(3)?.let { d -> LocalDate.parse(d.take(10)) }, it.getString(4)?.let(LocalTime::parse)) }
+                ?: throw IllegalStateException("that task is gone.")
+            val isInstance = row.isInstance
+            check(!row.isTemplate) { "edit the whole series with \"this and future\"." }
+            // A done task keeps its date: re-dating a late one would make it on time (the server refuses it too).
+            check(!row.done || (d.due == row.due && d.time == row.time)) { "it's done, so its date stays. reopen it first." }
             tx.execute(
                 "UPDATE tasks SET title = ?, notes = ?, due_date = ?, due_time = ?, list_id = ? WHERE id = ?",
                 listOf(d.title, d.notes, d.due?.toString(), d.time?.toString(), d.listId?.toString(), id.toString()),
@@ -106,6 +110,9 @@ class TaskActions(
     /** The task and its checklist. A deleted occurrence of a series is never created again. */
     override suspend fun deleteTask(id: UUID) {
         db.oneTransaction { tx ->
+            // A done task is part of a past day (active days, a late record); the server refuses it too.
+            val done = tx.getOptional("SELECT completed_at IS NOT NULL FROM tasks WHERE id = ?", listOf(id.toString())) { it.getLong(0) == 1L } ?: false
+            check(!done) { "a done task stays in your history, so it can't be deleted." }
             tx.execute("DELETE FROM subtasks WHERE task_id = ?", listOf(id.toString()))
             tx.execute("DELETE FROM tasks WHERE id = ?", listOf(id.toString()))
         }
@@ -234,6 +241,8 @@ class TaskActions(
         require(d.time == null || d.due != null || d.repeat != null) { "pick a date before a time." }
         return d.copy(title = title, notes = notes)
     }
+
+    private class Existing(val isTemplate: Boolean, val isInstance: Boolean, val done: Boolean, val due: LocalDate?, val time: LocalTime?)
 
     private companion object {
         const val MAX_TITLE = 300 // tasks.title and subtasks.title checks (migration 0001)

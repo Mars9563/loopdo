@@ -170,6 +170,22 @@ class TaskActionsTest {
     }
 
     @Test
+    fun doneTaskKeepsItsDateAndCannotBeDeleted() = runBlocking {
+        // Review of M5: re-dating a done late task would make it on time; deleting it would erase a past active day.
+        val t = actions.saveTask(null, draft("fix bike brake", due = nov(12)))
+        db.execute("UPDATE tasks SET completed_at = '2026-11-13T10:00:00Z', completed_on = '2026-11-13' WHERE id = ?", listOf(t.toString()))
+        val before = ops().size
+        assertEquals("it's done, so its date stays. reopen it first.", runCatching { actions.saveTask(t, draft("fix bike brake", due = today)) }.exceptionOrNull()?.message)
+        assertEquals("it's done, so its date stays. reopen it first.", runCatching { actions.saveTask(t, draft("fix bike brake", due = null)) }.exceptionOrNull()?.message)
+        assertEquals("a done task stays in your history, so it can't be deleted.", runCatching { actions.deleteTask(t) }.exceptionOrNull()?.message)
+        assertEquals(before, ops().size)
+        assertEquals("2026-11-12", col("SELECT due_date FROM tasks WHERE id = ?", t.toString()))
+        // Its name and notes can still change.
+        actions.saveTask(t, draft("fixed the bike brake", due = nov(12)))
+        assertEquals("fixed the bike brake", col("SELECT title FROM tasks WHERE id = ?", t.toString()))
+    }
+
+    @Test
     fun subtasksAreOneTransactionEach() = runBlocking {
         val t = actions.saveTask(null, draft("pay rent", due = today))
         val before = ops().size

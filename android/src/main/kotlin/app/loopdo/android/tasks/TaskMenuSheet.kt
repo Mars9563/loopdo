@@ -96,9 +96,12 @@ fun TaskMenuSheet(t: TaskItem, today: LocalDate, lists: List<ListInfo>, vm: Task
                 }
                 DashedRule(Modifier.padding(vertical = 8.dp))
                 BracketRow(
-                    BracketItem("edit ↗") { act(onEdit) },
-                    BracketItem("delete", danger = true) { deleting = true },
-                    BracketItem("close", idle = true, onClick = onClose),
+                    *listOfNotNull(
+                        BracketItem("edit ↗") { act(onEdit) },
+                        // A done task stays in the history (review of M5): no delete.
+                        BracketItem("delete", danger = true) { deleting = true }.takeIf { !t.done },
+                        BracketItem("close", idle = true, onClick = onClose),
+                    ).toTypedArray(),
                 )
             }
         }

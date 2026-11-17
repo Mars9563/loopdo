@@ -94,6 +94,8 @@ fun TaskEditorScreen(taskId: String, today: LocalDate, vm: TasksViewModel, onClo
     val dueDate = due?.let(LocalDate::parse)
     val draft = TaskDraft(title, notes, dueDate, time?.let(LocalTime::parse), listId?.let(UUID::fromString), rule)
     val scope = saveScope(t.isTemplate, t.isInstance)
+    /** A done task keeps its date (re-dating a late one would make it on time) and can't be deleted. */
+    val done = t.completedOn != null
     fun save(s: SaveScope) = vm.save(t.id, if (t.isTemplate) t.id else t.templateId, draft, s, onSaved = onClose, onError = { error = it })
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 18.dp)) {
@@ -110,12 +112,12 @@ fun TaskEditorScreen(taskId: String, today: LocalDate, vm: TasksViewModel, onClo
         Label("when")
         FlowRow {
             val choices = listOf("today" to today, "tomorrow" to today.plusDays(1))
-            choices.forEach { (label, d) -> Chip(label, dueDate == d) { due = d.toString() } }
+            choices.forEach { (label, d) -> Chip(label, dueDate == d, enabled = !done) { due = d.toString() } }
             val picked = dueDate?.takeIf { d -> choices.none { it.second == d } }
-            Chip(picked?.short() ?: "pick date", picked != null) { pickingDate = true }
-            if (!t.isTemplate) Chip("no date", dueDate == null) { due = null; time = null }
+            Chip(picked?.short() ?: "pick date", picked != null, enabled = !done) { pickingDate = true }
+            if (!t.isTemplate) Chip("no date", dueDate == null, enabled = !done) { due = null; time = null }
         }
-        Chip(time?.let { "@ $it" } ?: "@ time", time != null, enabled = dueDate != null) { if (time != null) time = null else pickingTime = true }
+        Chip(time?.let { "@ $it" } ?: "@ time", time != null, enabled = dueDate != null && !done) { if (time != null) time = null else pickingTime = true }
 
         Label("list")
         FlowRow {
@@ -162,8 +164,11 @@ fun TaskEditorScreen(taskId: String, today: LocalDate, vm: TasksViewModel, onClo
             BracketItem("save", primary = true) { save(SaveScope.SERIES) },
             modifier = Modifier.padding(top = 10.dp),
         ) else BracketRow(
-            BracketItem("delete", danger = true) { deleting = true },
-            BracketItem("save", primary = true) { if (scope == SaveScope.ASK) asking = true else save(scope) },
+            // A done task stays in the history: no delete (review of M5; the server refuses it too).
+            *listOfNotNull(
+                BracketItem("delete", danger = true) { deleting = true }.takeIf { !done },
+                BracketItem("save", primary = true) { if (scope == SaveScope.ASK) asking = true else save(scope) },
+            ).toTypedArray(),
             modifier = Modifier.padding(top = 10.dp),
         )
         Spacer(Modifier.height(40.dp))

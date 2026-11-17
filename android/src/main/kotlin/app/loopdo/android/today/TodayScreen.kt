@@ -69,11 +69,13 @@ class TodayExtras(
     val onOpenTask: (String) -> Unit,
     val onTaskMenu: (TaskItem) -> Unit,
     val onOpenLists: () -> Unit,
+    /** A habit's name → its detail on the habits tab (spec: reached from a habit name on today). */
+    val onOpenHabit: (String) -> Unit = {},
 )
 
 /** Locked screen 1 (docs/design/app/app-screens-v2.html), plus the task editor, quick menu and lists (M5). [openTask] = a deep link. */
 @Composable
-fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onLinkHandled: () -> Unit = {}, onSignOut: () -> Unit) {
+fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onLinkHandled: () -> Unit = {}, onOpenHabit: (String) -> Unit = {}, onSignOut: () -> Unit) {
     val model by vm.state.collectAsStateWithLifecycle()
     val snack by vm.snack.collectAsStateWithLifecycle()
     val templates by tasks.templates.collectAsStateWithLifecycle()
@@ -95,7 +97,7 @@ fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewMod
                 model, snack, vm, onSignOut,
                 TodayExtras(
                     repeating = today?.let { app.loopdo.android.tasks.repeatingRows(templates, it) }.orEmpty(),
-                    onOpenTask = { route = "task:$it" }, onTaskMenu = { menu = it }, onOpenLists = { route = "lists" },
+                    onOpenTask = { route = "task:$it" }, onTaskMenu = { menu = it }, onOpenLists = { route = "lists" }, onOpenHabit = onOpenHabit,
                 ),
             )
         }
@@ -241,9 +243,11 @@ private fun TodaySections(m: TodayModel, vm: TodayUi, extras: TodayExtras?) {
     m.habitsOpen.forEach { h ->
         val isCount = h.kind == HabitKind.COUNT
         CheckRow(
-            // A count habit's [ ] means "all done" (M5: no 35 taps); long-press sets the exact count.
+            // [ ] ticks; on a count habit it means "all done" (M5: no 35 taps). The name opens the habit's
+            // detail (owner, 2026-11-17); long-press a count habit to set the exact count.
             false, h.title, onClick = { if (isCount) vm.complete(h) else vm.tick(h) },
             onLongClick = if (isCount) ({ countSheet = h }) else null,
+            onName = extras?.let { e -> { e.onOpenHabit(h.id) } },
         ) {
             when {
                 isCount -> {
@@ -264,6 +268,7 @@ private fun TodaySections(m: TodayModel, vm: TodayUi, extras: TodayExtras?) {
                     true, h.title,
                     onClick = { if (h.kind == HabitKind.COUNT) vm.tick(h) else vm.untick(h) },
                     onLongClick = if (h.kind == HabitKind.COUNT) ({ countSheet = h }) else null,
+                    onName = extras?.let { e -> { e.onOpenHabit(h.id) } },
                 ) {
                     if (h.kind == HabitKind.COUNT) Text("${h.count}/${h.target}", style = LoopDoType.small.copy(color = LoopDoColors.done))
                 }
@@ -377,14 +382,39 @@ private fun Toggle(label: String, onClick: () -> Unit) = Row(Modifier.fillMaxWid
     Text(label, style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.heightIn(min = 48.dp).clickable(onClick = onClick).padding(12.dp))
 }
 
-/** One `[ ] title ... trailing` row; the whole row is the tap target (≥ 48 dp). */
+/**
+ * One `[ ] title ... trailing` row (≥ 48 dp). Without [onName] the whole row is the tap target; with it,
+ * the first 48 dp (the [ ] and its gap) ticks and the rest opens the name, the row looking the same.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CheckRow(done: Boolean, title: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {}) {
+private fun CheckRow(
+    done: Boolean, title: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null,
+    onName: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {},
+) {
     val color = if (done) LoopDoColors.done else LoopDoColors.text
+    val tick by androidx.compose.runtime.rememberUpdatedState(onClick)
+    val open by androidx.compose.runtime.rememberUpdatedState(onName)
+    val hold by androidx.compose.runtime.rememberUpdatedState(onLongClick)
+    val touch = if (onName == null) {
+        Modifier.combinedClickable(role = Role.Checkbox, onClickLabel = if (done) "untick" else "tick", onClick = onClick, onLongClick = onLongClick)
+    } else {
+        Modifier
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { if (it.x < 48.dp.toPx()) tick() else open?.invoke() },
+                    onLongPress = { hold?.invoke() },
+                )
+            }
+            .semantics(mergeDescendants = true) {
+                role = Role.Checkbox
+                onClick(label = "open") { open?.invoke(); true }
+                hold?.let { h -> onLongClick(label = "set the count") { h(); true } }
+                customActions = listOf(CustomAccessibilityAction(if (done) "untick" else "tick") { tick(); true })
+            }
+    }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .combinedClickable(role = Role.Checkbox, onClickLabel = if (done) "untick" else "tick", onClick = onClick, onLongClick = onLongClick),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).then(touch),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
