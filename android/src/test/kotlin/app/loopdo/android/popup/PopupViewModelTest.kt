@@ -139,4 +139,19 @@ class PopupViewModelTest {
         vm().keepJournalDraft(day, "old entry\nnew words", "old entry")
         assertEquals("new words", vm().lineDraft(day).first)
     }
+
+    // Review of M6, critical 1: an earlier day's draft edited after its day, or from before M6, still saves.
+    @Test
+    fun editedOrUntimedEarlierDraftStillSaves() = runTest {
+        val friday = LocalDate.of(2026, 11, 13)
+        val fridayNight = java.time.Instant.parse("2026-11-13T18:20:00Z")
+        val vm = vm()
+        vm.keepLineDraft(friday, "long day", fridayNight)
+        vm.keepLineDraft(friday, "long day.", java.time.Instant.parse("2026-11-14T04:00:00Z"), earlierDay = true)
+        vm.saveLine(friday, "long day.", earlierDay = true) {}
+        assertEquals(fridayNight, actions.lineSaves.last().third) // still its own day's time
+        vm.keepJournalDraft(friday, "old entry\nfrom before the stamps", "old entry") // no time known
+        vm.saveLine(friday, "from before the stamps", earlierDay = true) {}
+        assertEquals(java.time.Instant.EPOCH, actions.lineSaves.last().third) // "unknown": stamped at the day's end
+    }
 }

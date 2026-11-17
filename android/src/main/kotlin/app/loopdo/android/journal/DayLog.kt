@@ -158,8 +158,9 @@ private fun PhotoItem(
 /** A photo at [sizeDp] (decoded small, off the main thread); a dim box while it loads or isn't uploaded yet. */
 @Composable
 fun PhotoThumb(id: String, localPath: String?, photo: suspend (String, String?) -> File?, sizeDp: Int, modifier: Modifier = Modifier) {
-    val bitmap by produceState<ImageBitmap?>(null, id, localPath) {
-        value = withContext(Dispatchers.IO) { photo(id, localPath)?.let { decodeSampled(it, sizeDp * 3) } }
+    val key = "$id@$sizeDp"
+    val bitmap by produceState(THUMBS[key], id, localPath) {
+        if (value == null) value = withContext(Dispatchers.IO) { photo(id, localPath)?.let { decodeSampled(it, sizeDp * 3) } }?.also { THUMBS[key] = it }
     }
     val shape = RoundedCornerShape(8.dp)
     Box(modifier.size(sizeDp.dp).clip(shape).background(LoopDoColors.accent.copy(alpha = 0.10f)), contentAlignment = Alignment.Center) {
@@ -167,6 +168,9 @@ fun PhotoThumb(id: String, localPath: String?, photo: suspend (String, String?) 
             ?: Text("…", style = LoopDoType.small.copy(color = LoopDoColors.dim))
     }
 }
+
+/** Decoded photos near the screen (the feed is lazy; a year of photos is never held at once). */
+private val THUMBS = Lru<String, ImageBitmap>(64)
 
 /** Decodes [file] at about [px] on the short edge (power-of-two sampling), or null if it can't be read. */
 fun decodeSampled(file: File, px: Int): ImageBitmap? = runCatching {

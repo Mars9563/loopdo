@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -63,6 +64,7 @@ fun JournalTab(vm: JournalViewModel) {
     // The writer's words live here, not in the sheet: closing it never throws typed text away.
     var writing by rememberSaveable { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
+    var draftLoaded by rememberSaveable { mutableStateOf<String?>(null) }
     var writerError by rememberSaveable { mutableStateOf<String?>(null) }
     /** "date|stored line" being edited, its new text, or deleted. */
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
@@ -81,35 +83,40 @@ fun JournalTab(vm: JournalViewModel) {
 
     val model = m
     val today = model?.today?.date
-    fun addPhotoFrom(source: () -> ImageDecoder.Source, cleanup: () -> Unit = {}) {
+    // The writer's line lives in the shared draft store (also the widget pop-up's), so it survives a tab switch,
+    // the app lock and a restart; reloaded when the day changes.
+    if (today != null && draftLoaded != today.toString()) { draft = vm.draftFor(today); draftLoaded = today.toString() }
+    fun addPhotoFrom(source: () -> ImageDecoder.Source, afterSaved: () -> Unit = {}) {
         val day = today ?: return
         val id = UUID.randomUUID()
-        vm.addPhoto(day) { compress(source(), photoFile(ctx, id), id).also { cleanup() } }
+        vm.addPhoto(day, afterSaved) { compress(source(), photoFile(ctx, id), id) }
     }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { u -> addPhotoFrom({ ImageDecoder.createSource(ctx.contentResolver, u) }) }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val f = cameraFile?.let(::File)
-        if (ok && f != null && f.length() > 0) addPhotoFrom({ ImageDecoder.createSource(f) }, cleanup = { f.delete() }) else f?.delete()
+        if (ok && f != null && f.length() > 0) addPhotoFrom({ ImageDecoder.createSource(f) }, afterSaved = { f.delete() }) else f?.delete()
         cameraFile = null
     }
 
     BackHandler(enabled = view != "today") { if (calDay != null) calDay = null else view = "today" }
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
-            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    buildAnnotatedString {
-                        withStyle(SpanStyle(color = LoopDoColors.accent)) { append("~/journal") }
-                        model?.let { withStyle(SpanStyle(color = LoopDoColors.dim)) { append(" 🔥 ${it.streak}d") } }
-                    },
-                    style = LoopDoType.body, modifier = Modifier.weight(1f),
-                )
-                listOf("today", "feed", "calendar").forEachIndexed { i, v ->
-                    if (i > 0) Text("|", style = LoopDoType.small.copy(color = LoopDoColors.separator))
-                    Box(Modifier.heightIn(min = 48.dp).clickable(role = Role.Tab) { view = v }.padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
-                        Text("[$v]", style = LoopDoType.small.copy(color = if (view == v) LoopDoColors.accent else LoopDoColors.dim))
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp)) {
+            item(key = "header") {
+                Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        buildAnnotatedString {
+                            withStyle(SpanStyle(color = LoopDoColors.accent)) { append("~/journal") }
+                            model?.let { withStyle(SpanStyle(color = LoopDoColors.dim)) { append(" 🔥 ${it.streak}d") } }
+                        },
+                        style = LoopDoType.body, modifier = Modifier.weight(1f),
+                    )
+                    listOf("today", "feed", "calendar").forEachIndexed { i, v ->
+                        if (i > 0) Text("|", style = LoopDoType.small.copy(color = LoopDoColors.separator))
+                        Box(Modifier.heightIn(min = 48.dp).clickable(role = Role.Tab) { view = v }.padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
+                            Text("[$v]", style = LoopDoType.small.copy(color = if (view == v) LoopDoColors.accent else LoopDoColors.dim))
+                        }
                     }
                 }
             }
@@ -118,48 +125,54 @@ fun JournalTab(vm: JournalViewModel) {
                 val delete = { date: LocalDate -> { l: LogItem.Line -> deletingLine = "$date|${l.raw}" } }
                 when (view) {
                     "feed" -> {
-                        model.onThisDay.forEach { d ->
+                        items(model.onThisDay, key = { "otd-${it.date}" }) { d ->
                             Column(
                                 Modifier.padding(vertical = 6.dp).fillMaxWidth()
                                     .background(LoopDoColors.accent.copy(alpha = 0.07f), RoundedCornerShape(14.dp))
                                     .border(1.dp, LoopDoColors.accent.copy(alpha = 0.28f), RoundedCornerShape(14.dp)).padding(12.dp),
                             ) {
-                                val years = today!!.year - d.date.year
+                                val years = model.today.date.year - d.date.year
                                 Text("ON THIS DAY · $years ${if (years == 1) "YEAR" else "YEARS"} AGO", style = LoopDoType.label)
                                 DayLog(d.copy(blocks = d.blocks.take(2)), vm::photo)
                             }
                         }
-                        if (model.feed.isEmpty()) Hint("nothing written yet. [✎ today] writes the first line.")
-                        model.feed.forEach { d ->
-                            DayBar(d) { moodFor = d.date.toString() }
-                            DayLog(d, vm::photo, edit(d.date), delete(d.date), { openPhoto = it }, { deletingPhoto = it })
-                            Spacer(Modifier.height(10.dp))
-                        }
-                    }
-                    "calendar" -> {
-                        val open = calDay?.let(LocalDate::parse)
-                        if (open == null) {
-                            CalendarView(
-                                model, calMonth?.let(java.time.YearMonth::parse) ?: java.time.YearMonth.from(model.today.date),
-                                onMonth = { calMonth = it.toString() }, onDay = { calDay = it.toString() },
-                            )
-                        } else {
-                            Bracket("< calendar", idle = true) { calDay = null }
-                            val d = model.feed.firstOrNull { it.date == open }
-                            if (d == null) Hint("nothing written on this day.") else {
+                        if (model.feed.isEmpty()) item { Hint("nothing written yet. [✎ today] writes the first line.") }
+                        items(model.feed, key = { it.date.toString() }) { d ->
+                            Column {
                                 DayBar(d) { moodFor = d.date.toString() }
                                 DayLog(d, vm::photo, edit(d.date), delete(d.date), { openPhoto = it }, { deletingPhoto = it })
+                                Spacer(Modifier.height(10.dp))
                             }
                         }
                     }
-                    else -> {
-                        DayBar(model.today) { moodFor = model.today.date.toString() }
-                        if (model.today.blocks.isEmpty()) Hint("nothing yet today. [✎ today] writes the first line.")
-                        DayLog(model.today, vm::photo, edit(model.today.date), delete(model.today.date), { openPhoto = it }, { deletingPhoto = it })
+                    "calendar" -> item(key = "calendar") {
+                        Column {
+                            val open = calDay?.let(LocalDate::parse)
+                            if (open == null) {
+                                CalendarView(
+                                    model, calMonth?.let(java.time.YearMonth::parse) ?: java.time.YearMonth.from(model.today.date),
+                                    onMonth = { calMonth = it.toString() }, onDay = { calDay = it.toString() },
+                                )
+                            } else {
+                                Bracket("< calendar", idle = true) { calDay = null }
+                                val d = model.feed.firstOrNull { it.date == open }
+                                if (d == null) Hint("nothing written on this day.") else {
+                                    DayBar(d) { moodFor = d.date.toString() }
+                                    DayLog(d, vm::photo, edit(d.date), delete(d.date), { openPhoto = it }, { deletingPhoto = it })
+                                }
+                            }
+                        }
+                    }
+                    else -> item(key = "today") {
+                        Column {
+                            DayBar(model.today) { moodFor = model.today.date.toString() }
+                            if (model.today.blocks.isEmpty()) Hint("nothing yet today. [✎ today] writes the first line.")
+                            DayLog(model.today, vm::photo, edit(model.today.date), delete(model.today.date), { openPhoto = it }, { deletingPhoto = it })
+                        }
                     }
                 }
             }
-            Spacer(Modifier.height(140.dp))
+            item(key = "end") { Spacer(Modifier.height(140.dp)) }
         }
         if (!writing) Fab("✎ today", Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 14.dp)) { writing = true; writerError = null }
         snack?.let { s ->
@@ -172,9 +185,10 @@ fun JournalTab(vm: JournalViewModel) {
         }
         if (writing && model != null) WriterSheet(
             title = "~/journal ${model.today.label}", stamp = model.now.let { String.format(Locale.ROOT, "[%02d:%02d]", it.hour, it.minute) },
-            text = draft, onText = { draft = it; writerError = null },
+            text = draft, onText = { draft = it; writerError = null; vm.keepDraft(model.today.date, it) },
             mood = model.today.mood, onMood = { vm.setMood(model.today.date, it) },
-            error = writerError, onPhoto = { choosingPhoto = true },
+            error = writerError,
+            onPhoto = { if (canAddPhoto(model.today)) choosingPhoto = true else writerError = "a day holds 4 photos." },
             onCancel = { writing = false },
             onSave = { vm.addLines(model.today.date, draft, onSaved = { draft = ""; writing = false }, onError = { writerError = it }) },
         )

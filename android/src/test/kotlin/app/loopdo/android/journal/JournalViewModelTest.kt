@@ -55,4 +55,22 @@ class JournalViewModelTest {
         assertEquals(listOf("fri 13 nov", "😐", ""), model.feed[1].let { listOf(it.label, it.moodFace, it.dayTag) })
         assertEquals("", model.feed[2].moodFace)
     }
+
+    // Review of M6, important 2: a full day doesn't offer [📷 photo] (a camera shot can't be taken and then refused).
+    @Test
+    fun fifthPhotoIsNotOfferedOnAFullDay() {
+        val four = (1..4).map { PhotoRow("p$it", "e14", null, null) }
+        assertTrue(canAddPhoto(buildJournal(entries, photos, today, ist, LocalTime.of(4, 0), 0).today))
+        assertEquals(false, canAddPhoto(buildJournal(entries, four, today, ist, LocalTime.of(4, 0), 0).today))
+    }
+
+    // Review of M6, important 3: decoded photos are kept in a small LRU, not all at once.
+    @Test
+    fun lruKeepsTheMostRecent() {
+        val lru = Lru<String, Int>(2)
+        lru["a"] = 1; lru["b"] = 2
+        lru["a"] // touch a
+        lru["c"] = 3 // evicts b, the least recently used
+        assertEquals(listOf(1, null, 3), listOf(lru["a"], lru["b"], lru["c"]))
+    }
 }

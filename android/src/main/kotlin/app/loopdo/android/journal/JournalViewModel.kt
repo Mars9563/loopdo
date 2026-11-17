@@ -60,7 +60,12 @@ class JournalViewModel(
     private val now: () -> Instant,
     private val photoFile: suspend (String, String?) -> File?,
     private val uploadSoon: () -> Unit,
+    /** The unsaved line, shared with the widget pop-up and kept on disk (review of M6: never lost to a tab switch or the lock). */
+    private val drafts: LineDrafts? = null,
 ) : ViewModel() {
+
+    fun draftFor(date: LocalDate): String = drafts?.line(date)?.first.orEmpty()
+    fun keepDraft(date: LocalDate, text: String) { drafts?.keep(date, text, now(), earlierDay = false) }
 
     /** The time log, rebuilt on every change and at the day end (the ticker). */
     val state: StateFlow<JournalModel?> = rows.flatMapLatest { r ->
@@ -95,21 +100,22 @@ class JournalViewModel(
         }
     }
 
-    fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) = run(onError, onSaved) { actions.addLines(date, input) }
+    fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) = run(onError, { drafts?.clear(date); onSaved() }) { actions.addLines(date, input) }
     fun editLine(date: LocalDate, old: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit) = run(onError, onSaved) { actions.editLine(date, old, new) }
     fun deleteLine(date: LocalDate, old: String) = run { actions.deleteLine(date, old) }
     fun setMood(date: LocalDate, mood: Int?) = run { actions.setMood(date, mood) }
     fun deletePhoto(id: String) = run { actions.deletePhoto(UUID.fromString(id)) }
 
     /** Compresses ([prepare], off the main thread) and adds a photo to [date]; then asks for an upload. */
-    fun addPhoto(date: LocalDate, prepare: suspend () -> PreparedPhoto) = run {
+    fun addPhoto(date: LocalDate, afterSaved: () -> Unit = {}, prepare: suspend () -> PreparedPhoto) = run {
         val p = withContext(Dispatchers.IO) { prepare() }
         try {
             actions.addPhoto(date, p)
         } catch (e: Exception) {
-            File(p.path).delete() // refused (e.g. a fifth photo): no stray file
+            File(p.path).delete() // refused (e.g. a fifth photo): no stray compressed copy; the original is kept
             throw e
         }
+        afterSaved() // e.g. the camera's original, removed only once the photo is stored
         uploadSoon()
     }
 

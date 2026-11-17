@@ -42,4 +42,15 @@ class AppLockTest {
         l.onBackground(); clock += 5 * 60_000; l.onForeground()
         assertFalse(l.locked.value)
     }
+
+    // Review of M6, important 4: if the phone can't ask for a fingerprint or PIN any more, the lock switches off
+    // instead of trapping the user (who might clear the app's data and lose what isn't uploaded).
+    @Test
+    fun noScreenLockSwitchesTheLockOff() {
+        val store = Store(enabled = true)
+        val l = lock(store)
+        l.cannotAuthenticate()
+        assertFalse(l.locked.value)
+        assertFalse(store.enabled)
+    }
 }

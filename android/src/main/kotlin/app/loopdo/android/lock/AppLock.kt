@@ -42,6 +42,9 @@ class AppLock(private val store: LockStore, private val elapsed: () -> Long) {
 
     fun unlocked() { _locked.value = false; backgroundAt = null }
 
+    /** The phone can't ask for a fingerprint or its screen lock any more: switch the lock off rather than trap the user. */
+    fun cannotAuthenticate() { setEnabled(false); unlocked() }
+
     companion object {
         const val AWAY_MS = 60_000L
     }

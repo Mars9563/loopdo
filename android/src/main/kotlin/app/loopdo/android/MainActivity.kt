@@ -64,10 +64,16 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     /** Fingerprint or the phone's PIN/pattern (BiometricPrompt); success opens the app. */
     fun askToUnlock(graph: AppGraph) {
+        // The phone can't ask any more (its screen lock was removed): switch the lock off rather than trap the
+        // user, who might clear the app's data and lose what isn't uploaded (review of M6).
+        if (!canLock()) return noWayToUnlock(graph)
         val prompt = androidx.biometric.BiometricPrompt(
             this, androidx.core.content.ContextCompat.getMainExecutor(this),
             object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) = graph.appLock.unlocked()
+                override fun onAuthenticationError(code: Int, message: CharSequence) {
+                    if (code == androidx.biometric.BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL || code == androidx.biometric.BiometricPrompt.ERROR_HW_NOT_PRESENT) noWayToUnlock(graph)
+                }
             },
         )
         prompt.authenticate(
@@ -76,6 +82,12 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                 .setAllowedAuthenticators(LOCK_AUTHENTICATORS)
                 .build(),
         )
+    }
+
+    private fun noWayToUnlock(graph: AppGraph) {
+        graph.appLock.cannotAuthenticate()
+        setRecentsScreenshotEnabled(true)
+        android.widget.Toast.makeText(this, "the phone has no screen lock any more, so the app lock is off.", android.widget.Toast.LENGTH_LONG).show()
     }
 
     /** Whether this phone can ask for fingerprint or its screen lock (needed before the switch turns on). */
@@ -93,6 +105,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         super.onCreate(savedInstanceState)
         val graph = (application as LoopDoApp).graph
         if (savedInstanceState == null) link.value = linkOf(intent)
+        // With the app lock on, the recents screen shows no picture of the journal (review of M6).
+        setRecentsScreenshotEnabled(!graph.appLock.enabled)
         val demo = BuildConfig.DEBUG && intent.getBooleanExtra("demo", false)
         // Debug builds only: `am start ... --ez pinWidget true` asks the launcher to add the widget (the owner confirms).
         if (BuildConfig.DEBUG && intent.getBooleanExtra("pinWidget", false)) {
@@ -162,8 +176,8 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     var lockOn by remember { mutableStateOf(graph.appLock.enabled) }
     val toggleLock = {
         when {
-            lockOn -> { graph.appLock.setEnabled(false); lockOn = false; todayVm.showMessage("app lock off.") }
-            activity.canLock() -> { graph.appLock.setEnabled(true); lockOn = true; todayVm.showMessage("app lock on: it asks after a minute away.") }
+            lockOn -> { graph.appLock.setEnabled(false); lockOn = false; activity.setRecentsScreenshotEnabled(true); todayVm.showMessage("app lock off.") }
+            activity.canLock() -> { graph.appLock.setEnabled(true); lockOn = true; activity.setRecentsScreenshotEnabled(false); todayVm.showMessage("app lock on: it asks after a minute away.") }
             else -> todayVm.showMessage("set a screen lock or fingerprint on the phone first.")
         }
     }

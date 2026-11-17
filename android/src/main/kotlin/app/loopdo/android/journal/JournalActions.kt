@@ -37,8 +37,15 @@ class JournalActions(
      */
     override suspend fun addLines(date: LocalDate, input: String, at: Instant?) {
         val now = clock.now().instant
-        val stampAt = at ?: now
-        require(date == dateAt(now) || (at != null && dateAt(at) == date && date < dateAt(now))) { "new lines go on today." }
+        val today = dateAt(now)
+        // Only today; an earlier day only for its unsaved draft (given with [at]), never stuck: a draft time outside
+        // its day (edited the next morning, or none known before M6) is stamped one minute before that day's end.
+        require(date == today || (at != null && date < today)) { "new lines go on today." }
+        val stampAt = when {
+            date == today -> at ?: now
+            dateAt(at!!) == date -> at
+            else -> app.loopdo.shared.day.dayEndInstant(date, settingsAt(now)).minusSeconds(60)
+        }
         val lines = stampLines(input, settingsAt(stampAt).let { stampAt.atZone(it.zone).toLocalTime() })
         require(lines.isNotEmpty()) { "type something first." }
         val id = entryId(date)
@@ -65,9 +72,12 @@ class JournalActions(
 
     override suspend fun deleteLine(date: LocalDate, old: String) {
         val id = entryId(date)
+        val closed = date < dateAt(clock.now().instant)
         db.oneTransaction { tx ->
             val current = tx.entryText(id) ?: throw IllegalStateException("that line changed. try again.")
             val new = removeLine(current, old) ?: throw IllegalStateException("that line changed. try again.")
+            // A closed day that counted keeps at least one line or photo (else its journal day and streak change).
+            check(!closed || parseLines(new).isNotEmpty() || tx.photoCount(id) > 0) { KEEP_ONE }
             tx.writeText(id, date, current, new)
         }
     }
@@ -111,7 +121,13 @@ class JournalActions(
 
     /** Removes the photo from its day and this phone. Its copy in R2 stays (the phone never deletes there). */
     override suspend fun deletePhoto(id: UUID) {
+        val today = dateAt(clock.now().instant)
         val path: String? = db.oneTransaction { tx ->
+            tx.getOptional(
+                "SELECT e.id, e.loopdo_date, coalesce(e.text, '') FROM journal_photos p JOIN journal_entries e ON e.id = p.entry_id WHERE p.id = ?", listOf(id.toString()),
+            ) { Triple(it.getString(0)!!, LocalDate.parse(it.getString(1)!!.take(10)), it.getString(2) ?: "") }?.let { (entry, date, text) ->
+                check(date >= today || parseLines(text).isNotEmpty() || tx.photoCount(entry) > 1) { KEEP_ONE }
+            }
             val p = tx.getOptional("SELECT path FROM photo_files WHERE id = ?", listOf(id.toString())) { it.getString(0) ?: "" }
             tx.execute("DELETE FROM journal_photos WHERE id = ?", listOf(id.toString()))
             tx.execute("DELETE FROM photo_files WHERE id = ?", listOf(id.toString()))
@@ -125,6 +141,9 @@ class JournalActions(
     private fun PowerSyncTransaction.entryText(id: String): String? =
         getOptional("SELECT coalesce(text, '') FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0) ?: "" }
 
+    private fun PowerSyncTransaction.photoCount(entryId: String): Long =
+        get("SELECT count(*) FROM journal_photos WHERE entry_id = ?", listOf(entryId)) { it.getLong(0)!! }
+
     private fun PowerSyncTransaction.insertEntry(id: String, date: LocalDate, text: String) = execute(
         "INSERT INTO journal_entries (id, user_id, loopdo_date, text) VALUES (?, ?, ?, ?)",
         listOf(id, user().toString(), date.toString(), text),
@@ -137,5 +156,6 @@ class JournalActions(
     private companion object {
         const val MAX_JOURNAL = 20_000 // journal_entries.text check
         const val MAX_PHOTOS = 4 // journal_photos_limit trigger
+        const val KEEP_ONE = "a past day keeps at least one line or photo. edit it instead."
     }
 }

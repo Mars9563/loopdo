@@ -55,3 +55,15 @@ fun buildJournal(entries: List<EntryRow>, photos: List<PhotoRow>, today: LocalDa
         streak = streak,
     )
 }
+
+/** A day takes another photo (≤ 4, the server's limit); checked before the camera or gallery opens. */
+fun canAddPhoto(day: DayView): Boolean = day.localPaths.size < 4
+
+/** A small least-recently-used map (decoded photos: only the ones near the screen stay in memory). */
+class Lru<K, V>(private val max: Int) {
+    private val map = object : LinkedHashMap<K, V>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?) = size > max
+    }
+    @Synchronized operator fun get(key: K): V? = map[key]
+    @Synchronized operator fun set(key: K, value: V) { map[key] = value }
+}

@@ -94,9 +94,7 @@ class SyncModule(
 
     private val anchorScope = scope
 
-    /** Queued uploads or drafts the server hasn't got. */
-    private suspend fun hasUnsynced(): Boolean =
-        db.getNextCrudTransaction() != null || db.get("SELECT count(*) FROM drafts") { it.getLong(0)!! } > 0
+    private suspend fun hasUnsynced(): Boolean = hasUnsyncedWork(db)
 
     private companion object {
         const val LAST_USER = "last_user_id"
@@ -104,3 +102,9 @@ class SyncModule(
             "sign out, then sign in with that account while online so they can sync first."
     }
 }
+
+/** Queued uploads, drafts the server hasn't got, or photos not yet in R2 (M6): an account switch must not wipe them. */
+internal suspend fun hasUnsyncedWork(db: com.powersync.PowerSyncDatabase): Boolean =
+    db.getNextCrudTransaction() != null ||
+        db.get("SELECT count(*) FROM drafts") { it.getLong(0)!! } > 0 ||
+        db.get("SELECT count(*) FROM photo_files WHERE uploaded = 0") { it.getLong(0)!! } > 0

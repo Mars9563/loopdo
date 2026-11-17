@@ -148,4 +148,35 @@ class JournalActionsTest {
         assertFalse(File(p.path).exists())
         assertTrue(text().isEmpty())
     }
+
+    // Review of M6, critical 1: an earlier day's draft is never stuck; outside its day it gets that day's end.
+    @Test
+    fun earlierDayDraftOutsideItsDayIsStampedAtTheDayEnd() = runBlocking {
+        journal.addLines(today.minusDays(1), "fixed the next morning", at = now) // edited today
+        journal.addLines(today.minusDays(1), "from before the stamps", at = Instant.EPOCH) // no time known
+        val yesterday = uuidV5(user, "journal:2026-11-13").toString()
+        assertEquals(
+            "[03:59] fixed the next morning\n[03:59] from before the stamps",
+            db.get("SELECT text FROM journal_entries WHERE id = ?", listOf(yesterday)) { it.getString(0)!! },
+        )
+    }
+
+    // Review of M6, critical 2: a closed day that counted keeps at least one line or photo.
+    @Test
+    fun pastDayKeepsItsLastLineOrPhoto() = runBlocking {
+        val yesterday = uuidV5(user, "journal:2026-11-13").toString()
+        db.execute("INSERT INTO journal_entries (id, user_id, loopdo_date, text) VALUES (?, ?, '2026-11-13', ?)", listOf(yesterday, user.toString(), "[19:05] long day\n[23:30] 2 applications sent"))
+        journal.deleteLine(today.minusDays(1), "[19:05] long day")
+        assertEquals("a past day keeps at least one line or photo. edit it instead.", runCatching { journal.deleteLine(today.minusDays(1), "[23:30] 2 applications sent") }.exceptionOrNull()?.message)
+        // A photo-only past day keeps its photo; today can be emptied.
+        val p = photo()
+        journal.addPhoto(today, p)
+        journal.deletePhoto(p.id)
+        val q = UUID.randomUUID()
+        val older = uuidV5(user, "journal:2026-11-12").toString()
+        db.execute("INSERT INTO journal_entries (id, user_id, loopdo_date, text) VALUES (?, ?, '2026-11-12', '')", listOf(older, user.toString()))
+        db.execute("INSERT INTO journal_photos (id, user_id, entry_id, r2_key, sort_order) VALUES (?, ?, ?, ?, 0)", listOf(q.toString(), user.toString(), older, "u/$user/$older/$q.webp"))
+        assertEquals("a past day keeps at least one line or photo. edit it instead.", runCatching { journal.deletePhoto(q) }.exceptionOrNull()?.message)
+        assertEquals(1L, db.get("SELECT count(*) FROM journal_photos WHERE id = ?", listOf(q.toString())) { it.getLong(0)!! })
+    }
 }

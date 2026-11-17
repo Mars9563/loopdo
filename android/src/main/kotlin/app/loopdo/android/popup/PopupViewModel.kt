@@ -50,28 +50,18 @@ class PopupViewModel(
         drafts.save(baseKey(date), if (text == base) "" else base)
     }
 
+    /** M6: the day's unsaved line (shared with the app's writer) and when it was last edited on its own day. */
+    private val lines = app.loopdo.android.journal.LineDrafts(drafts)
+    fun lineDraft(date: LocalDate): Pair<String, java.time.Instant?> = lines.line(date)
+    fun keepLineDraft(date: LocalDate, text: String, at: java.time.Instant, earlierDay: Boolean = false) = lines.keep(date, text, at, earlierDay)
+
     /**
-     * M6: [date]'s unsaved new line and when it was last edited. A draft from before M6 held the whole entry
-     * (with its base): only the text typed after that base is a new line.
+     * Saves the line. An [earlierDay]'s draft passes the time it was last edited on its day, or EPOCH when none
+     * is known (a pre-M6 draft): the journal stamps it at that day's end, so it can always be saved.
      */
-    fun lineDraft(date: LocalDate): Pair<String, java.time.Instant?> {
-        val text = drafts.load(journalKey(date))
-        val base = drafts.load(baseKey(date))
-        val line = if (base.isEmpty()) text else (if (text.startsWith(base)) text.removePrefix(base) else text).trim()
-        return line to drafts.load(atKey(date)).takeIf { it.isNotEmpty() }?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
-    }
-
-    /** Keeps the line being typed for [date], and when (an earlier day's draft is stamped with that time). */
-    fun keepLineDraft(date: LocalDate, text: String, at: java.time.Instant) {
-        drafts.save(journalKey(date), text)
-        drafts.save(baseKey(date), "")
-        drafts.save(atKey(date), if (text.isEmpty()) "" else at.toString())
-    }
-
-    /** Saves the line; an [earlierDay]'s draft keeps the time it was last edited. The draft is cleared once stored. */
     fun saveLine(date: LocalDate, text: String, earlierDay: Boolean, onSaved: () -> Unit) {
-        val at = if (earlierDay) lineDraft(date).second else null
-        save(journalKey(date), { drafts.save(atKey(date), ""); drafts.save(baseKey(date), ""); onSaved() }) { actions.addJournalLines(date, text, at) }
+        val at = if (earlierDay) lineDraft(date).second ?: java.time.Instant.EPOCH else null
+        save(journalKey(date), { lines.clear(date); onSaved() }) { actions.addJournalLines(date, text, at) }
     }
 
     /** One mood per day, applied at once. */

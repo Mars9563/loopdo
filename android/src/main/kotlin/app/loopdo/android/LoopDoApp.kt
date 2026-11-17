@@ -183,6 +183,7 @@ class AppGraph(context: android.content.Context) {
     fun journalViewModel() = app.loopdo.android.journal.JournalViewModel(
         todayData.rows(), app.loopdo.android.journal.JournalData(sync.db), journalActions, { trustedClock.now().instant },
         photoFile = { id, path -> photoCache.file(id, path) }, uploadSoon = { uploadPhotosSoon() },
+        drafts = app.loopdo.android.journal.LineDrafts(app.loopdo.android.popup.PrefsPopupDrafts(appContext)),
     )
 
     fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }

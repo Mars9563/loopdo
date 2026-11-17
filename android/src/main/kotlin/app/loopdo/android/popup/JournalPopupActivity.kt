@@ -58,7 +58,7 @@ class JournalPopupActivity : ComponentActivity() {
                     val error by vm.error.collectAsStateWithLifecycle()
                     app.loopdo.android.journal.WriterSheet(
                         title = "~/journal ${date.short()}", stamp = stamp,
-                        text = text, onText = { text = it; vm.keepLineDraft(date, it, graph.trustedClock.now().instant) },
+                        text = text, onText = { text = it; vm.keepLineDraft(date, it, graph.trustedClock.now().instant, earlierDay = earlier) },
                         mood = mood, onMood = { mood = it; vm.setMood(date, it) },
                         error = error, onPhoto = null, notice = notice,
                         onCancel = { finish() },
