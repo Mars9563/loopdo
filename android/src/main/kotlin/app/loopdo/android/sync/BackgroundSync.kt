@@ -34,6 +34,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (graph.auth.session.value !is AuthState.SignedIn) return Result.success()
         val done = awaitUploaded(timeoutMs = 60_000, pollMs = 1_000) { graph.sync.db.getNextCrudTransaction() != null }
         Log.i("loopdo_sync", "background sync: ${if (done) "queue empty" else "changes still queued (next run retries)"}")
+        // M6: once the rows are up, the photos' days exist on the server and their files can go to R2.
+        runCatching { graph.photoUploader.runOnce() }.onSuccess { if (it > 0) Log.i("loopdo_photos", "background: $it photo(s) uploaded") }
         return Result.success()
     }
 

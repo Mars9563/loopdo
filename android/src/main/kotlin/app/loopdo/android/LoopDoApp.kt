@@ -69,6 +69,21 @@ class AppGraph(context: android.content.Context) {
     )
     private val appContext = context.applicationContext
 
+    // M6 photos: rows sync with PowerSync; files go to R2 through the API's signed URLs.
+    private val photoApi = app.loopdo.android.journal.KtorPhotoApi(http, token)
+    val photoUploader = app.loopdo.android.journal.PhotoUploader(
+        photoApi,
+        pending = {
+            sync.db.getAll(
+                "SELECT f.id, f.path, p.entry_id, p.bytes FROM photo_files f JOIN journal_photos p ON p.id = f.id WHERE f.uploaded = 0",
+            ) { app.loopdo.android.journal.PendingPhoto(java.util.UUID.fromString(it.getString(0)!!), it.getString(1)!!, it.getString(2)!!, it.getLong(3) ?: 0L) }
+        },
+        onError = { android.util.Log.i("loopdo_photos", "upload later: ${it.message}") },
+    ) { id -> sync.db.execute("UPDATE photo_files SET uploaded = 1 WHERE id = ?", listOf(id.toString())) }
+    val photoCache = app.loopdo.android.journal.PhotoCache(java.io.File(appContext.cacheDir, "photos"), photoApi)
+    suspend fun pendingPhotoCount(): Long = sync.db.get("SELECT count(*) FROM photo_files WHERE uploaded = 0") { it.getLong(0) ?: 0L }
+    fun uploadPhotosSoon() = runCatching { app.loopdo.android.journal.PhotoWorker.enqueue(appContext) }
+
     /** Widget taps: the same actions as the app, then a redraw (Task 5 adds the refresh schedule). */
     private val widgetRefresh = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
@@ -114,6 +129,8 @@ class AppGraph(context: android.content.Context) {
         scope.launch { sync.blocked.drop(1).collect { runCatching { redrawWidget() } } }
         // Background sync every ~15 min while online (owner, 2026-11-16).
         runCatching { app.loopdo.android.sync.SyncWorker.schedule(appContext) }
+        // Photos taken earlier (offline, or before a restart) go up as soon as there is a network.
+        uploadPhotosSoon()
     }
 
     /** Live widget state: the database's changes plus explicit redraws. */
