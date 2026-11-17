@@ -31,5 +31,7 @@ object LoopDoSchema {
         // Local-only: never uploaded.
         Table.localOnly("drafts", t("kind", "payload", "reason", "created_at")),
         Table.localOnly("upload_state", t("first_failure_at") + i("tx_id")),
+        // M6: a photo file on this phone and whether it has reached R2 (the queue).
+        Table.localOnly("photo_files", t("path") + i("uploaded")),
     )
 }

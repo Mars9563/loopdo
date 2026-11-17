@@ -72,4 +72,13 @@ class SettingsVersionsTest {
         // Sun 15 (NY) ends Mon 04:00 New York time.
         assertEquals(at("2026-11-16T09:00:00Z"), dayEndAt(versions, at("2026-11-15T15:00:00Z")))
     }
+
+    @Test
+    fun settingsAtGivesTheVersionInForce() {
+        // M6: a journal stamp is the wall time of the zone in force when the line was saved.
+        val change = Instant.parse("2026-11-20T00:00:00Z")
+        val versions = listOf(DaySettingsVersion(Instant.EPOCH, ist, null), DaySettingsVersion(change, ny, null))
+        assertEquals(ist, settingsAt(versions, change.minusSeconds(1)))
+        assertEquals(ny, settingsAt(versions, change))
+    }
 }

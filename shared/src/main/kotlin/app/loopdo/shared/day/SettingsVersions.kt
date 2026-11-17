@@ -22,6 +22,9 @@ private fun List<DaySettingsVersion>.inForceAt(t: Instant): DaySettingsVersion {
     return sorted.lastOrNull { it.effectiveAt <= t } ?: sorted.first()
 }
 
+/** The user's day settings in force at instant [t] (e.g. the zone a journal line's time is shown in). */
+fun settingsAt(versions: List<DaySettingsVersion>, t: Instant): DaySettings = versions.inForceAt(t).settings
+
 /** "What was the user's LoopDo date at instant t?", answered from the history. */
 fun dateResolver(versions: List<DaySettingsVersion>): (Instant) -> LocalDate {
     val snapshot = versions.toList()

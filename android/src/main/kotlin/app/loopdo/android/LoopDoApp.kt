@@ -54,11 +54,18 @@ class AppGraph(context: android.content.Context) {
         logFailure = { android.util.Log.w("loopdo_onboarding", "setup failed", it) },
     )
     val todayData = app.loopdo.android.today.TodayData(sync.db)
+    val journalActions = app.loopdo.android.journal.JournalActions(
+        sync.db, trustedClock,
+        dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
+        settingsAt = { t -> app.loopdo.shared.day.settingsAt(todayData.versionsNow(), t) },
+        userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+    )
     val actions = app.loopdo.android.today.Actions(
         sync.db, trustedClock, evidence,
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
         userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
         series = { draft -> taskActions.saveTask(null, draft) },
+        journal = journalActions,
     )
     private val appContext = context.applicationContext
 

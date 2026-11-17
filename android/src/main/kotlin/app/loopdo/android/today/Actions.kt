@@ -63,6 +63,8 @@ class Actions(
     private val userId: () -> UUID?,
     /** Makes a repeating series (TaskActions.saveTask); set by the app graph. */
     private val series: (suspend (app.loopdo.android.tasks.TaskDraft) -> UUID)? = null,
+    /** The M6 journal (stamped lines); set by the app graph. */
+    private val journal: app.loopdo.android.journal.JournalActions? = null,
 ) : TodayActions {
     private class Moment(val now: TrustedNow, val today: LocalDate, val evidence: String) {
         val verified get() = if (now.verified) 1 else 0
@@ -212,6 +214,8 @@ class Actions(
     override suspend fun appendJournalLine(text: String) {
         val line = text.trim()
         require(line.isNotEmpty()) { "type something first." }
+        // M6: a journal line carries the time it was saved.
+        journal?.let { return it.addLines(dateAt(clock.now().instant), line) }
         val user = userId() ?: throw IllegalStateException("not signed in")
         val today = dateAt(clock.now().instant)
         val id = uuidV5(user, "journal:$today").toString()
