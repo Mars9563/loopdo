@@ -47,7 +47,7 @@ import app.loopdo.android.ui.theme.LoopDoTheme
 import app.loopdo.android.ui.theme.LoopDoType
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : androidx.fragment.app.FragmentActivity() {
     companion object {
         /** Open on a tab ("journal" from the journal pop-up's [open app ↗]). */
         const val EXTRA_TAB = "tab"
@@ -55,10 +55,32 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_HABIT = "habit"
         /** Open one task in the task editor (its id; the widget's task names). */
         const val EXTRA_TASK = "task"
+        private const val LOCK_AUTHENTICATORS =
+            androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
     }
 
     /** Where a launch asked to go (tab, habit, task). Also set by onNewIntent: the app may already be open. */
     private val link = kotlinx.coroutines.flow.MutableStateFlow<Link?>(null)
+
+    /** Fingerprint or the phone's PIN/pattern (BiometricPrompt); success opens the app. */
+    fun askToUnlock(graph: AppGraph) {
+        val prompt = androidx.biometric.BiometricPrompt(
+            this, androidx.core.content.ContextCompat.getMainExecutor(this),
+            object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) = graph.appLock.unlocked()
+            },
+        )
+        prompt.authenticate(
+            androidx.biometric.BiometricPrompt.PromptInfo.Builder()
+                .setTitle("unlock loopdo_")
+                .setAllowedAuthenticators(LOCK_AUTHENTICATORS)
+                .build(),
+        )
+    }
+
+    /** Whether this phone can ask for fingerprint or its screen lock (needed before the switch turns on). */
+    fun canLock(): Boolean =
+        androidx.biometric.BiometricManager.from(this).canAuthenticate(LOCK_AUTHENTICATORS) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
@@ -101,7 +123,9 @@ class MainActivity : ComponentActivity() {
                     StartState.NeedsOnboarding -> OnboardingScreen(graph.onboarding, settingsAlreadySaved = hasSettings)
                     StartState.Ready -> {
                         val l by link.collectAsStateWithLifecycle()
-                        SignedInApp(graph, l)
+                        val locked by graph.appLock.locked.collectAsStateWithLifecycle()
+                        // M6: the optional app lock covers the whole signed-in app until fingerprint / PIN.
+                        if (locked) app.loopdo.android.lock.LockScreen { askToUnlock(graph) } else SignedInApp(graph, l, this@MainActivity)
                     }
                 }
             }
@@ -125,7 +149,7 @@ private fun linkOf(intent: android.content.Intent?): Link? {
 }
 
 @Composable
-private fun SignedInApp(graph: AppGraph, link: Link?) {
+private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     var tab by rememberSaveable { mutableStateOf(link?.tab ?: Tab.TODAY) }
     // A link is handed to its tab once; the tab clears it when it has opened it, so switching tabs
     // and coming back doesn't open the same task or habit again.
@@ -135,10 +159,18 @@ private fun SignedInApp(graph: AppGraph, link: Link?) {
     val habitsVm = viewModel { graph.habitsViewModel() }
     val tasksVm = viewModel { graph.tasksViewModel() }
     val journalVm = viewModel { graph.journalViewModel() }
+    var lockOn by remember { mutableStateOf(graph.appLock.enabled) }
+    val toggleLock = {
+        when {
+            lockOn -> { graph.appLock.setEnabled(false); lockOn = false; todayVm.showMessage("app lock off.") }
+            activity.canLock() -> { graph.appLock.setEnabled(true); lockOn = true; todayVm.showMessage("app lock on: it asks after a minute away.") }
+            else -> todayVm.showMessage("set a screen lock or fingerprint on the phone first.")
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
-                Tab.TODAY -> TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = { pending = null }, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }) {
+                Tab.TODAY -> TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = { pending = null }, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock) {
                     graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
                 }
                 Tab.JOURNAL -> app.loopdo.android.journal.JournalTab(journalVm)

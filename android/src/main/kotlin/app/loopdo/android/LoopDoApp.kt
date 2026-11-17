@@ -69,6 +69,9 @@ class AppGraph(context: android.content.Context) {
     )
     private val appContext = context.applicationContext
 
+    /** M6: the optional app lock (boot clock, so a changed wall clock can't skip it). */
+    val appLock = app.loopdo.android.lock.AppLock(app.loopdo.android.lock.PrefsLockStore(context.applicationContext)) { android.os.SystemClock.elapsedRealtime() }
+
     // M6 photos: rows sync with PowerSync; files go to R2 through the API's signed URLs.
     private val photoApi = app.loopdo.android.journal.KtorPhotoApi(http, token)
     val photoUploader = app.loopdo.android.journal.PhotoUploader(
@@ -131,6 +134,11 @@ class AppGraph(context: android.content.Context) {
         runCatching { app.loopdo.android.sync.SyncWorker.schedule(appContext) }
         // Photos taken earlier (offline, or before a restart) go up as soon as there is a network.
         uploadPhotosSoon()
+        // The app lock counts time in the background from the whole app (not one screen).
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onStop(owner: androidx.lifecycle.LifecycleOwner) = appLock.onBackground()
+            override fun onStart(owner: androidx.lifecycle.LifecycleOwner) = appLock.onForeground()
+        })
     }
 
     /** Live widget state: the database's changes plus explicit redraws. */
