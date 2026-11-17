@@ -41,31 +41,28 @@ class JournalPopupActivity : ComponentActivity() {
             }
             // Unsaved text from an earlier day reopens on that day (it stays editable), never stranded.
             val date = journalDateToOpen(today.date, vm.journalDraftDates())
+            val earlier = date != today.date
             val entry = graph.todayData.journalOn(date)
-            val current = entry?.text.orEmpty()
-            // A draft is replayed on top of the entry as it is now (owner: merge, never overwrite).
-            val startText = vm.journalDraft(date)?.let { (draft, base) -> mergeJournal(current, base, draft) } ?: current
-            vm.keepJournalDraft(date, startText, current)
-            val notice = if (date != today.date) "unsaved text from ${date.short()}: save it or clear it." else null
+            // M6 (locked journal-log-v2): the pop-up writes one new line, stamped when it's saved; an earlier
+            // day's draft keeps the time it was last edited.
+            val (startText, draftAt) = vm.lineDraft(date)
+            val now = graph.trustedClock.now().instant
+            val zone = app.loopdo.shared.day.settingsAt(graph.todayData.versionsNow(), now).zone
+            val stampTime = (if (earlier) draftAt ?: now else now).atZone(zone).toLocalTime()
+            val stamp = String.format(java.util.Locale.ROOT, "[%02d:%02d]", stampTime.hour, stampTime.minute)
+            val notice = if (earlier) "unsaved text from ${date.short()}: save it or clear it." else null
             setContent {
                 LoopDoTheme(backdrop = false) {
                     var text by rememberSaveable { mutableStateOf(startText) }
                     var mood by rememberSaveable { mutableStateOf(entry?.mood) }
                     val error by vm.error.collectAsStateWithLifecycle()
-                    JournalSheet(
-                        dateLabel = date.short(), streak = today.streaks.journal,
-                        text = text, onText = { text = it; vm.keepJournalDraft(date, it, current) },
-                        mood = mood, onMood = { mood = it },
-                        error = error, notice = notice,
-                        onOpenApp = {
-                            startActivity(
-                                Intent(this@JournalPopupActivity, MainActivity::class.java)
-                                    .putExtra(MainActivity.EXTRA_TAB, "journal").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                            finish()
-                        },
-                        onSave = { vm.saveJournal(date, text, mood, base = current) { finish() } },
-                        onDismiss = { finish() },
+                    app.loopdo.android.journal.WriterSheet(
+                        title = "~/journal ${date.short()}", stamp = stamp,
+                        text = text, onText = { text = it; vm.keepLineDraft(date, it, graph.trustedClock.now().instant) },
+                        mood = mood, onMood = { mood = it; vm.setMood(date, it) },
+                        error = error, onPhoto = null, notice = notice,
+                        onCancel = { finish() },
+                        onSave = { vm.saveLine(date, text, earlierDay = earlier) { finish() } },
                     )
                 }
             }

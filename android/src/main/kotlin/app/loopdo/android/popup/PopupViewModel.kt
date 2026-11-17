@@ -50,9 +50,39 @@ class PopupViewModel(
         drafts.save(baseKey(date), if (text == base) "" else base)
     }
 
+    /**
+     * M6: [date]'s unsaved new line and when it was last edited. A draft from before M6 held the whole entry
+     * (with its base): only the text typed after that base is a new line.
+     */
+    fun lineDraft(date: LocalDate): Pair<String, java.time.Instant?> {
+        val text = drafts.load(journalKey(date))
+        val base = drafts.load(baseKey(date))
+        val line = if (base.isEmpty()) text else (if (text.startsWith(base)) text.removePrefix(base) else text).trim()
+        return line to drafts.load(atKey(date)).takeIf { it.isNotEmpty() }?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+    }
+
+    /** Keeps the line being typed for [date], and when (an earlier day's draft is stamped with that time). */
+    fun keepLineDraft(date: LocalDate, text: String, at: java.time.Instant) {
+        drafts.save(journalKey(date), text)
+        drafts.save(baseKey(date), "")
+        drafts.save(atKey(date), if (text.isEmpty()) "" else at.toString())
+    }
+
+    /** Saves the line; an [earlierDay]'s draft keeps the time it was last edited. The draft is cleared once stored. */
+    fun saveLine(date: LocalDate, text: String, earlierDay: Boolean, onSaved: () -> Unit) {
+        val at = if (earlierDay) lineDraft(date).second else null
+        save(journalKey(date), { drafts.save(atKey(date), ""); drafts.save(baseKey(date), ""); onSaved() }) { actions.addJournalLines(date, text, at) }
+    }
+
+    /** One mood per day, applied at once. */
+    fun setMood(date: LocalDate, mood: Int?) = viewModelScope.launch {
+        runCatching { actions.setJournalMood(date, mood) }.onFailure { _error.value = it.message ?: "couldn't save that. try again." }
+        runCatching { redraw() }
+    }
+
     /** Days with unsaved journal text. */
     fun journalDraftDates(): Set<LocalDate> = drafts.keys()
-        .filter { it.startsWith("journal:") && !it.endsWith(":base") && drafts.load(it).isNotEmpty() }
+        .filter { it.startsWith("journal:") && !it.endsWith(":base") && !it.endsWith(":at") && drafts.load(it).isNotEmpty() }
         .mapNotNull { runCatching { LocalDate.parse(it.removePrefix("journal:")) }.getOrNull() }.toSet()
 
     private fun save(key: String, onSaved: () -> Unit, block: suspend () -> Unit) {
@@ -77,5 +107,6 @@ class PopupViewModel(
         const val ADD = "add"
         fun journalKey(date: LocalDate) = "journal:$date"
         private fun baseKey(date: LocalDate) = "journal:$date:base"
+        private fun atKey(date: LocalDate) = "journal:$date:at"
     }
 }

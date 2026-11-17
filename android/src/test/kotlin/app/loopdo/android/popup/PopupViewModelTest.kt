@@ -37,6 +37,8 @@ private class FakeActions : TodayActions {
     override suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID { maybeFail(); return UUID.randomUUID() }
     override suspend fun appendJournalLine(text: String) = maybeFail()
     override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String?) { maybeFail(); journalSaves += Triple(date, text, mood) }
+    val lineSaves = mutableListOf<Triple<LocalDate, String, java.time.Instant?>>()
+    override suspend fun addJournalLines(date: LocalDate, text: String, at: java.time.Instant?) { maybeFail(); lineSaves += Triple(date, text, at) }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -103,5 +105,38 @@ class PopupViewModelTest {
         assertEquals(listOf(Triple<LocalDate, String, Int?>(opened, "late night", 4)), actions.journalSaves)
         assertEquals("", drafts.load("journal:2026-11-14"))
         assertEquals(1, redraws)
+    }
+
+    // M6: the pop-up writes one new line; its draft is that line plus when it was last edited.
+    @Test
+    fun lineDraftKeepsItsLastEditTime() {
+        val day = LocalDate.of(2026, 11, 14)
+        val at = java.time.Instant.parse("2026-11-14T17:00:00Z")
+        vm().keepLineDraft(day, "half a thought", at)
+        assertEquals("half a thought" to at, vm().lineDraft(day))
+        assertEquals(setOf(day), vm().journalDraftDates())
+    }
+
+    @Test
+    fun earlierDayLineSavesWithItsDraftTime() = runTest {
+        val friday = LocalDate.of(2026, 11, 13)
+        val at = java.time.Instant.parse("2026-11-13T17:00:00Z")
+        val vm = vm()
+        vm.keepLineDraft(friday, "draft from last night", at)
+        vm.saveLine(friday, "draft from last night", earlierDay = true) {}
+        assertEquals(listOf(Triple<LocalDate, String, java.time.Instant?>(friday, "draft from last night", at)), actions.lineSaves)
+        assertEquals("" to null, vm.lineDraft(friday))
+        assertEquals(emptySet<LocalDate>(), vm.journalDraftDates())
+        // Today's line is stamped when it is saved (no draft time passed on).
+        vm.saveLine(friday.plusDays(1), "now", earlierDay = false) {}
+        assertEquals(null, actions.lineSaves.last().third)
+    }
+
+    @Test
+    fun oldWholeEntryDraftBecomesOnlyTheNewText() {
+        // A draft from before M6 held the whole entry (with its base): only what was typed after the base is kept.
+        val day = LocalDate.of(2026, 11, 14)
+        vm().keepJournalDraft(day, "old entry\nnew words", "old entry")
+        assertEquals("new words", vm().lineDraft(day).first)
     }
 }

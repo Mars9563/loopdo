@@ -53,6 +53,10 @@ interface TodayActions {
      * merged on top (mergeJournal), never overwriting newer text.
      */
     suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String? = null)
+    /** M6: new stamped lines on [date] (today; or an earlier day's unsaved draft, stamped [at]). */
+    suspend fun addJournalLines(date: LocalDate, text: String, at: java.time.Instant?): Unit = throw IllegalStateException("the journal isn't ready here.")
+    /** M6: [date]'s mood (one per day). */
+    suspend fun setJournalMood(date: LocalDate, mood: Int?): Unit = throw IllegalStateException("the journal isn't ready here.")
 }
 
 class Actions(
@@ -203,6 +207,16 @@ class Actions(
             )
         }
         return id
+    }
+
+    override suspend fun addJournalLines(date: LocalDate, text: String, at: java.time.Instant?) {
+        val j = journal ?: return super.addJournalLines(date, text, at)
+        j.addLines(date, text, at)
+    }
+
+    override suspend fun setJournalMood(date: LocalDate, mood: Int?) {
+        val j = journal ?: return super.setJournalMood(date, mood)
+        j.setMood(date, mood)
     }
 
     override suspend fun addRepeatingTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?, repeat: app.loopdo.shared.task.RepeatRule): UUID {

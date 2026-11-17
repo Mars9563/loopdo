@@ -74,6 +74,9 @@ fun JournalTab(vm: JournalViewModel) {
     var moodFor by rememberSaveable { mutableStateOf<String?>(null) }
     var choosingPhoto by rememberSaveable { mutableStateOf(false) }
     var cameraFile by rememberSaveable { mutableStateOf<String?>(null) }
+    /** The calendar's month, and the written day opened from it (null = the grid). */
+    var calMonth by rememberSaveable { mutableStateOf<String?>(null) }
+    var calDay by rememberSaveable { mutableStateOf<String?>(null) }
     val ctx = LocalContext.current
 
     val model = m
@@ -92,7 +95,7 @@ fun JournalTab(vm: JournalViewModel) {
         cameraFile = null
     }
 
-    BackHandler(enabled = view != "today") { view = "today" }
+    BackHandler(enabled = view != "today") { if (calDay != null) calDay = null else view = "today" }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -133,7 +136,22 @@ fun JournalTab(vm: JournalViewModel) {
                             Spacer(Modifier.height(10.dp))
                         }
                     }
-                    "calendar" -> CalendarView(model, vm)
+                    "calendar" -> {
+                        val open = calDay?.let(LocalDate::parse)
+                        if (open == null) {
+                            CalendarView(
+                                model, calMonth?.let(java.time.YearMonth::parse) ?: java.time.YearMonth.from(model.today.date),
+                                onMonth = { calMonth = it.toString() }, onDay = { calDay = it.toString() },
+                            )
+                        } else {
+                            Bracket("< calendar", idle = true) { calDay = null }
+                            val d = model.feed.firstOrNull { it.date == open }
+                            if (d == null) Hint("nothing written on this day.") else {
+                                DayBar(d) { moodFor = d.date.toString() }
+                                DayLog(d, vm::photo, edit(d.date), delete(d.date), { openPhoto = it }, { deletingPhoto = it })
+                            }
+                        }
+                    }
                     else -> {
                         DayBar(model.today) { moodFor = model.today.date.toString() }
                         if (model.today.blocks.isEmpty()) Hint("nothing yet today. [✎ today] writes the first line.")
@@ -251,9 +269,4 @@ fun JournalTab(vm: JournalViewModel) {
 @Composable
 internal fun Hint(text: String) = Text(text, style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(vertical = 8.dp))
 
-/** Until Task 6: the calendar view. */
-@Composable
-internal fun CalendarView(model: JournalModel, vm: JournalViewModel) {
-    Hint("the calendar comes in the next build.")
-}
 
