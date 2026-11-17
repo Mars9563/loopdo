@@ -85,6 +85,7 @@ class Applier(
                 "tasks" -> taskRules(i, op.op, id, data)
                 "habit_schedules" -> scheduleRules(i, op.op, id, data)
                 "journal_photos" -> { photoRules(i, op.op, data); Prepared(data) }
+                "subtasks" -> subtaskRules(op.op, id, data)
                 else -> Prepared(data)
             }
             if (p.skip) return
@@ -135,12 +136,19 @@ class Applier(
      *   server-owned), so the miss stays on record (spec 6.5).
      */
     private fun taskRules(i: Int, op: String, id: UUID, data: JsonObject): Prepared {
-        if (op == "DELETE") return Prepared(data)
         val existing = queryOne("select due_date, completed_at, late_since from public.tasks where id = ?::uuid", id.toString()) {
             Triple(it.getObject(1, LocalDate::class.java), it.getObject(2, java.time.OffsetDateTime::class.java), it.getObject(3, LocalDate::class.java))
         }
+        val completed = existing?.second != null
+        // A completed task is a past active day (and maybe a late one): it can't be deleted (review, M5).
+        if (op == "DELETE") return if (completed) throw Rejected("FORBIDDEN", i) else Prepared(data)
+        // Nor re-dated, which would turn "done late" into "done on time"; reopening it first is the way (its own rules).
+        val reopening = "completed_at" in data && data["completed_at"] is JsonNull
+        if (completed && !reopening && "due_date" in data && data.date("due_date") != existing!!.first) throw Rejected("FORBIDDEN", i)
         val template = data.text("template_id")
         val occurrence = data.date("occurrence_date")
+        // An occurrence that already exists is not created again by another device: its edits (PATCHes) stay.
+        if (op == "PUT" && existing != null && template != null && occurrence != null) return Prepared(data, skip = true)
         if (op == "PUT" && existing == null && template != null && occurrence != null) {
             val generatedThrough = queryOne("select generated_through from public.tasks where id = ?::uuid", template) {
                 it.getObject(1, LocalDate::class.java)
@@ -214,7 +222,8 @@ class Applier(
         // M5: a version proved (verified time evidence) to have been made before its first day keeps
         // its date, e.g. a pause set offline at the airport and synced days later.
         val provenDay = if (data["evidence"] is JsonObject) runCatching { verifiedDay(i, data) }.getOrNull() else null
-        if (provenDay != null && from > provenDay) return Prepared(data)
+        // A habit's first version proven to be made on its first day (created offline, synced later) keeps it too.
+        if (provenDay != null && (from > provenDay || (!hasOther && from == provenDay))) return Prepared(data)
         if (from >= earliest) return Prepared(data)
         // M5 restore: the archived stretch becomes a pause from the archive day. Those days were already
         // unjudged (archived), so keeping the past date changes nothing that was judged.
@@ -264,6 +273,13 @@ class Applier(
         // Archiving takes effect from tomorrow at the earliest, so it can't dodge today (M5).
         val tomorrow = today(i).plusDays(1)
         return if (archived < tomorrow) Prepared(data.with("archived_on", tomorrow.toString())) else Prepared(data)
+    }
+
+    /** Checklist items are created once (PUT); a second device creating the same item doesn't reset its tick. */
+    private fun subtaskRules(op: String, id: UUID, data: JsonObject): Prepared {
+        if (op != "PUT") return Prepared(data)
+        val exists = queryOne("select 1 from public.subtasks where id = ?::uuid", id.toString()) { true } ?: false
+        return Prepared(data, skip = exists)
     }
 
     private fun photoRules(i: Int, op: String, data: JsonObject) {

@@ -189,6 +189,82 @@ class UploadM5Test {
         assertEquals("2026-11-01:daily,2026-11-17:paused,2026-11-18:daily", versions(h))
     }
 
+    /** A task due 14 nov, completed late on 15 nov (fixtures, not through the API). */
+    private fun completedLateTask(): UUID {
+        val t = UUID.randomUUID()
+        TestDb.admin("""
+            insert into public.tasks (id, user_id, title, due_date, completed_at, completed_on, verified)
+            values ('$t', '$a', 'fix bike brake', '2026-11-14', '2026-11-15T10:00:00Z', '2026-11-15', true);
+        """.trimIndent())
+        return t
+    }
+
+    @Test
+    fun dueDateChangeOnCompletedTaskIsRefused() = app(monMorning) {
+        // Review finding 1: re-dating a done late task would turn "done late" into "done on time".
+        val t = completedLateTask()
+        assertRejected(upload(a, op("PATCH", "tasks", t, buildJsonObject { put("due_date", "2026-11-16") })).bodyAsText(), "FORBIDDEN", 0)
+        assertRejected(upload(a, op("PATCH", "tasks", t, buildJsonObject { put("due_date", JsonNull) })).bodyAsText(), "FORBIDDEN", 0)
+        assertEquals("2026-11-14", TestDb.scalar("select due_date from public.tasks where id = '$t'"))
+        // Other edits on a done task are fine (the title is not judged).
+        assertEquals(HttpStatusCode.OK, upload(a, op("PATCH", "tasks", t, buildJsonObject { put("title", "fixed the bike brake") })).status)
+    }
+
+    @Test
+    fun completedTaskDeleteIsRefused() = app(monMorning) {
+        // Review finding 2: its completion is a past active day; deleting it would re-judge that day.
+        val t = completedLateTask()
+        assertRejected(upload(a, op("DELETE", "tasks", t)).bodyAsText(), "FORBIDDEN", 0)
+        assertEquals("1", TestDb.scalar("select count(*) from public.tasks where id = '$t'"))
+        val open = UUID.randomUUID()
+        upload(a, op("PUT", "tasks", open, buildJsonObject { put("title", "read compose docs") }))
+        assertEquals(HttpStatusCode.OK, upload(a, op("DELETE", "tasks", open)).status)
+        assertEquals("0", TestDb.scalar("select count(*) from public.tasks where id = '$open'"))
+    }
+
+    @Test
+    fun existingInstancePutIsSkipped() = app(monMorning) {
+        // Review finding 3: a second device creating the same occurrence must not reset the first one's edits.
+        val tpl = UUID.randomUUID(); val inst = UUID.randomUUID()
+        val instance = buildJsonObject {
+            put("title", "pay rent"); put("template_id", tpl.toString()); put("occurrence_date", "2026-11-16"); put("due_date", "2026-11-16")
+        }
+        upload(a,
+            op("PUT", "tasks", tpl, buildJsonObject { put("title", "pay rent"); putJsonObject("repeat_rule") { put("type", "daily") } }),
+            op("PUT", "tasks", inst, instance))
+        upload(a, op("PATCH", "tasks", inst, buildJsonObject { put("title", "pay rent (landlord)"); put("due_date", "2026-11-20") }))
+        val again = upload(a, op("PUT", "tasks", inst, instance))
+        assertEquals(HttpStatusCode.OK, again.status, again.bodyAsText())
+        assertEquals("pay rent (landlord)|2026-11-20", TestDb.scalar("select title || '|' || due_date from public.tasks where id = '$inst'"))
+    }
+
+    @Test
+    fun existingSubtaskPutIsSkipped() = app(monMorning) {
+        val t = UUID.randomUUID(); val s = UUID.randomUUID()
+        upload(a, op("PUT", "tasks", t, buildJsonObject { put("title", "pay rent") }))
+        val item = buildJsonObject { put("task_id", t.toString()); put("title", "check the amount"); put("done", 0) }
+        upload(a, op("PUT", "subtasks", s, item))
+        upload(a, op("PATCH", "subtasks", s, buildJsonObject { put("done", 1) }))
+        assertEquals(HttpStatusCode.OK, upload(a, op("PUT", "subtasks", s, item)).status)
+        assertEquals("t", TestDb.scalar("select done from public.subtasks where id = '$s'"))
+    }
+
+    @Test
+    fun firstVersionProvenByEvidenceKeepsItsDay() = app(monMorning) {
+        // Review finding 8: a habit created offline on sat 14 nov and synced on monday starts on 14 nov,
+        // so its ticks of 14–15 nov count.
+        val h = UUID.randomUUID()
+        val r = upload(a,
+            op("PUT", "habits", h, habit("stretch")),
+            op("PUT", "habit_schedules", UUID.randomUUID(), schedule(h, "2026-11-14", "daily", saturdayNight())))
+        assertEquals(HttpStatusCode.OK, r.status, r.bodyAsText())
+        assertEquals("2026-11-14:daily", versions(h))
+        // Without verified evidence it still starts today.
+        val g = UUID.randomUUID()
+        upload(a, op("PUT", "habits", g, habit("walk")), op("PUT", "habit_schedules", UUID.randomUUID(), schedule(g, "2026-11-14", "daily")))
+        assertEquals("2026-11-16:daily", versions(g))
+    }
+
     @Test
     fun lateSinceIsKeptAndServerOwned() = app(monMorning) {
         val t = UUID.randomUUID()
