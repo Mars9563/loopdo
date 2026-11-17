@@ -39,7 +39,7 @@ val TABLES: Map<String, TableSpec> = listOf(
     TableSpec("journal_entries", ALL, mapOf("loopdo_date" to Col.DATE, "text" to Col.TEXT, "mood" to Col.INT)),
     TableSpec("journal_photos", setOf("PUT", "DELETE"), mapOf(
         "entry_id" to Col.UUID, "r2_key" to Col.TEXT, "width" to Col.INT, "height" to Col.INT,
-        "bytes" to Col.INT, "sort_order" to Col.INT)),
+        "bytes" to Col.INT, "sort_order" to Col.INT, "added_at" to Col.TIMESTAMPTZ)),
 ).associateBy { it.name }
 
 /** Server-decided columns, written alongside the client's. */
