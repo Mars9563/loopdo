@@ -115,7 +115,7 @@ fun SettingsScreen(vm: SettingsViewModel, host: SettingsHost, onClose: () -> Uni
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Bracket("sign out", primary = true, onClick = host.onSignOut)
                 Spacer(Modifier.weight(1f))
-                Bracket("delete account", danger = true) { sheet = "delete" }
+                Bracket("delete account", danger = true) { vm.dismiss(); sheet = "delete" } // the delete screen starts without an old message
             }
             message?.let { Text(it, style = LoopDoType.small.copy(color = if (it.startsWith("saved") || it.startsWith("the new")) LoopDoColors.accent else LoopDoColors.warn), modifier = Modifier.padding(vertical = 8.dp)) }
             Spacer(Modifier.height(32.dp))

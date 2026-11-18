@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.OutputStream
@@ -66,9 +68,17 @@ class SettingsViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    init {
+        // Ask again whenever the admin flag arrives (it may sync after the screen opened).
+        viewModelScope.launch {
+            latestProfile.map { it?.isAdmin == true }.distinctUntilChanged().collect { if (it) refreshAdmin() }
+        }
+    }
+
     /** The admin switch needs the server (app_config isn't synced): asked when the screen opens. */
     fun refreshAdmin() = viewModelScope.launch {
         if (latestProfile.value?.isAdmin == true) runCatching { signups.value = account.signups() }
+            .onFailure { android.util.Log.w("loopdo_settings", "sign-up switch: ${it.javaClass.simpleName}: ${it.message}") }
     }
 
     private fun act(block: suspend () -> String?) = viewModelScope.launch {
