@@ -63,5 +63,19 @@ class DesktopGraph(val dataDir: File) {
         debug = false,
     )
 
+    val habitActions = app.loopdo.client.habits.HabitActions(sync.db, trustedClock, evidence, dateAt = { t -> dateResolver(todayData.versionsNow())(t) }, userId = userId)
+    val onboarding = app.loopdo.client.onboarding.Onboarding(
+        app.loopdo.client.onboarding.KtorSettingsApi(http, token),
+        app.loopdo.client.onboarding.PowerSyncProfileWriter(sync.db, userId),
+    )
+    private val photoApi = app.loopdo.client.journal.KtorPhotoApi(http, token)
+    val photoCache = app.loopdo.client.journal.PhotoCache(File(dataDir, "photos"), photoApi)
+    val drafts = app.loopdo.client.journal.LineDrafts(app.loopdo.desktop.store.FilePopupDrafts(File(dataDir, "drafts.json")))
+
+    fun journalViewModel() = app.loopdo.client.journal.JournalViewModel(
+        todayData.rows(), app.loopdo.client.journal.JournalData(sync.db), journalActions, { trustedClock.now().instant },
+        photoFile = { id, path -> photoCache.file(id, path) }, uploadSoon = {}, drafts = drafts,
+    )
+
     fun todayViewModel() = TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
 }

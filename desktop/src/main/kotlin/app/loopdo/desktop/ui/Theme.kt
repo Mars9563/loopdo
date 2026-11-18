@@ -36,6 +36,9 @@ val Mono: FontFamily by lazy {
     )
 }
 
+/** Symbols JetBrains Mono lacks (❄): bundled DejaVu Sans Mono (free licence, see font/DEJAVU-LICENSE.txt), so they stay text, not colour emoji. */
+val Glyphs: FontFamily by lazy { FontFamily(Font("dejavu-mono", fontBytes("dejavu_sans_mono.ttf"), FontWeight.Normal)) }
+
 /** Type scale from desktop-v1: body 13.5, small 12.5, label 11.5, path/date 22, mark 24. */
 class LoopDoType(
     val body: TextStyle = TextStyle(fontFamily = Mono, fontSize = 13.5.sp, color = Fern.ink, lineHeight = 21.sp),

@@ -296,7 +296,7 @@ private fun DemoApp() {
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             if (tab == Tab.TODAY) app.loopdo.android.today.TodayContent(
-                remember { app.loopdo.android.today.demoToday() }, null, app.loopdo.android.today.DemoUi, onSignOut = {},
+                remember { app.loopdo.client.today.demoToday() }, null, app.loopdo.client.today.DemoUi, onSignOut = {},
             ) else ComingSoon(tab)
         }
         LoopDoNavBar(selected = tab, onSelect = { tab = it })

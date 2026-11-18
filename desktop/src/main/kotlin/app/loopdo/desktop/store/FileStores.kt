@@ -35,6 +35,7 @@ class FileKeyValue(private val file: File) : KeyValueStore {
         map = next
     }
 
+    fun keys(): Set<String> = synchronized(lock) { map.keys.toSet() }
     fun getString(key: String): String? = synchronized(lock) { map[key]?.takeIf { it.isString }?.content }
     fun putString(key: String, value: String) = synchronized(lock) { write(map + (key to JsonPrimitive(value))) }
     override fun getLong(key: String): Long? = synchronized(lock) { map[key]?.longOrNull }

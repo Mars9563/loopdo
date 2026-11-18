@@ -1,4 +1,4 @@
-package app.loopdo.android.today
+package app.loopdo.client.today
 
 import app.loopdo.client.today.Snack
 import app.loopdo.client.today.TodayUi

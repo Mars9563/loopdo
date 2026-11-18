@@ -28,9 +28,10 @@ import java.io.File
 fun main(args: Array<String>) {
     if ("--self-check" in args) return selfCheck(File(args.getOrNull(args.indexOf("--self-check") + 1) ?: "self-check.png"))
     application {
+        val graph = remember { DesktopGraph(dataDir()) }
         Window(onCloseRequest = ::exitApplication, title = "loopdo_", state = rememberWindowState(width = 1200.dp, height = 740.dp)) {
             window.minimumSize = java.awt.Dimension(1000, 640)
-            LoopDoTheme { App() }
+            LoopDoTheme { Root(graph) { app.loopdo.desktop.ui.MainApp(graph) } }
         }
     }
 }
