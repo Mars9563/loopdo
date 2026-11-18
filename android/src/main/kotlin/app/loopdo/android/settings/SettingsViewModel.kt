@@ -82,12 +82,12 @@ class SettingsViewModel(
         try { block() } catch (e: java.io.IOException) { throw IllegalStateException("needs a connection. try again when you're online.") }
 
     fun setDayEnd(hour: Int) = act { online {
-        val z = state.value?.zone ?: return@online null
-        daySettings.setDaySettings(z.id, "%02d:00".format(hour)); "the new day end starts when today ends."
+        val s = withDayEnd(latestVersions.value, now(), hour)
+        daySettings.setDaySettings(s.zone.id, "%02d:00".format(hour)); "the new day end starts when today ends."
     } }
     fun setZone(zone: String) = act { online {
-        val end = state.value?.dayEnd ?: return@online null
-        daySettings.setDaySettings(zone, "%02d:%02d".format(end.hour, end.minute)); "the new time zone starts when today ends."
+        val s = withZone(latestVersions.value, now(), zone)
+        daySettings.setDaySettings(zone, "%02d:%02d".format(s.dayEnd.hour, s.dayEnd.minute)); "the new time zone starts when today ends."
     } }
     /** Cancel a waiting change: send the settings in force now again (it replaces the waiting one). */
     fun keepCurrent() = act { online {
@@ -105,7 +105,18 @@ class SettingsViewModel(
     }
     fun setSignups(open: Boolean) = act { account.setSignups(open); signups.value = open; null }
     /** [open] gives the file the owner picked in Android's "save as"; it is closed when the ZIP is written. */
-    fun exportTo(open: () -> OutputStream?) = act { (open() ?: return@act "couldn't open that file.").use { exportResultLine(export(it)) } }
+    fun exportTo(open: () -> OutputStream?, discard: () -> Unit = {}) = act {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val out = open() ?: return@withContext "couldn't open that file."
+            try {
+                out.use { exportResultLine(export(it)) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                discard(); throw e
+            } catch (e: Exception) {
+                discard(); "the export failed, nothing was saved. try again."
+            }
+        }
+    }
     fun deleteAccount() = act { account.delete(); null }
     fun keepAccount() = act { account.keep(); null }
     fun dismiss() { _message.value = null }

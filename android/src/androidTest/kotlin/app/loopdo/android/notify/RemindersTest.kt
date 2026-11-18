@@ -360,4 +360,17 @@ class RemindersTest {
         scheduler.fire(key)
         assertEquals("week 47 review: 33/40 done", poster.posted.values.single().title)
     }
+
+    @Test
+    fun kindSwitchedOffClearsWhatIsShown() = runBlocking {
+        val gym = habit("gym", "18:00")
+        scheduler.replan()
+        now = Instant.parse("2026-11-18T12:20:00Z")
+        scheduler.fire(key(gym, Ping.BEFORE))
+        assertEquals(1, poster.posted.size)
+        db.execute("INSERT OR REPLACE INTO profiles (id, settings) VALUES (?, ?)", listOf("p1", """{"reminders":{"habits":false}}"""))
+        scheduler.replan()
+        assertTrue(poster.posted.isEmpty())
+        assertFalse(alarms.set.keys.any { it.startsWith("habit:") })
+    }
 }

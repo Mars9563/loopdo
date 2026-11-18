@@ -28,8 +28,19 @@ class WipeJob(private val db: Db, private val r2: R2Lister?, private val live: B
             return WipeReport(claimed.size, 0, 0, live = false)
         }
         // Photos first: if R2 can't be reached, nothing is wiped today and it is tried again tomorrow.
-        val photos = claimed.sumOf { id -> r2?.deletePrefix("u/$id/") ?: 0 }
-        val wiped = db.asService { c -> c.prepareStatement("select public.wipe_claimed_accounts()").use { st -> st.executeQuery().use { it.next(); it.getInt(1) } } }
+        var photos = 0
+        val cleaned = claimed.filter { id ->
+            runCatching { photos += r2?.deletePrefix("u/$id/") ?: 0 }
+                .onFailure { log.warn("photo delete failed for one account; retried tomorrow (${it.javaClass.simpleName})") }
+                .isSuccess
+        }
+        if (cleaned.isEmpty()) return WipeReport(claimed.size, photos, 0, live = true)
+        val wiped = db.asService { c ->
+            c.prepareStatement("select public.wipe_claimed_accounts(?)").use { st ->
+                st.setArray(1, c.createArrayOf("uuid", cleaned.toTypedArray()))
+                st.executeQuery().use { it.next(); it.getInt(1) }
+            }
+        }
         log.info("wiped: $wiped account(s), $photos photo(s)")
         return WipeReport(claimed.size, photos, wiped, live = true)
     }
@@ -52,7 +63,9 @@ class S3R2Lister(r2: R2Config) : R2Lister {
         s3.listObjectsV2Paginator { it.bucket(bucket).prefix(prefix) }.forEach { page ->
             val keys = page.contents().map { o -> software.amazon.awssdk.services.s3.model.ObjectIdentifier.builder().key(o.key()).build() }
             if (keys.isNotEmpty()) {
-                s3.deleteObjects { it.bucket(bucket).delete { d -> d.objects(keys) } }
+                val r = s3.deleteObjects { it.bucket(bucket).delete { d -> d.objects(keys) } }
+                // DeleteObjects answers 200 with per-key errors: any of them means "not done", so the wipe waits (review I2).
+                if (r.hasErrors() && r.errors().isNotEmpty()) error("R2 refused ${r.errors().size} of ${keys.size} deletes")
                 deleted += keys.size
             }
         }

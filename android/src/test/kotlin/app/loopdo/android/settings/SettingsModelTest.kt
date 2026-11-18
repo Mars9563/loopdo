@@ -68,4 +68,22 @@ class SettingsModelTest {
         assertEquals("1h", leadLabel(Duration.ofMinutes(60)))
         assertEquals("30m", leadLabel(Duration.ofMinutes(30)))
     }
+
+    @Test fun aWaitingChangeEqualToTheCurrentIsNoChange() {
+        val same = DaySettingsVersion(waiting.effectiveAt, current.settings, null) // what [keep] leaves behind
+        assertNull(pendingLine(listOf(current, same), now))
+        assertNull(keepLabel(listOf(current, same), now))
+    }
+
+    @Test fun aChangeBuildsOnTheWaitingOne() {
+        val zoneWaiting = DaySettingsVersion(waiting.effectiveAt, DaySettings(ZoneId.of("Asia/Tokyo"), LocalTime.of(4, 0)), null)
+        assertEquals(DaySettings(ZoneId.of("Asia/Tokyo"), LocalTime.of(6, 0)), withDayEnd(listOf(current, zoneWaiting), now, 6))
+        assertEquals(DaySettings(ZoneId.of("Asia/Tokyo"), LocalTime.of(6, 0)), withZone(listOf(current, waiting), now, "Asia/Tokyo"))
+        assertEquals(DaySettings(ist, LocalTime.of(5, 0)), withDayEnd(listOf(current), now, 5))
+    }
+
+    @Test fun versionLabelIsMajorMinor() {
+        assertEquals("v0.9", versionLabel("0.9.0"))
+        assertEquals("v1.2", versionLabel("1.2.3"))
+    }
 }

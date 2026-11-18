@@ -119,7 +119,10 @@ class ReminderScheduler(
         old.filter { it.key !in keys }.forEach { alarms.cancel(it.key) }
         plan.forEach { alarms.set(it.key, elapsedFor(it.fireAt)) }
         alarms.set(REPLAN, elapsedFor(replanAt(now, input.versions)))
-        val missed = catchUp(old, store.shown(), now, day)
+        val off = offKinds(input.prefs)
+        val missed = catchUp(old, store.shown(), now, day).filter { it.kind !in off }
+        // A kind switched off in settings: what it already shows goes away too (review I4).
+        old.filter { it.kind in off }.forEach { poster.cancel(notificationId(it)) }
         // Notifications already up whose item is now done (in the app, the widget or on the other device) go away.
         old.filter { it.key in store.shown() && it.key !in missed.map { m -> m.key } }.forEach { r ->
             if (decide(r, data.state(r), day, quiet = false) == null) poster.cancel(notificationId(r))
@@ -179,6 +182,15 @@ class ReminderScheduler(
         }
         if (poster.post(notificationId(r), shown, r)) store.markShown(r.key)
     }
+}
+
+/** The kinds the owner switched off (M9 settings). */
+fun offKinds(p: app.loopdo.shared.remind.ReminderPrefs): Set<ReminderKind> = buildSet {
+    if (!p.habits) add(ReminderKind.HABIT)
+    if (!p.tasks) add(ReminderKind.TASK)
+    if (!p.journal) add(ReminderKind.JOURNAL)
+    if (!p.dayEnd) add(ReminderKind.DAY_END)
+    if (!p.weekReview) add(ReminderKind.WEEK_REVIEW)
 }
 
 /** A reminder from its key ("kind:id:date:ping"); its time is not in the key and not needed for a button. */

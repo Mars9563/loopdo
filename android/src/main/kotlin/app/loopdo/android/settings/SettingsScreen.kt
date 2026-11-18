@@ -60,7 +60,7 @@ fun SettingsScreen(vm: SettingsViewModel, host: SettingsHost, onClose: () -> Uni
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Bracket("<", idle = true, onClick = onClose)
                 Text("~/settings", style = LoopDoType.title.copy(color = LoopDoColors.accent), modifier = Modifier.weight(1f))
-                Text("v${ui.version}", style = LoopDoType.small.copy(color = LoopDoColors.dim))
+                Text(versionLabel(ui.version), style = LoopDoType.small.copy(color = LoopDoColors.dim))
             }
             Label("data")
             Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -81,6 +81,9 @@ fun SettingsScreen(vm: SettingsViewModel, host: SettingsHost, onClose: () -> Uni
                 Text(p, style = LoopDoType.small.copy(color = LoopDoColors.dim, fontSize = 11.sp), modifier = Modifier.padding(start = 18.dp))
                 ui.keep?.let { k -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { Bracket(k, primary = true) { vm.keepCurrent() } } }
             }
+            // Locked mock B: the rule, in one dim line.
+            Text("day end: whole hours 00:00–08:00. a change starts when today ends, so today is never cut short or stretched. it needs a connection once.",
+                style = LoopDoType.small.copy(color = LoopDoColors.dim, fontSize = 11.sp), modifier = Modifier.padding(top = 4.dp))
             if (sheet == "dayEnd") FlowRow(Modifier.fillMaxWidth()) {
                 (0..8).forEach { h -> Bracket("%02d:00".format(h), primary = h == ui.dayEnd.hour, idle = h != ui.dayEnd.hour) { vm.setDayEnd(h); sheet = null } }
             }

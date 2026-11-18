@@ -247,7 +247,14 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (activity.askNotificationsOnce()) todayVm.showMessage("loopdo_ reminds you of habits, tasks and the journal.")
     }
-    val exportNow = { activity.pickExportFile(java.time.LocalDate.now()) { uri -> settingsVm.exportTo { activity.contentResolver.openOutputStream(uri) } } }
+    val exportNow = {
+        activity.pickExportFile(java.time.LocalDate.now()) { uri ->
+            settingsVm.exportTo(
+                open = { activity.contentResolver.openOutputStream(uri) },
+                discard = { runCatching { android.provider.DocumentsContract.deleteDocument(activity.contentResolver, uri) } },
+            )
+        }
+    }
     val signOut = { graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }; Unit }
     // M9: an account waiting to be deleted shows only this (locked settings-v1 D), on every phone.
     val deleting by settingsVm.deleting.collectAsStateWithLifecycle()

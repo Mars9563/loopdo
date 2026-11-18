@@ -31,11 +31,11 @@ begin
   end if;
   -- M9: only the API itself may claim or wipe accounts; a signed-in user may only ask/keep for their own.
   if has_function_privilege('loopdo_user', 'public.claim_due_accounts()', 'execute')
-     or has_function_privilege('loopdo_user', 'public.wipe_claimed_accounts()', 'execute')
-     or has_function_privilege('authenticated', 'public.wipe_claimed_accounts()', 'execute') then
+     or has_function_privilege('loopdo_user', 'public.wipe_claimed_accounts(uuid[])', 'execute')
+     or has_function_privilege('authenticated', 'public.wipe_claimed_accounts(uuid[])', 'execute') then
     raise exception 'FAIL grants: a user role can claim or wipe accounts';
   end if;
-  if not has_function_privilege('loopdo_api', 'public.wipe_claimed_accounts()', 'execute') then
+  if not has_function_privilege('loopdo_api', 'public.wipe_claimed_accounts(uuid[])', 'execute') then
     raise exception 'FAIL grants: loopdo_api cannot run the wipe';
   end if;
   if has_column_privilege('loopdo_user', 'public.profiles', 'delete_requested_at', 'update')

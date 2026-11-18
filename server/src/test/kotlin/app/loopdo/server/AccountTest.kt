@@ -140,4 +140,15 @@ class AccountTest {
         call("/api/admin/signups", admin, """{"enabled":true}""")
         assertEquals("true", TestDb.scalar("select signups_enabled::text from public.app_config where id = 1"))
     }
+
+    @Test
+    fun claimedButKeptIsNeverWiped() {
+        // A keep that raced the claim: the claim is set but the request was cleared. It must survive a live run.
+        val u = throwaway()
+        TestDb.admin("update public.profiles set wipe_claimed_at = now(), delete_requested_at = null where id = '$u'")
+        val r2 = FakeR2()
+        runBlocking { job(live = true, r2).runOnce() }
+        assertTrue(exists(u))
+        assertTrue("u/$u/" !in r2.deleted)
+    }
 }

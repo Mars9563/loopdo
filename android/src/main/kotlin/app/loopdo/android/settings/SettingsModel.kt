@@ -27,6 +27,7 @@ private fun waiting(versions: List<DaySettingsVersion>, now: Instant) = versions
 fun pendingLine(versions: List<DaySettingsVersion>, now: Instant): String? {
     val next = waiting(versions, now) ?: return null
     val cur = inForceNow(versions, now)
+    if (next.settings == cur) return null // what [keep] leaves behind: nothing will change (review I5)
     val start = next.effectiveAt.atZone(cur.zone).format(DateTimeFormatter.ofPattern("EEE d MMM HH:mm", Locale.ENGLISH)).lowercase()
     val what = listOfNotNull(
         next.settings.dayEnd.takeIf { it != cur.dayEnd }?.let { "day ends $it" },
@@ -37,7 +38,21 @@ fun pendingLine(versions: List<DaySettingsVersion>, now: Instant): String? {
 
 /** The `[keep 04:00]` button while a change waits. */
 fun keepLabel(versions: List<DaySettingsVersion>, now: Instant): String? =
-    waiting(versions, now)?.let { "keep ${inForceNow(versions, now).dayEnd}" }
+    waiting(versions, now)?.takeIf { it.settings != inForceNow(versions, now) }?.let { "keep ${inForceNow(versions, now).dayEnd}" }
+
+/** The settings that will apply once today ends: the waiting change if any, else the current ones. */
+private fun upcoming(versions: List<DaySettingsVersion>, now: Instant): DaySettings = waiting(versions, now)?.settings ?: inForceNow(versions, now)
+
+/** A new day end on top of what is coming (so a waiting zone change isn't dropped). */
+fun withDayEnd(versions: List<DaySettingsVersion>, now: Instant, hour: Int): DaySettings =
+    upcoming(versions, now).copy(dayEnd = java.time.LocalTime.of(hour, 0))
+
+/** A new zone on top of what is coming (so a waiting day-end change isn't dropped). */
+fun withZone(versions: List<DaySettingsVersion>, now: Instant, zone: String): DaySettings =
+    upcoming(versions, now).copy(zone = java.time.ZoneId.of(zone))
+
+/** "v0.9" from "0.9.0" (locked mock A). */
+fun versionLabel(versionName: String): String = "v" + versionName.split('.').take(2).joinToString(".")
 
 /** profiles.settings with the reminders part replaced; every other key is kept as it was. */
 fun withPrefs(settingsJson: String?, p: ReminderPrefs): String {
