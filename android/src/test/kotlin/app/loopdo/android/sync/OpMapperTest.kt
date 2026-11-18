@@ -49,4 +49,20 @@ class OpMapperTest {
         ))
         assertEquals(setOf("title"), OpMapper.toJson(op).getValue("data").jsonObject.keys)
     }
+
+    @Test
+    fun previousValuesAndTheRetryKeyAreSent() {
+        // M6.5: the server applies count differences (new - old) and needs a key that is the same on every retry.
+        val op = PendingOp("PATCH", "habit_logs", "l-1", mapOf("count" to 4L), old = mapOf("count" to 3L), key = "k-1")
+        val json = OpMapper.toJson(op)
+        assertEquals(JsonPrimitive(3L), json.getValue("old").jsonObject["count"])
+        assertEquals("k-1", json.getValue("key").jsonPrimitive.content)
+    }
+
+    @Test
+    fun noOldOrKeyWhenThereAreNone() {
+        val json = OpMapper.toJson(PendingOp("PATCH", "tasks", "t-1", mapOf("title" to "x")))
+        assertEquals(false, "old" in json)
+        assertEquals(false, "key" in json)
+    }
 }

@@ -127,6 +127,19 @@ class ActionsTest {
     }
 
     @Test
+    fun countChangesCarryTheOldCountAndARetryKey() = runBlocking {
+        // M6.5: the server adds the difference (new - old), once per key, so two devices' taps add up.
+        val h = habit("count", 8)
+        actions.tickHabit(h)
+        actions.tickHabit(h)
+        val logOps = ops().filter { it.table == "habit_logs" }
+        assertEquals("3 -> 4 style: the PATCH knows the count before it", "1", logOps[1].previousValues!!["count"]?.toString())
+        val keys = logOps.map { it.metadata }
+        assertTrue("every change has a key", keys.all { !it.isNullOrBlank() })
+        assertEquals("keys are unique", 2, keys.distinct().size)
+    }
+
+    @Test
     fun reopenUndatedTaskHasNoEvidence() = runBlocking {
         val t = actions.addTask("fix bike brake", due = null, time = null, listId = null)
         actions.completeTask(t)

@@ -22,7 +22,9 @@ import java.util.UUID
 /** A PowerSync CrudTransaction seen as one PendingTransaction. */
 class PowerSyncTransaction(private val tx: CrudTransaction) : PendingTransaction {
     override val id: Int = tx.transactionId ?: tx.crud.first().clientId
-    override val ops: List<PendingOp> = tx.crud.map { PendingOp(it.op.toJson(), it.table, it.id, it.opData?.toMap()) }
+    override val ops: List<PendingOp> = tx.crud.map {
+        PendingOp(it.op.toJson(), it.table, it.id, it.opData?.toMap(), it.previousValues?.toMap(), it.metadata)
+    }
     override suspend fun complete() = tx.complete(null)
 }
 

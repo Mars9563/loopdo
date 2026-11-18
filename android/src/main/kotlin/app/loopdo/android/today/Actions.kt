@@ -146,13 +146,13 @@ class Actions(
             val completedAt = if (new > 0) m.now.instant.toString() else null
             if (old == null) {
                 tx.execute(
-                    "INSERT INTO habit_logs (id, user_id, habit_id, loopdo_date, count, completed_at, evidence, verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    listOf(id, userId()?.toString(), habitId.toString(), m.today.toString(), new, completedAt, m.evidence, m.verified),
+                    "INSERT INTO habit_logs (id, user_id, habit_id, loopdo_date, count, completed_at, evidence, verified, _metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    listOf(id, userId()?.toString(), habitId.toString(), m.today.toString(), new, completedAt, m.evidence, m.verified, UUID.randomUUID().toString()),
                 )
             } else {
                 tx.execute(
-                    "UPDATE habit_logs SET count = ?, completed_at = ?, evidence = ?, verified = ? WHERE id = ?",
-                    listOf(new, completedAt, m.evidence, m.verified, id),
+                    "UPDATE habit_logs SET count = ?, completed_at = ?, evidence = ?, verified = ?, _metadata = ? WHERE id = ?",
+                    listOf(new, completedAt, m.evidence, m.verified, UUID.randomUUID().toString(), id),
                 )
             }
             (old ?: 0) to new

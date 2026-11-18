@@ -17,7 +17,13 @@ import java.time.Duration
 import java.time.Instant
 
 /** One queued local change (a PowerSync CrudEntry, decoupled from the SDK for testing). */
-data class PendingOp(val op: String, val table: String, val id: String, val data: Map<String, Any?>?)
+data class PendingOp(
+    val op: String, val table: String, val id: String, val data: Map<String, Any?>?,
+    /** The row's previous values (tables that track them, M6.5): count differences, stale deletes. */
+    val old: Map<String, Any?>? = null,
+    /** Unique per change, the same on every retry (the write's _metadata): a count difference is applied once. */
+    val key: String? = null,
+)
 
 /** One local transaction = one user action; uploaded and acknowledged as a unit. */
 interface PendingTransaction {
@@ -91,6 +97,10 @@ object OpMapper {
         op.data?.let { data ->
             put("data", JsonObject(data.filterKeys { it !in serverOwned }.mapValues { (col, v) -> value(op.table, col, v) }))
         }
+        op.old?.let { old ->
+            put("old", JsonObject(old.filterKeys { it !in serverOwned }.mapValues { (col, v) -> value(op.table, col, v) }))
+        }
+        op.key?.let { put("key", it) }
     }
 
     private fun value(table: String, col: String, v: Any?): JsonElement = when (v) {

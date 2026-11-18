@@ -3,6 +3,7 @@ package app.loopdo.android.sync
 import com.powersync.db.schema.Column
 import com.powersync.db.schema.Schema
 import com.powersync.db.schema.Table
+import com.powersync.db.schema.TrackPreviousValuesOptions
 
 /**
  * The phone's copy of the 10 synced tables (supabase/migrations/0001) plus two
@@ -18,7 +19,13 @@ object LoopDoSchema {
         Table("day_settings_versions", t("user_id", "effective_at", "time_zone", "day_end", "floor_date") + stamps),
         Table("habits", t("user_id", "title", "kind", "reminder_time", "archived_on", "unit", "deleted_at") + i("target", "sort_order", "step") + stamps),
         Table("habit_schedules", t("user_id", "habit_id", "valid_from", "recurrence", "weekdays", "evidence") + i("target") + stamps),
-        Table("habit_logs", t("user_id", "habit_id", "loopdo_date", "completed_at", "evidence") + i("count", "verified") + stamps),
+        // M6.5: the old count goes up with each change (the server adds differences) and _metadata carries the retry key.
+        Table(
+            name = "habit_logs",
+            columns = t("user_id", "habit_id", "loopdo_date", "completed_at", "evidence") + i("count", "verified") + stamps,
+            trackMetadata = true,
+            trackPreviousValues = TrackPreviousValuesOptions(columnFilter = listOf("count")),
+        ),
         Table("lists", t("user_id", "name") + i("sort_order") + stamps),
         Table(
             "tasks",
