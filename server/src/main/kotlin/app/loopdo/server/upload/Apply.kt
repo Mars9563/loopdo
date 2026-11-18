@@ -123,6 +123,8 @@ class Applier(
         val sent = data.text("count")?.toIntOrNull() ?: return data
         val key = crud.key ?: return data // no retry protection: absolute, as before M6.5
         if (key.length > 100) throw Rejected("BAD_OP", i)
+        // Two devices uploading at the same moment take turns on this log (review: a read-then-write lost taps).
+        lockRow(id)
         // A retry of a change already applied (the reply was lost): what is stored already includes it.
         val fresh = c.prepareStatement(
             "insert into public.applied_ops (user_id, op_key) values (?::uuid, ?) on conflict do nothing",
@@ -354,6 +356,7 @@ class Applier(
      * edited line).
      */
     private fun lineRules(i: Int, op: String, id: UUID, data: JsonObject, old: JsonObject?): Prepared {
+        lockRow(id) // two devices' edits of one line are compared one after the other
         val storedEdit = queryOne("select edited_at from public.journal_lines where id = ?::uuid", id.toString()) {
             it.getObject(1, java.time.OffsetDateTime::class.java).toInstant()
         }
@@ -404,6 +407,13 @@ class Applier(
     }
 
     // --- SQL ---------------------------------------------------------------
+
+    /** Until this transaction ends, other uploads of the same row wait here (also before the row exists). */
+    private fun lockRow(id: UUID) {
+        c.prepareStatement("select pg_advisory_xact_lock(hashtextextended(?, 0))").use { st ->
+            st.setString(1, id.toString()); st.executeQuery().close()
+        }
+    }
 
     private fun put(spec: TableSpec, id: UUID, data: JsonObject, extra: Map<String, String?>) {
         val cols = data.keys.map { it to spec.columns.getValue(it) } + extra.keys.map { it to SERVER_COLUMNS.getValue(it) }

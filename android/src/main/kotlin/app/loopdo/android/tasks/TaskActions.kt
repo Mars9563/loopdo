@@ -81,11 +81,12 @@ class TaskActions(
             check(!row.isTemplate) { "edit the whole series with \"this and future\"." }
             // A done task keeps its date: re-dating a late one would make it on time (the server refuses it too).
             check(!row.done || (d.due == row.due && d.time == row.time)) { "it's done, so its date stays. reopen it first." }
+            // A re-date carries its proof in the same change (review of M6.5: a second PATCH came too late to count).
+            val proof = if (!row.done && d.due != row.due) moveProof(today) else null
             tx.execute(
-                "UPDATE tasks SET title = ?, notes = ?, due_date = ?, due_time = ?, list_id = ? WHERE id = ?",
-                listOf(d.title, d.notes, d.due?.toString(), d.time?.toString(), d.listId?.toString(), id.toString()),
+                "UPDATE tasks SET title = ?, notes = ?, due_date = ?, due_time = ?, list_id = ?, evidence = coalesce(?, evidence) WHERE id = ?",
+                listOf(d.title, d.notes, d.due?.toString(), d.time?.toString(), d.listId?.toString(), proof, id.toString()),
             )
-            if (!row.done && d.due != row.due) moveProof(today)?.let { tx.execute("UPDATE tasks SET evidence = ? WHERE id = ?", listOf(it, id.toString())) }
             if (d.repeat != null && !isInstance) {
                 val due = requireNotNull(d.due) { "pick a date for the first one." }
                 val t = tx.insertTask(d.copy(due = due.plusDays(1)), d.repeat)

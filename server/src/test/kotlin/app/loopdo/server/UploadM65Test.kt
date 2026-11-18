@@ -14,6 +14,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.serialization.json.putJsonObject
 import app.loopdo.shared.time.signAnchor
 import java.time.Instant
@@ -305,5 +307,42 @@ class UploadM65Test {
         val h = habit("yes_no", 1)
         ok(a, op("PATCH", "habits", h, buildJsonObject { put("archived_on", "2026-11-16") }))
         assertEquals("2026-11-17", TestDb.scalar("select archived_on from public.habits where id = '$h'"))
+    }
+
+    // --- final review (M6.5) -------------------------------------------------------------------------------
+
+    // Important 1: two devices uploading at the same moment both count (no lost tap between read and write).
+    @Test
+    fun simultaneousTapsFromManyDevicesAllCount() = app {
+        val h = habit("count", 100); val log = UUID.randomUUID()
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 3)))
+        kotlinx.coroutines.coroutineScope {
+            (1..12).map {
+                async { upload(a, op("PATCH", "habit_logs", log, countPatch(4), old = buildJsonObject { put("count", 3) })) }
+            }.awaitAll().forEach { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
+        }
+        assertEquals("15", count(log))
+    }
+
+    @Test
+    fun simultaneousFirstTapsBothCount() = app {
+        repeat(5) {
+            val h = habit("count", 100) // one log per habit and day: a fresh habit each round
+            val log = UUID.randomUUID()
+            kotlinx.coroutines.coroutineScope {
+                listOf(async { upload(a, op("PUT", "habit_logs", log, logPut(h, 1))) }, async { upload(a, op("PUT", "habit_logs", log, logPut(h, 1))) })
+                    .awaitAll().forEach { assertEquals(HttpStatusCode.OK, it.status, it.bodyAsText()) }
+            }
+            assertEquals("2", count(log))
+        }
+    }
+
+    // Important 3: a field the server doesn't know yet (a newer app) is ignored, never a refusal that discards the change.
+    @Test
+    fun anUnknownFieldFromANewerAppIsIgnored() = app {
+        val e = day(); val l = UUID.randomUUID()
+        val withExtra = JsonObject(op("PUT", "journal_lines", l, line(e, "from a newer app", "2026-11-16T04:30:00Z")) + ("future_field" to kotlinx.serialization.json.JsonPrimitive(1)))
+        ok(a, withExtra)
+        assertEquals("from a newer app", text(l))
     }
 }

@@ -229,5 +229,12 @@ class TaskActionsTest {
         withProof.moveTask(t, nov(20), null)
         val move = ops().last { it.table == "tasks" }
         assertTrue("the move PATCH has the evidence", move.opData!!["evidence"].toString().contains("2026-11-14"))
+        // Review of M6.5: a re-date in the editor carries its proof in the SAME change as the new date.
+        val before = ops().size
+        withProof.saveTask(t, draft("call home", due = nov(21)))
+        val edit = ops().drop(before).filter { it.table == "tasks" }
+        assertEquals(1, edit.size)
+        assertEquals("2026-11-21", edit.single().opData!!["due_date"])
+        assertTrue("the editor's PATCH has the evidence", edit.single().opData!!["evidence"].toString().contains("2026-11-14"))
     }
 }

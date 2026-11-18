@@ -70,7 +70,13 @@ object UploadClassifier {
         422 -> runCatching {
             val o = Json.parseToJsonElement(body!!).jsonObject
             val code = o.getValue("code").jsonPrimitive.content
-            if (code == "SETTINGS_REQUIRED") UploadOutcome.RetryLater else UploadOutcome.Rejected(code, o.getValue("opIndex").jsonPrimitive.int)
+            val opIndex = o.getValue("opIndex").jsonPrimitive.int
+            when {
+                code == "SETTINGS_REQUIRED" -> UploadOutcome.RetryLater
+                // The server couldn't read the request at all: likely older than the app. Retried, set aside after a day.
+                opIndex < 0 -> UploadOutcome.ServerBug
+                else -> UploadOutcome.Rejected(code, opIndex)
+            }
         }.getOrDefault(UploadOutcome.ServerBug)
         401, 408, 429, 502, 503, 504 -> UploadOutcome.RetryLater
         else -> if (status >= 500) UploadOutcome.ServerBug else UploadOutcome.RetryLater

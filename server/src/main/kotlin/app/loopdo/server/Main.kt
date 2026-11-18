@@ -48,7 +48,9 @@ private fun serverTimeHeader(clock: () -> Instant) = createRouteScopedPlugin("Se
 }
 
 fun Application.loopdoModule(deps: Deps) {
-    install(ContentNegotiation) { json() }
+    // A field a newer app sends that this server doesn't know yet is ignored, not refused: a refusal makes the phone
+    // discard the whole change (review of M6.5). Table columns are still checked one by one (Applier).
+    install(ContentNegotiation) { json(kotlinx.serialization.json.Json { ignoreUnknownKeys = true }) }
     install(StatusPages) {
         exception<DbUnavailable> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ApiError("UNAVAILABLE")) }
     }
