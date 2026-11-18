@@ -146,13 +146,13 @@ private fun HabitDetailView(d: HabitDetail, grid: List<Pair<LocalDate, CellState
 }
 
 @Composable
-fun Bar(label: String, pct: Int?, negative: Boolean = false) {
+fun Bar(label: String, pct: Int?, negative: Boolean = false, value: String? = null) {
     val t = LocalType.current
     Row(Modifier.fillMaxWidth().height(32.dp), verticalAlignment = Alignment.CenterVertically) {
         BasicText(label, style = t.body, modifier = Modifier.width(150.dp))
         Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(Fern.ink.copy(alpha = .08f))) {
             if (pct != null) Box(Modifier.fillMaxWidth(pct.coerceIn(0, 100) / 100f).height(8.dp).clip(RoundedCornerShape(4.dp)).background(if (negative) Fern.ember.copy(alpha = .8f) else Fern.leaf))
         }
-        BasicText(pct?.let { "$it%" } ?: "–", style = t.body.copy(color = Fern.hi), modifier = Modifier.width(54.dp).padding(start = 12.dp))
+        BasicText(value ?: pct?.let { "$it%" } ?: "–", style = t.body.copy(color = Fern.hi), modifier = Modifier.width(54.dp).padding(start = 12.dp))
     }
 }
