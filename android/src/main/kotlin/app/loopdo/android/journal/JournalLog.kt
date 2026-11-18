@@ -3,15 +3,19 @@ package app.loopdo.android.journal
 import java.time.LocalTime
 import java.util.Locale
 
-// The journal as a time log (M6, owner's idea; locked journal-log-v2). A day's entry stays one text
-// (journal_entries.text) with one saved line per text line, each stamped "[HH:mm] ". Lines written before
-// the stamps existed have no time. Photos are rows with their own time (journal_photos.added_at).
+// The journal as a time log (M6, owner's idea; locked journal-log-v2). M6.5: each saved line is its own row
+// (journal_lines) with its time, so two devices never overwrite each other's lines. Text saved before M6.5
+// (journal_entries.text, one "[HH:mm] " line per text line) is moved into rows once; until then it shows as is.
+// Photos are rows with their own time (journal_photos.added_at).
 
 data class LogLine(val time: LocalTime?, val text: String)
 
+/** A saved line of a day: [id] = its journal_lines row ("text:<n>" for old text not moved yet). */
+data class DayLine(val id: String, val time: LocalTime?, val text: String)
+
 sealed interface LogItem {
-    /** [raw] = the line exactly as stored (stamp included): what an edit or delete matches. */
-    data class Line(val index: Int, val line: LogLine, val raw: String = "") : LogItem
+    /** [raw] = the line as shown with its stamp (dialogs); [id] = what an edit or delete names. */
+    data class Line(val index: Int, val line: LogLine, val raw: String = "", val id: String = "") : LogItem
     data class Photo(val id: String, val time: LocalTime?) : LogItem
 }
 
@@ -32,12 +36,17 @@ private fun parse(raw: String): LogLine = STAMP.matchEntire(raw)?.let { m ->
 
 private fun storedLines(text: String): List<String> = text.split('\n').map { it.trimEnd() }.filter { it.isNotBlank() }
 
-/** The day's lines in save order; a line without a stamp (written before M6) has no time. */
+/** Old day text's lines in save order; a line without a stamp (written before M6) has no time. */
 fun parseLines(text: String): List<LogLine> = storedLines(text).map(::parse)
 
-/** What the writer stores: each non-blank line of [input], trimmed, stamped with [at]. */
-fun stampLines(input: String, at: LocalTime): List<String> =
-    input.split('\n').map { it.trim() }.filter { it.isNotEmpty() }.map { "${stampOf(at)} $it" }
+/** Old day text as lines (not moved into rows yet). */
+fun linesOfText(text: String): List<DayLine> = parseLines(text).mapIndexed { i, l -> DayLine("text:$i", l.time, l.text) }
+
+/** What the writer saves: each non-blank line of [input], trimmed; each becomes one row. */
+fun splitInput(input: String): List<String> = input.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+
+/** How a line is shown: `[09:05] text`, or just the text when it has no time. */
+fun shown(time: LocalTime?, text: String): String = if (time == null) text else "${stampOf(time)} $text"
 
 /**
  * The day as blocks: untimed (old) lines first, then the timed lines in save order with each photo after the
@@ -45,10 +54,13 @@ fun stampLines(input: String, at: LocalTime): List<String> =
  * [dayStart] (the LoopDo day end), so 00:10 falls between 23:50 and 01:30. Items [GAP_MINUTES] or more apart
  * start a new block.
  */
-fun dayLog(text: String, photos: List<Pair<String, LocalTime?>>, dayStart: LocalTime = LocalTime.of(4, 0)): List<LogBlock> {
+fun dayLog(text: String, photos: List<Pair<String, LocalTime?>>, dayStart: LocalTime = LocalTime.of(4, 0)): List<LogBlock> =
+    dayLog(linesOfText(text), photos, dayStart)
+
+/** The day as blocks, from its saved lines (in save order) and photos; see the text form above. */
+fun dayLog(dayLines: List<DayLine>, photos: List<Pair<String, LocalTime?>>, dayStart: LocalTime = LocalTime.of(4, 0)): List<LogBlock> {
     fun key(t: LocalTime) = Math.floorMod(t.toSecondOfDay() / 60 - dayStart.toSecondOfDay() / 60, 24 * 60)
-    val raws = storedLines(text)
-    val lines = raws.mapIndexed { i, raw -> LogItem.Line(i, parse(raw), raw) }
+    val lines = dayLines.mapIndexed { i, l -> LogItem.Line(i, LogLine(l.time, l.text), shown(l.time, l.text), l.id) }
     val untimed = lines.filter { it.line.time == null }
     val timed = lines.filter { it.line.time != null }
     val timedPhotos = photos.filter { it.second != null }.map { LogItem.Photo(it.first, it.second) }.sortedBy { key(it.time!!) }
@@ -84,21 +96,4 @@ fun dayLog(text: String, photos: List<Pair<String, LocalTime?>>, dayStart: Local
         else blocks[blocks.lastIndex] = LogBlock(blocks.last().items + untimedPhotos)
     }
     return blocks
-}
-
-/** [text] with the first line equal to [old] (as stored) given [new] text; its stamp stays. Null if [old] is gone. */
-fun replaceLine(text: String, old: String, new: String): String? {
-    val all = text.split('\n')
-    val i = all.indexOfFirst { it.trimEnd() == old }
-    if (i < 0) return null
-    val stamp = STAMP.matchEntire(old)?.let { m -> "[${m.groupValues[1]}:${m.groupValues[2]}] " }.orEmpty()
-    return all.toMutableList().also { it[i] = stamp + new.trim() }.joinToString("\n")
-}
-
-/** [text] without the first line equal to [old]. Null if [old] is gone. */
-fun removeLine(text: String, old: String): String? {
-    val all = text.split('\n')
-    val i = all.indexOfFirst { it.trimEnd() == old }
-    if (i < 0) return null
-    return all.toMutableList().also { it.removeAt(i) }.joinToString("\n")
 }

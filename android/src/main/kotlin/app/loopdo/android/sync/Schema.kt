@@ -34,6 +34,12 @@ object LoopDoSchema {
         ),
         Table("subtasks", t("user_id", "task_id", "title") + i("done", "sort_order") + stamps),
         Table("journal_entries", t("user_id", "loopdo_date", "text") + i("mood") + stamps),
+        // M6.5: each journal line is a row; the old edited_at goes up with a change (a stale delete is skipped).
+        Table(
+            name = "journal_lines",
+            columns = t("user_id", "entry_id", "stamped_at", "text", "edited_at", "deleted_at") + i("sort_order") + stamps,
+            trackPreviousValues = TrackPreviousValuesOptions(columnFilter = listOf("edited_at")),
+        ),
         Table("journal_photos", t("user_id", "entry_id", "r2_key", "added_at") + i("width", "height", "bytes", "sort_order") + stamps),
         // Local-only: never uploaded.
         Table.localOnly("drafts", t("kind", "payload", "reason", "created_at")),

@@ -121,8 +121,8 @@ fun JournalTab(vm: JournalViewModel) {
                 }
             }
             if (model != null) {
-                val edit = { date: LocalDate -> { l: LogItem.Line -> editing = "$date|${l.raw}"; editText = l.line.text; editError = null } }
-                val delete = { date: LocalDate -> { l: LogItem.Line -> deletingLine = "$date|${l.raw}" } }
+                val edit = { date: LocalDate -> { l: LogItem.Line -> editing = "$date|${l.id}|${l.raw}"; editText = l.line.text; editError = null } }
+                val delete = { date: LocalDate -> { l: LogItem.Line -> deletingLine = "$date|${l.id}|${l.raw}" } }
                 when (view) {
                     "feed" -> {
                         items(model.onThisDay, key = { "otd-${it.date}" }) { d ->
@@ -216,7 +216,7 @@ fun JournalTab(vm: JournalViewModel) {
         dismissButton = { Bracket("cancel", idle = true) { choosingPhoto = false } },
     )
     editing?.let { key ->
-        val (date, raw) = key.split("|", limit = 2).let { LocalDate.parse(it[0]) to it[1] }
+        val (date, lineId, raw) = key.split("|", limit = 3).let { Triple(LocalDate.parse(it[0]), it[1], it[2]) }
         AlertDialog(
             onDismissRequest = { editing = null },
             containerColor = Color(0xF51E283A),
@@ -230,18 +230,18 @@ fun JournalTab(vm: JournalViewModel) {
                     editError?.let { Text(it, style = LoopDoType.small.copy(color = LoopDoColors.warn)) }
                 }
             },
-            confirmButton = { Bracket("save", primary = true) { vm.editLine(date, raw, editText, onSaved = { editing = null }, onError = { editError = it }) } },
+            confirmButton = { Bracket("save", primary = true) { vm.editLine(date, lineId, editText, onSaved = { editing = null }, onError = { editError = it }) } },
             dismissButton = { Bracket("cancel", idle = true) { editing = null } },
         )
     }
     deletingLine?.let { key ->
-        val (date, raw) = key.split("|", limit = 2).let { LocalDate.parse(it[0]) to it[1] }
+        val (date, lineId, raw) = key.split("|", limit = 3).let { Triple(LocalDate.parse(it[0]), it[1], it[2]) }
         AlertDialog(
             onDismissRequest = { deletingLine = null },
             containerColor = Color(0xF51E283A),
             title = { Text("delete this line?", style = LoopDoType.title) },
             text = { Text(raw, style = LoopDoType.body.copy(color = LoopDoColors.dim)) },
-            confirmButton = { Bracket("delete", danger = true) { deletingLine = null; vm.deleteLine(date, raw) } },
+            confirmButton = { Bracket("delete", danger = true) { deletingLine = null; vm.deleteLine(date, lineId) } },
             dismissButton = { Bracket("cancel", idle = true) { deletingLine = null } },
         )
     }

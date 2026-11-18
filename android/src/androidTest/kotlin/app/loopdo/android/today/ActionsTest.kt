@@ -117,12 +117,16 @@ class ActionsTest {
 
     @Test
     fun journalLineAppendsToDeterministicEntry() = runBlocking {
-        actions.appendJournalLine("pizza was good")
-        actions.appendJournalLine("  long walk  ")
+        // M6.5: [+ add]'s journal line is a row of today's day (one day row per date, deterministic id).
+        val withJournal = Actions(
+            db, TrustedClock(clocks, anchors), EvidenceFactory(clocks, anchors), { loopDoDate(it, ist) }, { user },
+            journal = app.loopdo.android.journal.JournalActions(db, TrustedClock(clocks, anchors), { loopDoDate(it, ist) }, { ist }, { user }),
+        )
+        withJournal.appendJournalLine("pizza was good")
+        withJournal.appendJournalLine("  long walk  ")
         val id = uuidV5(user, "journal:2026-11-14").toString()
-        val (text, date) = db.get("SELECT text, loopdo_date FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0) to it.getString(1) }
-        assertEquals("pizza was good\nlong walk", text)
-        assertEquals("2026-11-14", date)
+        assertEquals("2026-11-14", db.get("SELECT loopdo_date FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0)!! })
+        assertEquals(listOf("pizza was good", "long walk"), db.getAll("SELECT text FROM journal_lines WHERE entry_id = ? ORDER BY stamped_at, sort_order", listOf(id)) { it.getString(0)!! })
         assertEquals(1L, db.get("SELECT count(*) FROM journal_entries") { it.getLong(0)!! })
     }
 
@@ -169,28 +173,6 @@ class ActionsTest {
         val mondaysOnly = habit("yes_no", 1, weekdays = "[1]") // today is a saturday
         assertNull(actions.tickHabit(mondaysOnly, shownDate = today))
         assertEquals(0L, db.get("SELECT count(*) FROM habit_logs") { it.getLong(0)!! })
-    }
-
-    @Test
-    fun saveJournalWritesTheShownDate() = runBlocking {
-        now = Instant.parse("2026-11-15T04:30:00Z") // 10:00 sun IST: the pop-up was opened on sat 14
-        actions.saveJournal(LocalDate.of(2026, 11, 14), "late night", 4)
-        val id = uuidV5(user, "journal:2026-11-14").toString()
-        val (text, mood) = db.get("SELECT text, mood FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0) to it.getLong(1) }
-        assertEquals("late night", text)
-        assertEquals(4L, mood)
-        val future = runCatching { actions.saveJournal(LocalDate.of(2026, 11, 16), "x", null) }.exceptionOrNull()
-        assertTrue("a day that hasn't started is refused, got $future", future is IllegalArgumentException)
-    }
-
-    @Test
-    fun saveJournalMergesTextAddedSinceTheDraftStarted() = runBlocking {
-        val sat = LocalDate.of(2026, 11, 14)
-        actions.saveJournal(sat, "walk", null)
-        actions.appendJournalLine("called mom") // e.g. [+ add] while the journal pop-up held a draft
-        actions.saveJournal(sat, "walk and gym", 4, base = "walk")
-        val id = uuidV5(user, "journal:2026-11-14").toString()
-        assertEquals("walk\ncalled mom\nand gym", db.get("SELECT text FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0)!! })
     }
 
     @Test

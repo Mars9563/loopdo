@@ -1,7 +1,6 @@
 package app.loopdo.android.journal
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.LocalTime
 
@@ -12,7 +11,8 @@ class JournalLogTest {
 
     @Test
     fun stampFormatsHoursAndMinutes() {
-        assertEquals(listOf("[09:05] a", "[09:05] b"), stampLines("a\n\n  b  ", t(9, 5)))
+        assertEquals(listOf("a", "b"), splitInput("a\n\n  b  "))
+        assertEquals("[09:05] a", shown(t(9, 5), "a"))
         assertEquals(listOf(LogLine(t(9, 5), "a"), LogLine(null, "old line")), parseLines("[09:05] a\nold line\n\n"))
     }
 
@@ -50,12 +50,11 @@ class JournalLogTest {
     }
 
     @Test
-    fun replaceAndRemoveTouchOneLine() {
-        val text = "[13:00] ok\n[13:00] ok\n[14:00] fine"
-        assertEquals("[13:00] okay\n[13:00] ok\n[14:00] fine", replaceLine(text, "[13:00] ok", "okay"))
-        assertEquals("[13:00] ok\n[14:00] fine", removeLine(text, "[13:00] ok"))
-        assertEquals("written before\n[14:00] fine", replaceLine("old\n[14:00] fine", "old", "written before"))
-        assertNull(replaceLine(text, "[09:00] gone", "x"))
-        assertNull(removeLine(text, "[09:00] gone"))
+    fun rowsCarryTheirIdsAndShowTheirStamp() {
+        // M6.5: a line is a row; an edit or delete names its id, never its text (two equal lines stay apart).
+        val blocks = dayLog(listOf(DayLine("a", t(13, 0), "ok"), DayLine("b", t(13, 0), "ok")), emptyList())
+        val items = blocks.flatMap { it.items }.filterIsInstance<LogItem.Line>()
+        assertEquals(listOf("a", "b"), items.map { it.id })
+        assertEquals("[13:00] ok", items.first().raw)
     }
 }

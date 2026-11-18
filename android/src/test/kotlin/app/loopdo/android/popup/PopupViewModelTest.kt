@@ -36,7 +36,6 @@ private class FakeActions : TodayActions {
     override suspend fun reopenTask(taskId: UUID) = false
     override suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID { maybeFail(); return UUID.randomUUID() }
     override suspend fun appendJournalLine(text: String) = maybeFail()
-    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String?) { maybeFail(); journalSaves += Triple(date, text, mood) }
     val lineSaves = mutableListOf<Triple<LocalDate, String, java.time.Instant?>>()
     override suspend fun addJournalLines(date: LocalDate, text: String, at: java.time.Instant?) { maybeFail(); lineSaves += Triple(date, text, at) }
 }
@@ -80,31 +79,6 @@ class PopupViewModelTest {
         assertEquals(1, redraws)
         assertEquals(1, saved)
         assertEquals(null, vm.error.value)
-    }
-
-    @Test
-    fun failedJournalSaveKeepsText() = runTest {
-        val vm = vm()
-        val sat = LocalDate.of(2026, 11, 14)
-        vm.keepDraft(PopupViewModel.journalKey(sat), "a long day")
-        actions.fail = "today's entry is full (20000 characters)."
-        var saved = 0
-        vm.saveJournal(sat, "a long day", 4) { saved++ }
-        assertEquals("today's entry is full (20000 characters).", vm.error.value)
-        assertEquals("a long day", drafts.load("journal:2026-11-14"))
-        assertEquals(0, saved)
-    }
-
-    @Test
-    fun journalSavesToTheDateItOpenedOn() = runTest {
-        // Opened on sat 14, saved after midnight: the activity passes the date it captured at open.
-        val opened = LocalDate.of(2026, 11, 14)
-        val vm = vm()
-        vm.keepDraft(PopupViewModel.journalKey(opened), "late night")
-        vm.saveJournal(opened, "late night", 4) {}
-        assertEquals(listOf(Triple<LocalDate, String, Int?>(opened, "late night", 4)), actions.journalSaves)
-        assertEquals("", drafts.load("journal:2026-11-14"))
-        assertEquals(1, redraws)
     }
 
     // M6: the pop-up writes one new line; its draft is that line plus when it was last edited.

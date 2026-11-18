@@ -34,12 +34,6 @@ class PopupViewModel(
 
     fun appendJournal(text: String, onSaved: () -> Unit) = save(ADD, onSaved) { actions.appendJournalLine(text) }
 
-    fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String? = null, onSaved: () -> Unit) =
-        save(journalKey(date), onSaved) {
-            actions.saveJournal(date, text, mood, base)
-            drafts.save(baseKey(date), "")
-        }
-
     /** [date]'s unsaved journal text and the entry text it started from, or null. */
     fun journalDraft(date: LocalDate): Pair<String, String>? =
         drafts.load(journalKey(date)).takeIf { it.isNotEmpty() }?.let { it to drafts.load(baseKey(date)) }

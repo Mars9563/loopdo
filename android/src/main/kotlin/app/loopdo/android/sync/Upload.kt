@@ -118,6 +118,7 @@ object OpMapper {
     /** Fields the user typed by hand, per table: what a refusal must not throw away. */
     val typedText: Map<String, List<String>> = mapOf(
         "journal_entries" to listOf("text"),
+        "journal_lines" to listOf("text"),
         "tasks" to listOf("title", "notes"),
         "subtasks" to listOf("title"),
         "lists" to listOf("name"),

@@ -47,12 +47,6 @@ interface TodayActions {
     suspend fun addRepeatingTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?, repeat: app.loopdo.shared.task.RepeatRule): UUID =
         throw IllegalStateException("repeating tasks can't be added here.")
     suspend fun appendJournalLine(text: String)
-    /**
-     * Stores [text] and [mood] as [date]'s entry (past entries stay editable; future days can't be
-     * written). [base] = the entry text the edit started from: if the entry changed since, the edit is
-     * merged on top (mergeJournal), never overwriting newer text.
-     */
-    suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String? = null)
     /** M6: new stamped lines on [date] (today; or an earlier day's unsaved draft, stamped [at]). */
     suspend fun addJournalLines(date: LocalDate, text: String, at: java.time.Instant?): Unit = throw IllegalStateException("the journal isn't ready here.")
     /** M6: [date]'s mood (one per day). */
@@ -224,54 +218,15 @@ class Actions(
         return make(app.loopdo.android.tasks.TaskDraft(title, null, due, time, listId, repeat))
     }
 
-    /** Adds a line to today's journal entry (one entry per day, deterministic id). */
+    /** Adds a line to today's journal (M6.5: a row of its own, stamped when it is saved). */
     override suspend fun appendJournalLine(text: String) {
-        val line = text.trim()
-        require(line.isNotEmpty()) { "type something first." }
-        // M6: a journal line carries the time it was saved.
-        journal?.let { return it.addLines(dateAt(clock.now().instant), line) }
-        val user = userId() ?: throw IllegalStateException("not signed in")
-        val today = dateAt(clock.now().instant)
-        val id = uuidV5(user, "journal:$today").toString()
-        db.writeTransaction { tx ->
-            val old = tx.getOptional("SELECT text FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0) ?: "" }
-            val new = if (old.isNullOrBlank()) line else old.trimEnd() + "\n" + line
-            require(new.length <= MAX_JOURNAL) { "today's entry is full ($MAX_JOURNAL characters)." }
-            if (old == null) {
-                tx.execute(
-                    "INSERT INTO journal_entries (id, user_id, loopdo_date, text) VALUES (?, ?, ?, ?)",
-                    listOf(id, user.toString(), today.toString(), new),
-                )
-            } else {
-                tx.execute("UPDATE journal_entries SET text = ? WHERE id = ?", listOf(new, id))
-            }
-        }
-    }
-
-    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String?) {
-        val user = userId() ?: throw IllegalStateException("not signed in")
-        val today = dateAt(clock.now().instant)
-        require(date <= today) { "that day hasn't started yet." }
-        require(mood == null || mood in app.loopdo.shared.Limits.MOOD_RANGE) { "pick one of the five moods." }
-        val id = uuidV5(user, "journal:$date").toString()
-        db.writeTransaction { tx ->
-            val current = tx.getOptional("SELECT text FROM journal_entries WHERE id = ?", listOf(id)) { it.getString(0).orEmpty() }
-            val merged = if (base != null && current != null && current != base) app.loopdo.android.popup.mergeJournal(current, base, text) else text
-            require(merged.length <= MAX_JOURNAL) { "today's entry is full ($MAX_JOURNAL characters)." }
-            if (current != null) {
-                tx.execute("UPDATE journal_entries SET text = ?, mood = ? WHERE id = ?", listOf(merged, mood, id))
-            } else {
-                tx.execute(
-                    "INSERT INTO journal_entries (id, user_id, loopdo_date, text, mood) VALUES (?, ?, ?, ?, ?)",
-                    listOf(id, user.toString(), date.toString(), merged, mood),
-                )
-            }
-        }
+        require(text.isNotBlank()) { "type something first." }
+        val j = journal ?: throw IllegalStateException("the journal isn't ready here.")
+        j.addLines(dateAt(clock.now().instant), text.trim())
     }
 
     private companion object {
         const val COUNT = "count"
         const val MAX_TITLE = 300 // tasks.title check (migration 0001)
-        const val MAX_JOURNAL = 20_000 // journal_entries.text check
     }
 }

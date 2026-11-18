@@ -31,7 +31,6 @@ private class FakeActions : TodayActions {
     override suspend fun completeHabit(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? = 0 to 1
     override suspend fun decrementHabit(habitId: UUID, shownDate: LocalDate?) = 1 to 0
     override suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate?) = 0 to 1
-    override suspend fun saveJournal(date: LocalDate, text: String, mood: Int?, base: String?) = maybeFail()
     override suspend fun completeTask(taskId: UUID) = true
     override suspend fun reopenTask(taskId: UUID) = true
     override suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID { maybeFail(); return UUID.randomUUID() }

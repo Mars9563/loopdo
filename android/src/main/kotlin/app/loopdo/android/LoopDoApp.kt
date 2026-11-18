@@ -130,6 +130,17 @@ class AppGraph(context: android.content.Context) {
         // Sign-in/out: show (or hide) the data even when no widget session is open.
         scope.launch { auth.session.drop(1).collect { runCatching { redrawWidget() } } }
         scope.launch { sync.blocked.drop(1).collect { runCatching { redrawWidget() } } }
+        // M6.5: a day's text saved before lines were rows (also arriving by sync) becomes rows, once. Watches the
+        // settings too, since the move needs the day settings (they may arrive after the entries on a new phone).
+        scope.launch {
+            sync.db.watch(
+                "SELECT (SELECT count(*) FROM journal_entries WHERE trim(coalesce(text, '')) <> ''), (SELECT count(*) FROM day_settings_versions)",
+            ) { (it.getLong(0) ?: 0L) to (it.getLong(1) ?: 0L) }.collect { rows ->
+                val (old, versions) = rows.firstOrNull() ?: return@collect
+                if (old > 0 && versions > 0) runCatching { journalActions.moveOldText() }
+                    .onFailure { android.util.Log.w("loopdo_journal", "moving old journal text failed", it) }
+            }
+        }
         // Background sync every ~15 min while online (owner, 2026-11-16).
         runCatching { app.loopdo.android.sync.SyncWorker.schedule(appContext) }
         // Photos taken earlier (offline, or before a restart) go up as soon as there is a network.

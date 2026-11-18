@@ -33,8 +33,9 @@ import java.util.UUID
 /** What the journal screens ask of the database (JournalActions; a fake in tests). */
 interface JournalCommands {
     suspend fun addLines(date: LocalDate, input: String, at: Instant? = null)
-    suspend fun editLine(date: LocalDate, old: String, newText: String)
-    suspend fun deleteLine(date: LocalDate, old: String)
+    /** [lineId] = the line's row; its time stays. */
+    suspend fun editLine(date: LocalDate, lineId: String, newText: String)
+    suspend fun deleteLine(date: LocalDate, lineId: String)
     suspend fun setMood(date: LocalDate, mood: Int?)
     suspend fun addPhoto(date: LocalDate, photo: PreparedPhoto): UUID
     suspend fun deletePhoto(id: UUID)
@@ -45,6 +46,11 @@ class JournalData(private val db: PowerSyncDatabase) {
     fun entries(): Flow<List<EntryRow>> =
         db.watch("SELECT id, loopdo_date, coalesce(text, ''), mood FROM journal_entries") {
             EntryRow(it.getString(0)!!, LocalDate.parse(it.getString(1)!!.take(10)), it.getString(2) ?: "", it.getLong(3)?.toInt())
+        }
+
+    fun lines(): Flow<List<LineRow>> =
+        db.watch("SELECT id, entry_id, stamped_at, coalesce(text, ''), coalesce(sort_order, 0) FROM journal_lines WHERE deleted_at IS NULL") {
+            LineRow(it.getString(0)!!, it.getString(1)!!, it.getString(2)?.let(::parseInstant), it.getString(3) ?: "", it.getLong(4)?.toInt() ?: 0)
         }
 
     fun photos(): Flow<List<PhotoRow>> = db.watch(
@@ -70,10 +76,10 @@ class JournalViewModel(
     /** The time log, rebuilt on every change and at the day end (the ticker). */
     val state: StateFlow<JournalModel?> = rows.flatMapLatest { r ->
         if (r.versions.isEmpty()) return@flatMapLatest flowOf(null)
-        combine(ticker(now) { dayEndAt(r.versions, now()) }, data.entries(), data.photos()) { t, entries, photos ->
+        combine(ticker(now) { dayEndAt(r.versions, now()) }, data.entries(), data.lines(), data.photos()) { t, entries, lines, photos ->
             val (today, _) = r.toModel(t) ?: return@combine null
             val s = settingsAt(r.versions, t)
-            buildJournal(entries, photos, today.date, s.zone, s.dayEnd, today.streaks.journal).copy(now = t.atZone(s.zone).toLocalTime())
+            buildJournal(entries, photos, today.date, s.zone, s.dayEnd, today.streaks.journal, lines).copy(now = t.atZone(s.zone).toLocalTime())
         }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -101,8 +107,8 @@ class JournalViewModel(
     }
 
     fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) = run(onError, { drafts?.clear(date); onSaved() }) { actions.addLines(date, input) }
-    fun editLine(date: LocalDate, old: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit) = run(onError, onSaved) { actions.editLine(date, old, new) }
-    fun deleteLine(date: LocalDate, old: String) = run { actions.deleteLine(date, old) }
+    fun editLine(date: LocalDate, lineId: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit) = run(onError, onSaved) { actions.editLine(date, lineId, new) }
+    fun deleteLine(date: LocalDate, lineId: String) = run { actions.deleteLine(date, lineId) }
     fun setMood(date: LocalDate, mood: Int?) = run { actions.setMood(date, mood) }
     fun deletePhoto(id: String) = run { actions.deletePhoto(UUID.fromString(id)) }
 

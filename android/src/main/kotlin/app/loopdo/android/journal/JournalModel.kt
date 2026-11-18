@@ -9,6 +9,9 @@ import java.time.ZoneId
 
 data class EntryRow(val id: String, val date: LocalDate, val text: String, val mood: Int?)
 
+/** A live journal line (journal_lines, not deleted). [stampedAt] null = no time (old text). */
+data class LineRow(val id: String, val entryId: String, val stampedAt: Instant?, val text: String, val sortOrder: Int)
+
 /** A photo row; [localPath] = this phone's own file (it took the photo), else null (download it). */
 data class PhotoRow(val id: String, val entryId: String, val addedAt: Instant?, val localPath: String?)
 
@@ -32,20 +35,30 @@ data class JournalModel(
     val now: LocalTime = LocalTime.MIDNIGHT,
 )
 
-fun buildJournal(entries: List<EntryRow>, photos: List<PhotoRow>, today: LocalDate, zone: ZoneId, dayStart: LocalTime, streak: Int): JournalModel {
+fun buildJournal(
+    entries: List<EntryRow>, photos: List<PhotoRow>, today: LocalDate, zone: ZoneId, dayStart: LocalTime, streak: Int,
+    lines: List<LineRow> = emptyList(),
+): JournalModel {
     val photosBy = photos.groupBy { it.entryId }
+    // Save order: untimed first, then by time (two devices' lines interleave by when they were written).
+    val linesBy = lines.sortedWith(compareBy<LineRow>({ it.stampedAt != null }, { it.stampedAt }, { it.sortOrder }, { it.id })).groupBy { it.entryId }
+    fun dayLines(e: EntryRow?): List<DayLine> = e?.let {
+        linesOfText(it.text) + linesBy[it.id].orEmpty().map { l -> DayLine(l.id, l.stampedAt?.atZone(zone)?.toLocalTime(), l.text) }
+    }.orEmpty()
     fun view(date: LocalDate, e: EntryRow?): DayView {
         val mine = e?.let { photosBy[it.id] }.orEmpty()
         return DayView(
             date = date, mood = e?.mood,
-            blocks = dayLog(e?.text.orEmpty(), mine.map { it.id to it.addedAt?.atZone(zone)?.toLocalTime() }, dayStart),
+            blocks = dayLog(dayLines(e), mine.map { it.id to it.addedAt?.atZone(zone)?.toLocalTime() }, dayStart),
             localPaths = mine.associate { it.id to it.localPath },
             label = date.short(), moodFace = e?.mood?.let { MOODS.getOrNull(it - 1) }.orEmpty(),
             dayTag = if (date == today) "today" else "", entryExists = e != null,
         )
     }
     // A journal day has any text or at least one photo (the streak rule); an emptied entry isn't shown.
-    val days = entries.filter { it.date <= today && (it.text.isNotBlank() || photosBy[it.id].orEmpty().isNotEmpty()) }
+    val days = entries.filter {
+        it.date <= today && (it.text.isNotBlank() || linesBy[it.id].orEmpty().isNotEmpty() || photosBy[it.id].orEmpty().isNotEmpty())
+    }
         .sortedByDescending { it.date }
     return JournalModel(
         today = view(today, entries.firstOrNull { it.date == today }),

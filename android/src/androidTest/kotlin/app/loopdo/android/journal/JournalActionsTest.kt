@@ -28,7 +28,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 
-/** Runs on the phone: the journal as a time log (M6). LoopDo today = sat 14 nov; the clock reads 00:42 IST. */
+/** Runs on the phone: the journal as a time log (M6; M6.5: a line is a row). LoopDo today = sat 14 nov; the clock reads 00:42 IST. */
 @RunWith(AndroidJUnit4::class)
 class JournalActionsTest {
     private lateinit var db: PowerSyncDatabase
@@ -61,7 +61,17 @@ class JournalActionsTest {
     @After
     fun close() = runBlocking { db.close() }
 
-    private suspend fun text(): String = db.get("SELECT text FROM journal_entries WHERE id = ?", listOf(entryId)) { it.getString(0)!! }
+    private suspend fun text(): String = text(entryId)
+
+    /** The day's live lines as shown ("[00:42] text"), in save order. */
+    private suspend fun text(entry: String): String = db.getAll(
+        "SELECT stamped_at, text FROM journal_lines WHERE entry_id = ? AND deleted_at IS NULL ORDER BY stamped_at, sort_order", listOf(entry),
+    ) { shown(it.getString(0)?.let { t -> Instant.parse(t).atZone(ist.zone).toLocalTime() }, it.getString(1)!!) }.joinToString("\n")
+
+    /** The id of the first live line reading [text] (its text, without the stamp). */
+    private suspend fun lineId(text: String, entry: String = entryId): String = db.get(
+        "SELECT id FROM journal_lines WHERE entry_id = ? AND text = ? AND deleted_at IS NULL ORDER BY sort_order LIMIT 1", listOf(entry, text),
+    ) { it.getString(0)!! }
     private suspend fun ops(): List<CrudEntry> = db.getCrudBatch(1000)?.crud.orEmpty()
     private fun photo() = PreparedPhoto(
         UUID.randomUUID(),
@@ -84,17 +94,19 @@ class JournalActionsTest {
         // The screen shows "[00:42] had this for lunch"; meanwhile the widget adds a line.
         now = now.plusSeconds(60)
         journal.addLines(today, "from the widget")
-        journal.editLine(today, "[00:42] had this for lunch", "had dal for lunch")
+        val lunch = lineId("had this for lunch")
+        journal.editLine(today, lunch, "had dal for lunch")
         assertEquals("[00:42] had dal for lunch\n[00:43] from the widget", text())
-        assertEquals("that line changed. try again.", runCatching { journal.editLine(today, "[00:42] had this for lunch", "x") }.exceptionOrNull()?.message)
+        journal.deleteLine(today, lunch)
+        assertEquals("that line changed. try again.", runCatching { journal.editLine(today, lunch, "x") }.exceptionOrNull()?.message)
     }
 
     @Test
     fun duplicateLinesChangeOneAtATime() = runBlocking {
         journal.addLines(today, "ok\nok")
-        journal.deleteLine(today, "[00:42] ok")
+        journal.deleteLine(today, lineId("ok"))
         assertEquals("[00:42] ok", text())
-        journal.editLine(today, "[00:42] ok", "okay")
+        journal.editLine(today, lineId("ok"), "okay")
         assertEquals("[00:42] okay", text())
     }
 
@@ -105,7 +117,7 @@ class JournalActionsTest {
         val lastEdit = Instant.parse("2026-11-13T17:00:00Z") // 22:30 IST fri 13 nov
         journal.addLines(today.minusDays(1), "draft from last night", at = lastEdit)
         val yesterday = uuidV5(user, "journal:2026-11-13").toString()
-        assertEquals("[22:30] draft from last night", db.get("SELECT text FROM journal_entries WHERE id = ?", listOf(yesterday)) { it.getString(0)!! })
+        assertEquals("[22:30] draft from last night", text(yesterday))
     }
 
     @Test
@@ -132,7 +144,7 @@ class JournalActionsTest {
         val before = ops().size
         journal.addPhoto(today, p)
         val added = ops().drop(before)
-        assertEquals(listOf("journal_entries", "journal_photos"), added.map { it.table }) // the entry first (foreign key)
+        assertEquals(listOf("journal_entries", "journal_photos"), added.map { it.table }) // the day first (foreign key)
         assertEquals(1, added.map { it.transactionId }.distinct().size)
         val row = db.get("SELECT r2_key, added_at, width, entry_id FROM journal_photos WHERE id = ?", listOf(p.id.toString())) {
             listOf(it.getString(0), it.getString(1), it.getLong(2).toString(), it.getString(3))
@@ -155,10 +167,7 @@ class JournalActionsTest {
         journal.addLines(today.minusDays(1), "fixed the next morning", at = now) // edited today
         journal.addLines(today.minusDays(1), "from before the stamps", at = Instant.EPOCH) // no time known
         val yesterday = uuidV5(user, "journal:2026-11-13").toString()
-        assertEquals(
-            "[03:59] fixed the next morning\n[03:59] from before the stamps",
-            db.get("SELECT text FROM journal_entries WHERE id = ?", listOf(yesterday)) { it.getString(0)!! },
-        )
+        assertEquals("[03:59] fixed the next morning\n[03:59] from before the stamps", text(yesterday))
     }
 
     // Review of M6, critical 2: a closed day that counted keeps at least one line or photo.
@@ -166,8 +175,9 @@ class JournalActionsTest {
     fun pastDayKeepsItsLastLineOrPhoto() = runBlocking {
         val yesterday = uuidV5(user, "journal:2026-11-13").toString()
         db.execute("INSERT INTO journal_entries (id, user_id, loopdo_date, text) VALUES (?, ?, '2026-11-13', ?)", listOf(yesterday, user.toString(), "[19:05] long day\n[23:30] 2 applications sent"))
-        journal.deleteLine(today.minusDays(1), "[19:05] long day")
-        assertEquals("a past day keeps at least one line or photo. edit it instead.", runCatching { journal.deleteLine(today.minusDays(1), "[23:30] 2 applications sent") }.exceptionOrNull()?.message)
+        journal.moveOldText()
+        journal.deleteLine(today.minusDays(1), lineId("long day", yesterday))
+        assertEquals("a past day keeps at least one line or photo. edit it instead.", runCatching { journal.deleteLine(today.minusDays(1), lineId("2 applications sent", yesterday)) }.exceptionOrNull()?.message)
         // A photo-only past day keeps its photo; today can be emptied.
         val p = photo()
         journal.addPhoto(today, p)
@@ -178,5 +188,37 @@ class JournalActionsTest {
         db.execute("INSERT INTO journal_photos (id, user_id, entry_id, r2_key, sort_order) VALUES (?, ?, ?, ?, 0)", listOf(q.toString(), user.toString(), older, "u/$user/$older/$q.webp"))
         assertEquals("a past day keeps at least one line or photo. edit it instead.", runCatching { journal.deletePhoto(q) }.exceptionOrNull()?.message)
         assertEquals(1L, db.get("SELECT count(*) FROM journal_photos WHERE id = ?", listOf(q.toString())) { it.getLong(0)!! })
+    }
+
+    // M6.5: two devices. A line is a row, a delete keeps it (marked), an edit carries the edit it replaced.
+    @Test
+    fun editAndDeleteCarryTheEditTheyReplaced() = runBlocking {
+        journal.addLines(today, "first")
+        val id = lineId("first")
+        now = now.plusSeconds(60)
+        journal.editLine(today, id, "second")
+        journal.deleteLine(today, lineId("second"))
+        val lineOps = ops().filter { it.table == "journal_lines" }
+        assertEquals(listOf("PUT", "PATCH", "PATCH"), lineOps.map { it.op.toJson() })
+        assertEquals("2026-11-14T19:12:00Z", lineOps[1].previousValues!!["edited_at"]) // the edit the laptop could have changed
+        assertEquals("2026-11-14T19:13:00Z", lineOps[2].previousValues!!["edited_at"])
+        assertEquals(1L, db.get("SELECT count(*) FROM journal_lines WHERE id = ? AND deleted_at IS NOT NULL", listOf(id)) { it.getLong(0)!! })
+    }
+
+    @Test
+    fun oldTextMovesIntoLinesOnce() = runBlocking {
+        db.execute(
+            "INSERT INTO journal_entries (id, user_id, loopdo_date, text, mood) VALUES (?, ?, '2026-11-14', ?, 4)",
+            listOf(entryId, user.toString(), "written before times\n[23:50] late night\n[00:20] still up"),
+        )
+        journal.moveOldText()
+        journal.moveOldText() // nothing left to move
+        assertEquals("written before times\n[23:50] late night\n[00:20] still up", text())
+        assertEquals("", db.get("SELECT text FROM journal_entries WHERE id = ?", listOf(entryId)) { it.getString(0)!! })
+        assertEquals(4L, db.get("SELECT mood FROM journal_entries WHERE id = ?", listOf(entryId)) { it.getLong(0)!! })
+        // 00:20 is after midnight, still sat 14 nov's LoopDo day (day end 04:00): sun 15 nov 00:20 IST.
+        assertEquals("2026-11-14T18:50:00Z", db.get("SELECT stamped_at FROM journal_lines WHERE text = 'still up'") { it.getString(0)!! })
+        // The ids come from the day and the line's place: a second device makes the same rows.
+        assertEquals(uuidV5(UUID.fromString(entryId), "line:0").toString(), lineId("written before times"))
     }
 }

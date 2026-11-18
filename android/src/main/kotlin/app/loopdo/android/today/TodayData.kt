@@ -68,7 +68,8 @@ class TodayData(private val db: PowerSyncDatabase) {
     suspend fun versionsNow(): List<DaySettingsVersion> = db.getAll(versionsSql) { version(it) }
 
     private val journalDaysSql =
-        "SELECT loopdo_date FROM journal_entries WHERE trim(text) <> '' OR id IN (SELECT entry_id FROM journal_photos)"
+        "SELECT loopdo_date FROM journal_entries WHERE trim(text) <> '' OR id IN (SELECT entry_id FROM journal_photos)" +
+            " OR id IN (SELECT entry_id FROM journal_lines WHERE deleted_at IS NULL AND trim(text) <> '')"
 
     fun rows(): Flow<TodayRows> {
         val flows: List<Flow<List<Any>>> = listOf(
