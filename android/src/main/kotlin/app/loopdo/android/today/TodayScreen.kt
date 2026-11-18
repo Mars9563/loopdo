@@ -1,5 +1,9 @@
 package app.loopdo.android.today
 
+import app.loopdo.client.today.Snack
+import app.loopdo.client.today.TodayUi
+import app.loopdo.client.today.TodayViewModel
+
 import app.loopdo.client.today.countdown
 import app.loopdo.client.today.short
 
@@ -93,7 +97,7 @@ class TodayExtras(
 
 /** Locked screen 1 (docs/design/app/app-screens-v2.html), plus the task editor, quick menu and lists (M5). [openTask] = a deep link. */
 @Composable
-fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onLinkHandled: () -> Unit = {}, onOpenHabit: (String) -> Unit = {}, lockOn: Boolean? = null, onToggleLock: () -> Unit = {}, notificationsOff: Boolean = false, onAllowNotifications: () -> Unit = {}, onOpenSettings: (() -> Unit)? = null, waitingMark: String? = null, onSignOut: () -> Unit) {
+fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.client.tasks.TasksViewModel, openTask: OpenTask?, onLinkHandled: () -> Unit = {}, onOpenHabit: (String) -> Unit = {}, lockOn: Boolean? = null, onToggleLock: () -> Unit = {}, notificationsOff: Boolean = false, onAllowNotifications: () -> Unit = {}, onOpenSettings: (() -> Unit)? = null, waitingMark: String? = null, onSignOut: () -> Unit) {
     val model by vm.state.collectAsStateWithLifecycle()
     val snack by vm.snack.collectAsStateWithLifecycle()
     val templates by tasks.templates.collectAsStateWithLifecycle()

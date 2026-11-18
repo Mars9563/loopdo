@@ -1,5 +1,7 @@
 package app.loopdo.android.popup
 
+import app.loopdo.client.popup.PopupViewModel
+
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity

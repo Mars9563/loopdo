@@ -1,4 +1,4 @@
-package app.loopdo.android.habits
+package app.loopdo.client.habits
 
 import app.loopdo.client.habits.HabitCommands
 import app.loopdo.client.habits.HabitDraft
@@ -6,7 +6,7 @@ import app.loopdo.client.habits.HabitsList
 import app.loopdo.client.habits.buildHabitsList
 import app.loopdo.client.habits.short
 
-import android.util.Log
+import app.loopdo.client.log.logW
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.loopdo.client.today.HabitRow
@@ -80,7 +80,7 @@ class HabitsViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w("loopdo_habits", "habit action failed", e)
+                logW("loopdo_habits", "habit action failed", e)
                 onError(GENERIC)
             }
         }

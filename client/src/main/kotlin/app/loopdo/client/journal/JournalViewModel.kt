@@ -1,4 +1,4 @@
-package app.loopdo.android.journal
+package app.loopdo.client.journal
 
 import app.loopdo.client.journal.EntryRow
 import app.loopdo.client.journal.JournalCommands
@@ -9,7 +9,7 @@ import app.loopdo.client.journal.PhotoRow
 import app.loopdo.client.journal.PreparedPhoto
 import app.loopdo.client.journal.buildJournal
 
-import android.util.Log
+import app.loopdo.client.log.logW
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.loopdo.client.today.TodayRows
@@ -101,7 +101,7 @@ class JournalViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w("loopdo_journal", "journal action failed", e)
+                logW("loopdo_journal", "journal action failed", e)
                 onError(GENERIC)
             }
         }

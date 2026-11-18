@@ -1,5 +1,7 @@
 package app.loopdo.android.habits
 
+import app.loopdo.client.habits.HabitsViewModel
+
 import app.loopdo.client.habits.short
 
 import app.loopdo.client.habits.HabitLine

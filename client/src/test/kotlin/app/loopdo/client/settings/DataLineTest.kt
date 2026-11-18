@@ -1,4 +1,5 @@
-package app.loopdo.android.settings
+package app.loopdo.client.settings
+
 
 import java.time.Instant
 import java.time.ZoneId

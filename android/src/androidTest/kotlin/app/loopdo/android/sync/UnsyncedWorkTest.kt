@@ -1,5 +1,8 @@
 package app.loopdo.android.sync
 
+import app.loopdo.client.sync.hasUnsyncedWork
+import app.loopdo.client.sync.PENDING_PHOTOS_SQL
+
 import app.loopdo.client.sync.LoopDoSchema
 
 import androidx.test.ext.junit.runners.AndroidJUnit4

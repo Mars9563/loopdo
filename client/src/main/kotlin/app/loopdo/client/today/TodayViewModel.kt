@@ -1,4 +1,4 @@
-package app.loopdo.android.today
+package app.loopdo.client.today
 
 import app.loopdo.client.today.toModel
 
@@ -10,7 +10,7 @@ import app.loopdo.client.today.TodayModel
 import app.loopdo.client.today.TodayRows
 import app.loopdo.client.today.ticker
 
-import android.util.Log
+import app.loopdo.client.log.logE
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.loopdo.client.sync.message
@@ -109,7 +109,7 @@ class TodayViewModel(
         } catch (e: IllegalArgumentException) {
             _snack.value = Snack(e.message ?: "that didn't work.", null)
         } catch (e: Exception) {
-            Log.e("loopdo_today", "action failed", e)
+            logE("loopdo_today", "action failed", e)
             _snack.value = Snack("couldn't save that. try again.", null)
         }
     }

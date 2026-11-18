@@ -1,5 +1,8 @@
 package app.loopdo.android.tasks
 
+import app.loopdo.client.tasks.ListInfo
+import app.loopdo.client.tasks.TasksViewModel
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable

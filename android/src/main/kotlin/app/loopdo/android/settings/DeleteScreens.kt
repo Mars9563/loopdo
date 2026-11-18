@@ -1,5 +1,7 @@
 package app.loopdo.android.settings
 
+import app.loopdo.client.settings.SettingsViewModel
+
 import app.loopdo.client.settings.Deleting
 import app.loopdo.client.settings.deleteEnabled
 

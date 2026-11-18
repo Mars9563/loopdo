@@ -1,4 +1,7 @@
-package app.loopdo.android.settings
+package app.loopdo.client.settings
+
+import app.loopdo.client.settings.Waiting
+import app.loopdo.client.settings.dataLine
 
 import app.loopdo.client.settings.AccountApi
 import app.loopdo.client.settings.Deleting
@@ -91,7 +94,7 @@ class SettingsViewModel(
     /** The admin switch needs the server (app_config isn't synced): asked when the screen opens. */
     fun refreshAdmin() = viewModelScope.launch {
         if (latestProfile.value?.isAdmin == true) runCatching { signups.value = account.signups() }
-            .onFailure { android.util.Log.w("loopdo_settings", "sign-up switch: ${it.javaClass.simpleName}: ${it.message}") }
+            .onFailure { app.loopdo.client.log.logW("loopdo_settings", "sign-up switch: ${it.javaClass.simpleName}: ${it.message}") }
     }
 
     private fun act(block: suspend () -> String?) = viewModelScope.launch {

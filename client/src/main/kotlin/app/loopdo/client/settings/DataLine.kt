@@ -1,7 +1,7 @@
-package app.loopdo.android.settings
+package app.loopdo.client.settings
 
-import android.content.Context
-import app.loopdo.android.sync.PENDING_PHOTOS_SQL
+import app.loopdo.client.store.KeyValueStore
+import app.loopdo.client.sync.PENDING_PHOTOS_SQL
 import com.powersync.PowerSyncDatabase
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -50,8 +50,7 @@ fun todayMark(w: Waiting, now: Instant): String? =
     if (w.total > 0 && w.oldest != null && Duration.between(w.oldest, now) > Duration.ofMinutes(10)) "↑${w.total}" else null
 
 /** The live [Waiting] of this phone: PowerSync's upload queue, photos not in R2, and when the queue last emptied. */
-class DataSafety(private val db: PowerSyncDatabase, context: Context, private val now: () -> Instant) {
-    private val prefs = context.getSharedPreferences("data_safety", Context.MODE_PRIVATE)
+class DataSafety(private val db: PowerSyncDatabase, private val store: KeyValueStore, private val now: () -> Instant) {
 
     fun waiting(): Flow<Waiting> = combine(
         db.watch("SELECT (SELECT count(*) FROM ps_crud), ($PENDING_PHOTOS_SQL)") { (it.getLong(0) ?: 0L).toInt() to (it.getLong(1) ?: 0L).toInt() },
@@ -61,13 +60,14 @@ class DataSafety(private val db: PowerSyncDatabase, context: Context, private va
         val t = now()
         // "Waiting since" starts when the queue goes from empty to not; "last saved" when it empties again.
         if (changes + photos > 0) {
-            if (!prefs.contains(SINCE)) prefs.edit().putLong(SINCE, t.toEpochMilli()).apply()
-        } else if (prefs.contains(SINCE)) {
-            prefs.edit().remove(SINCE).putLong(SAVED, t.toEpochMilli()).apply()
+            if (store.getLong(SINCE) == null) store.putLong(SINCE, t.toEpochMilli())
+        } else if (store.getLong(SINCE) != null) {
+            store.putLong(SAVED, t.toEpochMilli())
+            store.remove(SINCE)
         }
         val synced = status.lastSyncedAt?.let { Instant.ofEpochMilli(it.toEpochMilliseconds()) }
-        val saved = listOfNotNull(synced, prefs.getLong(SAVED, 0L).takeIf { it > 0 }?.let(Instant::ofEpochMilli)).maxOrNull()
-        Waiting(changes, photos, prefs.getLong(SINCE, 0L).takeIf { it > 0 }?.let(Instant::ofEpochMilli), saved, status.connected)
+        val saved = listOfNotNull(synced, store.getLong(SAVED)?.takeIf { it > 0 }?.let(Instant::ofEpochMilli)).maxOrNull()
+        Waiting(changes, photos, store.getLong(SINCE)?.takeIf { it > 0 }?.let(Instant::ofEpochMilli), saved, status.connected)
     }
 
     private companion object {

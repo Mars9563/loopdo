@@ -1,5 +1,7 @@
 package app.loopdo.android.popup
 
+import app.loopdo.client.popup.PopupViewModel
+
 import app.loopdo.client.popup.journalDateToOpen
 
 import android.content.Intent

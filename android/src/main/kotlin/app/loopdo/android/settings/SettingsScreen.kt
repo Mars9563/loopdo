@@ -1,5 +1,7 @@
 package app.loopdo.android.settings
 
+import app.loopdo.client.settings.SettingsViewModel
+
 import app.loopdo.client.settings.leadLabel
 import app.loopdo.client.settings.nextLead
 import app.loopdo.client.settings.versionLabel

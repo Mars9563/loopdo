@@ -1,8 +1,6 @@
-package app.loopdo.android.today
+package app.loopdo.client.today
 
-import app.loopdo.client.today.HabitItem
-import app.loopdo.client.today.StaleDayException
-import app.loopdo.client.today.TodayActions
+
 
 import app.loopdo.client.sync.SetAside
 import app.loopdo.client.sync.SetAsideNotices

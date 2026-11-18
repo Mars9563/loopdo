@@ -1,5 +1,7 @@
 package app.loopdo.android.stats
 
+import app.loopdo.client.stats.StatsViewModel
+
 import app.loopdo.client.stats.StatsUi
 import app.loopdo.client.stats.weekRange
 

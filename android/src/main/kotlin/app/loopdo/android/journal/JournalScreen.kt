@@ -1,5 +1,7 @@
 package app.loopdo.android.journal
 
+import app.loopdo.client.journal.JournalViewModel
+
 import app.loopdo.client.journal.preview
 
 import app.loopdo.client.journal.LogItem

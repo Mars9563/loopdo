@@ -24,6 +24,8 @@ dependencies {
     api(libs.supabase.auth)
     api(libs.kotlinx.serialization.json)
     api(libs.ktor.client.core)
+    // The phone's view models (D2): androidx.lifecycle ViewModel is multiplatform (JVM artifact on the laptop).
+    api(libs.androidx.lifecycle.viewmodel)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit4)

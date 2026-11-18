@@ -1,5 +1,7 @@
 package app.loopdo.android.tasks
 
+import app.loopdo.client.tasks.TasksViewModel
+
 import app.loopdo.client.tasks.SaveScope
 import app.loopdo.client.tasks.TaskDraft
 import app.loopdo.client.tasks.nextLine

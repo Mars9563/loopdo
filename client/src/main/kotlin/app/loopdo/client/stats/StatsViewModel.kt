@@ -1,4 +1,4 @@
-package app.loopdo.android.stats
+package app.loopdo.client.stats
 
 import app.loopdo.client.stats.FocusActions
 import app.loopdo.client.stats.PickItem

@@ -1,4 +1,4 @@
-package app.loopdo.android.tasks
+package app.loopdo.client.tasks
 
 import app.loopdo.client.tasks.SaveScope
 import app.loopdo.client.tasks.TaskCommands
@@ -6,7 +6,7 @@ import app.loopdo.client.tasks.TaskDraft
 import app.loopdo.client.tasks.TemplateRow
 import app.loopdo.client.tasks.template
 
-import android.util.Log
+import app.loopdo.client.log.logW
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.loopdo.shared.task.RepeatRule
@@ -110,7 +110,7 @@ class TasksViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w("loopdo_tasks", "task action failed", e)
+                logW("loopdo_tasks", "task action failed", e)
                 onError(GENERIC)
             }
         }

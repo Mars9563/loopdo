@@ -229,7 +229,7 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     val waiting by remember { graph.dataSafety.waiting() }.collectAsStateWithLifecycle(null)
     var minute by remember { mutableStateOf(0L) }
     androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(60_000); minute++ } }
-    val waitingMark = remember(waiting, minute) { waiting?.let { app.loopdo.android.settings.todayMark(it, graph.trustedClock.now().instant) } }
+    val waitingMark = remember(waiting, minute) { waiting?.let { app.loopdo.client.settings.todayMark(it, graph.trustedClock.now().instant) } }
     var lockOn by remember { mutableStateOf(graph.appLock.enabled) }
     val toggleLock = {
         when {

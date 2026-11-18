@@ -1,4 +1,4 @@
-package app.loopdo.android.popup
+package app.loopdo.client.popup
 
 import app.loopdo.client.popup.PopupDrafts
 
