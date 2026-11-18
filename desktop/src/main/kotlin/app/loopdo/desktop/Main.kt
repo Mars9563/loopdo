@@ -25,6 +25,7 @@ import app.loopdo.desktop.ui.Fern
 import app.loopdo.client.auth.AuthState
 import app.loopdo.client.onboarding.hasDaySettings
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import java.io.File
 import androidx.compose.ui.window.Tray
 import app.loopdo.desktop.shell.Command
@@ -39,13 +40,31 @@ fun main(args: Array<String>) {
     val demo = cmd == Command.Demo
     val dir = if (demo) java.nio.file.Files.createTempDirectory("loopdo-demo").toFile() else dataDir()
     val single = SingleInstance(socketFor(dir), lockFor(dir))
-    val shown = mutableStateOf(cmd != Command.Background)
-    if (!single.tryServe { c -> if (c != Command.Background) shown.value = true }) {
+    val shown = mutableStateOf(cmd != Command.Background && cmd != Command.Quick)
+    val quick = mutableStateOf(cmd == Command.Quick)
+    if (!single.tryServe { c -> when (c) { Command.Quick -> quick.value = true; Command.Background -> Unit; else -> shown.value = true } }) {
         single.send(cmd) // the running loopdo_ shows itself (or quick add, from D3)
         return
     }
     application {
         val graph = remember { if (demo) null else DesktopGraph(dir) }
+        // Quick add: its own small window over whatever is open; the main window stays as it is (hidden or not).
+        if (quick.value && graph != null) {
+            val signedIn = graph.auth.session.collectAsState().value is AuthState.SignedIn
+            if (!signedIn) { shown.value = true; quick.value = false }
+            else {
+                val qs = androidx.compose.ui.window.rememberWindowState(
+                    width = 600.dp, height = 150.dp,
+                    position = androidx.compose.ui.window.WindowPosition.Aligned(androidx.compose.ui.Alignment.TopCenter),
+                )
+                Window(onCloseRequest = { quick.value = false }, state = qs, title = "loopdo_ quick add", undecorated = true, transparent = true,
+                    alwaysOnTop = true, resizable = false, icon = androidx.compose.ui.res.painterResource("tray.png")) {
+                    LaunchedEffect(Unit) { window.toFront(); window.requestFocus() }
+                    val vm = remember { graph.popupViewModel() }
+                    LoopDoTheme { app.loopdo.desktop.ui.QuickAdd(graph, vm) { quick.value = false } }
+                }
+            }
+        }
         val quit = {
             // The database closes first; only then is the lock released for a next launch (D2 review).
             graph?.sync?.db?.let { db -> kotlinx.coroutines.runBlocking { runCatching { db.close() } } }
@@ -57,6 +76,7 @@ fun main(args: Array<String>) {
             onAction = { shown.value = true },
             menu = {
                 Item("[open]", onClick = { shown.value = true })
+                if (graph != null) Item("[quick add]", onClick = { quick.value = true })
                 Separator()
                 Item("[quit]", onClick = quit)
             },

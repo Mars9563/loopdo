@@ -83,7 +83,15 @@ class DesktopGraph(val dataDir: File) {
     val photoLoop = app.loopdo.desktop.journal.PhotoLoop(scope, run = { photoUploader.runOnce() }, pending = { sync.db.get(app.loopdo.client.sync.PENDING_PHOTOS_SQL) { it.getLong(0) ?: 0L } })
     /** Where the laptop keeps photos it compressed itself (and downloads, by id). */
     val photoDir = File(dataDir, "photos")
-    val drafts = app.loopdo.client.journal.LineDrafts(app.loopdo.desktop.store.FilePopupDrafts(File(dataDir, "drafts.json")))
+    /** ONE store for unsaved text (the writer and quick add share it, like the phone's app and widget pop-up). */
+    val popupDrafts = app.loopdo.desktop.store.FilePopupDrafts(File(dataDir, "drafts.json"))
+    val drafts = app.loopdo.client.journal.LineDrafts(popupDrafts)
+
+    fun popupViewModel() = app.loopdo.client.popup.PopupViewModel(actions, popupDrafts) {}
+    suspend fun today(): java.time.LocalDate = dateResolver(todayData.versionsNow())(trustedClock.now().instant)
+    /** "HH:mm" now in the account's LoopDo time zone (the stamp a line saved now gets). */
+    suspend fun stampNow(): String { val now = trustedClock.now().instant
+        return now.atZone(settingsAt(todayData.versionsNow(), now).zone).toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")) }
 
     fun journalViewModel() = app.loopdo.client.journal.JournalViewModel(
         todayData.rows(), app.loopdo.client.journal.JournalData(sync.db), journalActions, { trustedClock.now().instant },
