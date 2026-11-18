@@ -130,7 +130,7 @@ internal fun ReviewScreen(r: ReviewUi, vm: StatsViewModel) {
 private fun WeekGrid(r: ReviewUi) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth()) {
-            Spacer(Modifier.width(96.dp))
+            Spacer(Modifier.width(124.dp))
             "mtwtfss".forEach { Text(it.toString(), style = LoopDoType.small.copy(color = LoopDoColors.dim, fontSize = 10.sp), modifier = Modifier.weight(1f), textAlign = TextAlign.Center) }
             Spacer(Modifier.width(44.dp))
         }
@@ -139,12 +139,12 @@ private fun WeekGrid(r: ReviewUi) {
                 Text(buildAnnotatedString {
                     if (h.id in r.focusIds) withStyle(SpanStyle(color = LoopDoColors.accent)) { append("› ") }
                     append(h.title)
-                }, style = LoopDoType.small, modifier = Modifier.width(96.dp), maxLines = 1)
+                }, style = LoopDoType.small, modifier = Modifier.width(124.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 h.cells.forEach { c ->
                     val (glyph, color) = when (c) {
                         Cell.DONE -> "█" to LoopDoColors.accent
                         Cell.MISSED -> "▢" to LoopDoColors.warn
-                        Cell.FROZEN -> "❄" to LoopDoColors.accent
+                        Cell.FROZEN -> "❄\uFE0E" to LoopDoColors.accent // text style, not the emoji
                         Cell.NOT_DUE -> "·" to LoopDoColors.separator
                         Cell.OPEN -> "○" to LoopDoColors.dim
                         Cell.FUTURE -> "" to LoopDoColors.dim
@@ -155,6 +155,6 @@ private fun WeekGrid(r: ReviewUi) {
                     modifier = Modifier.width(44.dp), textAlign = TextAlign.End)
             }
         }
-        Text("█ done · ▢ missed · ❄ freeze · · not due · ○ still open today", style = LoopDoType.small.copy(color = LoopDoColors.dim, fontSize = 10.sp))
+        Text("█ done · ▢ missed · ❄\uFE0E freeze · · not due · ○ open today", style = LoopDoType.small.copy(color = LoopDoColors.dim, fontSize = 10.sp))
     }
 }

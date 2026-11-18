@@ -204,7 +204,10 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     // A link is handed to its tab once; the tab clears it when it has opened it, so switching tabs
     // and coming back doesn't open the same task or habit again.
     var pending by remember { mutableStateOf<Link?>(null) }
-    androidx.compose.runtime.LaunchedEffect(link) { link?.let { tab = it.tab ?: tab; pending = it; activity.linkHandedOver(it) } }
+    androidx.compose.runtime.LaunchedEffect(link) { link?.let { tab = it.tab ?: tab; pending = it } }
+    // A link is dropped only once its screen has used it: the signed-in app can be built twice on a cold start
+    // (M8: a [review >] link opened Today), and after the app lock it must not open the same thing again (M7 review).
+    val handled = { pending?.let(activity::linkHandedOver); pending = null }
     val todayVm = viewModel { graph.todayViewModel() }
     val habitsVm = viewModel { graph.habitsViewModel() }
     val tasksVm = viewModel { graph.tasksViewModel() }
@@ -230,12 +233,12 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
-                Tab.TODAY -> TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = { pending = null }, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock, notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() }) {
+                Tab.TODAY -> TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = handled, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock, notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() }) {
                     graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
                 }
-                Tab.JOURNAL -> app.loopdo.android.journal.JournalTab(journalVm, openWriter = pending?.write == true) { pending = null }
-                Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, pending?.habit, pending?.nonce ?: 0L) { pending = null }
-                Tab.STATS -> app.loopdo.android.stats.StatsTab(statsVm, openReview = pending?.review == true) { pending = null }
+                Tab.JOURNAL -> app.loopdo.android.journal.JournalTab(journalVm, openWriter = pending?.write == true) { handled() }
+                Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, pending?.habit, pending?.nonce ?: 0L) { handled() }
+                Tab.STATS -> app.loopdo.android.stats.StatsTab(statsVm, openReview = pending?.review == true) { handled() }
             }
         }
         LoopDoNavBar(selected = tab, onSelect = { tab = it })

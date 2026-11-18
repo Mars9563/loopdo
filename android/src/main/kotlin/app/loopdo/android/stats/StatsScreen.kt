@@ -138,7 +138,7 @@ private fun StatsScreen(s: StatsUi, vm: StatsViewModel) {
 @Composable
 private fun Bar(label: String, fraction: Double, value: String) {
     Row(Modifier.fillMaxWidth().heightIn(min = 28.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = LoopDoType.small, modifier = Modifier.width(110.dp), maxLines = 1)
+        Text(label, style = LoopDoType.small, modifier = Modifier.width(132.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         val blocks = (fraction.coerceIn(0.0, 1.0) * 12).roundToInt()
         Text("█".repeat(blocks), style = LoopDoType.small.copy(color = LoopDoColors.accent), modifier = Modifier.weight(1f), maxLines = 1)
         Text(value, style = LoopDoType.small)
