@@ -19,6 +19,9 @@ import java.util.UUID
 class PhotoCompressTest {
     private val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "compress-test").apply { mkdirs() }
 
+    @org.junit.After
+    fun clean() { dir.deleteRecursively() }
+
     @Test
     fun compressKeepsAspectAndLimit() {
         val big = Bitmap.createBitmap(4000, 3000, Bitmap.Config.ARGB_8888)

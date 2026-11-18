@@ -61,7 +61,7 @@ class TaskActionsTest {
     }
 
     @After
-    fun close() = runBlocking { db.close() }
+    fun close() = runBlocking { db.close(); app.loopdo.android.deleteTestDatabases() }
 
     private fun draft(title: String, due: LocalDate? = null, repeat: RepeatRule? = null, listId: UUID? = null) =
         TaskDraft(title = title, notes = null, due = due, time = null, listId = listId, repeat = repeat)

@@ -73,7 +73,7 @@ class HabitActionsTest {
     }
 
     @After
-    fun close() = runBlocking { db.close() }
+    fun close() = runBlocking { db.close(); app.loopdo.android.deleteTestDatabases() }
 
     private fun vocab(target: Int = 35) = HabitDraft(
         title = "japanese vocab", kind = HabitKind.COUNT, target = target, unit = "words", step = 5,

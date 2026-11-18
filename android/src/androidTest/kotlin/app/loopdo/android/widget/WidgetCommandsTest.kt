@@ -59,7 +59,7 @@ class WidgetCommandsTest {
     }
 
     @After
-    fun close() = runBlocking { db.close() }
+    fun close() = runBlocking { db.close(); app.loopdo.android.deleteTestDatabases() }
 
     private suspend fun habit(kind: String, target: Int): UUID {
         val id = UUID.randomUUID()

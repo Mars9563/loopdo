@@ -27,7 +27,7 @@ class SchemaRoundTripTest {
     }
 
     @After
-    fun close() = runBlocking { db.close() }
+    fun close() = runBlocking { db.close(); app.loopdo.android.deleteTestDatabases() }
 
     @Test
     fun localWriteQueuesTheApiShape() = runBlocking {

@@ -59,7 +59,7 @@ class JournalActionsTest {
     }
 
     @After
-    fun close() = runBlocking { db.close() }
+    fun close() = runBlocking { db.close(); app.loopdo.android.deleteTestDatabases() }
 
     private suspend fun text(): String = text(entryId)
 

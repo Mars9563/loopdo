@@ -63,7 +63,7 @@ class ActionsTest {
     }
 
     @After
-    fun close() = runBlocking { db.close() }
+    fun close() = runBlocking { db.close(); app.loopdo.android.deleteTestDatabases() }
 
     /** A habit due every day since 1 nov (or only on [weekdays], ISO numbers, e.g. "[1]" = mondays). */
     private suspend fun habit(kind: String, target: Int, weekdays: String? = null): UUID {

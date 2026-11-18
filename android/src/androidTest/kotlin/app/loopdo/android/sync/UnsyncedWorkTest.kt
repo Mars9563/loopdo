@@ -24,6 +24,6 @@ class UnsyncedWorkTest {
             assertFalse("an uploaded photo is safe", hasUnsyncedWork(db))
             db.execute("INSERT INTO photo_files (id, path, uploaded) VALUES (?, '/y.webp', 0)", listOf(UUID.randomUUID().toString()))
             assertTrue(hasUnsyncedWork(db))
-        } finally { db.close() }
+        } finally { db.close(); app.loopdo.android.deleteTestDatabases() }
     }
 }
