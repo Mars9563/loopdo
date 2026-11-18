@@ -218,6 +218,27 @@ class AppGraph(context: android.content.Context) {
 
     fun tasksViewModel() = app.loopdo.android.tasks.TasksViewModel(app.loopdo.android.tasks.TaskData(sync.db), taskActions)
 
+    /** M8: the weekly focus (Sun/Mon only, at most 2; the server checks the same). */
+    val focusActions by lazy {
+        app.loopdo.android.stats.FocusActions(
+            sync.db,
+            userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId?.toString() },
+            today = { app.loopdo.shared.day.dateResolver(todayData.versionsNow())(trustedClock.now().instant) },
+            evidence = evidence,
+        )
+    }
+
+    /** M8: opening the review on a Sunday silences that Sunday's 20:00 ping (this phone only). */
+    val reviewOpened by lazy { appContext.getSharedPreferences("stats", android.content.Context.MODE_PRIVATE) }
+    fun reviewOpenedOn(sunday: java.time.LocalDate): Boolean = reviewOpened.getBoolean("reviewed:$sunday", false)
+
+    fun statsViewModel() = app.loopdo.android.stats.StatsViewModel(
+        app.loopdo.android.stats.StatsData(sync.db).rows(), focusActions, now = { trustedClock.now().instant },
+    ) { today ->
+        app.loopdo.android.stats.sundayToSilence(today)?.let { reviewOpened.edit().putBoolean("reviewed:$it", true).apply() }
+        scope.launch { runCatching { reminders.replan() } }
+    }
+
     fun journalViewModel() = app.loopdo.android.journal.JournalViewModel(
         todayData.rows(), app.loopdo.android.journal.JournalData(sync.db), journalActions, { trustedClock.now().instant },
         photoFile = { id, path -> photoCache.file(id, path) }, uploadSoon = { uploadPhotosSoon() },

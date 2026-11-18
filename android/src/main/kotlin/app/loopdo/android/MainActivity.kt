@@ -57,6 +57,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         const val EXTRA_TASK = "task"
         /** With EXTRA_TAB "journal": open today's writer at once (the journal reminder's [write], M7). */
         const val EXTRA_WRITE = "write"
+        /** With EXTRA_TAB "stats": open the weekly review (the Sunday ping's [review >], M8). */
+        const val EXTRA_REVIEW = "review"
         private const val LOCK_AUTHENTICATORS =
             androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
     }
@@ -177,20 +179,23 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
 /** A launch's destination; [nonce] makes the same link work again later. */
 /** [write]: open today's journal writer (the journal reminder's [write], M7). */
-data class Link(val tab: Tab?, val habit: String?, val task: String?, val write: Boolean = false, val nonce: Long = System.nanoTime())
+data class Link(val tab: Tab?, val habit: String?, val task: String?, val write: Boolean = false, val review: Boolean = false, val nonce: Long = System.nanoTime())
 
 private fun linkOf(intent: android.content.Intent?): Link? = intent?.let {
-    linkFrom(it.getStringExtra(MainActivity.EXTRA_TAB), it.getStringExtra(MainActivity.EXTRA_HABIT), it.getStringExtra(MainActivity.EXTRA_TASK), it.getBooleanExtra(MainActivity.EXTRA_WRITE, false))
+    linkFrom(
+        it.getStringExtra(MainActivity.EXTRA_TAB), it.getStringExtra(MainActivity.EXTRA_HABIT), it.getStringExtra(MainActivity.EXTRA_TASK),
+        it.getBooleanExtra(MainActivity.EXTRA_WRITE, false), it.getBooleanExtra(MainActivity.EXTRA_REVIEW, false),
+    )
 }
 
 /** Where a launch goes; [write] only means something on the journal tab. */
-internal fun linkFrom(tabName: String?, habit: String?, task: String?, write: Boolean): Link? {
+internal fun linkFrom(tabName: String?, habit: String?, task: String?, write: Boolean, review: Boolean = false): Link? {
     val tab = when {
         habit != null -> Tab.HABITS
         task != null -> Tab.TODAY
         else -> Tab.entries.firstOrNull { it.name.equals(tabName, ignoreCase = true) }
     }
-    return if (tab == null) null else Link(tab, habit, task, write = write && tab == Tab.JOURNAL)
+    return if (tab == null) null else Link(tab, habit, task, write = write && tab == Tab.JOURNAL, review = review && tab == Tab.STATS)
 }
 
 @Composable
@@ -204,6 +209,7 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     val habitsVm = viewModel { graph.habitsViewModel() }
     val tasksVm = viewModel { graph.tasksViewModel() }
     val journalVm = viewModel { graph.journalViewModel() }
+    val statsVm = viewModel { graph.statsViewModel() }
     var lockOn by remember { mutableStateOf(graph.appLock.enabled) }
     val toggleLock = {
         when {
@@ -229,7 +235,7 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
                 }
                 Tab.JOURNAL -> app.loopdo.android.journal.JournalTab(journalVm, openWriter = pending?.write == true) { pending = null }
                 Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, pending?.habit, pending?.nonce ?: 0L) { pending = null }
-                else -> ComingSoon(tab)
+                Tab.STATS -> app.loopdo.android.stats.StatsTab(statsVm, openReview = pending?.review == true) { pending = null }
             }
         }
         LoopDoNavBar(selected = tab, onSelect = { tab = it })
