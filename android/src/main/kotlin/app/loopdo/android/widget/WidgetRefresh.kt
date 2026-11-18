@@ -1,5 +1,7 @@
 package app.loopdo.android.widget
 
+import app.loopdo.client.notify.toElapsed
+
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -28,9 +30,6 @@ fun widgetAlarms(now: Instant, dayEndAt: Instant): List<Instant> =
 fun elapsedAlarms(trustedNow: Instant, elapsedNowMs: Long, dayEndAt: Instant): List<Long> =
     widgetAlarms(trustedNow, dayEndAt).map { toElapsed(trustedNow, elapsedNowMs, it) }
 
-/** [target] (a trusted instant) as a boot-clock time. */
-fun toElapsed(trustedNow: Instant, elapsedNowMs: Long, target: Instant): Long =
-    elapsedNowMs + Duration.between(trustedNow, target).toMillis()
 
 /**
  * Schedules the widget's two boot-clock alarms, each with Android's smallest inexact window (10 min), so no

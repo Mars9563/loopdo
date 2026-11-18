@@ -1,5 +1,10 @@
 package app.loopdo.android.notify
 
+import app.loopdo.client.notify.AlarmSetter
+import app.loopdo.client.notify.Poster
+import app.loopdo.client.notify.REPLAN
+import app.loopdo.client.notify.ReminderScheduler
+
 import app.loopdo.client.notify.CH_DAY_END
 import app.loopdo.client.notify.CH_DAY_END_NIGHT
 import app.loopdo.client.notify.CH_HABITS
@@ -15,9 +20,9 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.loopdo.client.sync.LoopDoSchema
-import app.loopdo.android.widget.TapKind
-import app.loopdo.android.widget.TapResult
-import app.loopdo.android.widget.WidgetTap
+import app.loopdo.client.notify.TapKind
+import app.loopdo.client.notify.TapResult
+import app.loopdo.client.notify.WidgetTap
 import app.loopdo.shared.remind.Ping
 import app.loopdo.shared.remind.Reminder
 import app.loopdo.shared.remind.ReminderKind

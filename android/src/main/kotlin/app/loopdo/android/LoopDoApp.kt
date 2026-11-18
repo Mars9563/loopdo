@@ -192,7 +192,7 @@ class AppGraph(context: android.content.Context) {
 
     /** M7: the phone's own reminders (alarms + notifications), ready on the same day the widget is. */
     val reminders by lazy {
-        app.loopdo.android.notify.ReminderScheduler(
+        app.loopdo.client.notify.ReminderScheduler(
             app.loopdo.client.notify.ReminderData(sync.db) { sunday -> weekPingState(sunday) },
             app.loopdo.android.notify.ReminderStore(appContext.getSharedPreferences("reminders", android.content.Context.MODE_PRIVATE)),
             app.loopdo.android.notify.AndroidAlarmSetter(appContext),

@@ -1,5 +1,8 @@
 package app.loopdo.android.widget
 
+import app.loopdo.client.notify.TapKind
+import app.loopdo.client.notify.WidgetTap
+
 import app.loopdo.client.today.TodayActions
 import kotlinx.coroutines.test.runTest
 import java.time.LocalDate

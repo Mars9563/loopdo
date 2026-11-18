@@ -1,5 +1,9 @@
 package app.loopdo.android.widget
 
+import app.loopdo.client.notify.TapKind
+import app.loopdo.client.notify.TapResult
+import app.loopdo.client.notify.WidgetTap
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.loopdo.client.sync.LoopDoSchema

@@ -1,5 +1,9 @@
 package app.loopdo.android.widget
 
+import app.loopdo.client.notify.TapKind
+import app.loopdo.client.notify.TapResult
+import app.loopdo.client.notify.WidgetTap
+
 import android.content.Context
 import android.util.Log
 import android.content.BroadcastReceiver
@@ -65,15 +69,8 @@ class WidgetCommands(
     }
 }
 
-enum class TapResult { DONE, STALE, FAILED }
-
-enum class TapKind(val path: String) { TICK("tick"), PLUS("plus"), UNTICK("untick"), TASK("task"), COMPLETE("complete") }
-
-/** One widget tap target: what to do to which item, as shown on [date] ([done] = the row showed it done). */
-data class WidgetTap(val kind: TapKind, val id: String, val date: LocalDate, val done: Boolean, val step: Int = 1) {
-    /** Android identifies a widget PendingIntent by its data, so each item gets its own (final review C1). */
-    fun toUri(): String = "$SCHEME://tap/${kind.path}/$id?date=$date&done=$done" + if (step != 1) "&step=$step" else ""
-}
+/** Android identifies a widget PendingIntent by its data, so each item gets its own (final review C1). */
+fun WidgetTap.toUri(): String = "$SCHEME://tap/${kind.path}/$id?date=$date&done=$done" + if (step != 1) "&step=$step" else ""
 
 private const val SCHEME = "loopdo-widget"
 

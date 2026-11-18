@@ -1,5 +1,8 @@
 package app.loopdo.android.widget
 
+import app.loopdo.client.notify.TapKind
+import app.loopdo.client.notify.WidgetTap
+
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
