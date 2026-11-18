@@ -1,0 +1,62 @@
+package app.loopdo.desktop.store
+
+import app.loopdo.client.store.KeyValueStore
+import app.loopdo.client.time.AnchorStore
+import app.loopdo.client.time.SignedAnchor
+import app.loopdo.shared.time.TimeAnchor
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.time.Instant
+
+/**
+ * A small JSON map in one file (the laptop's SharedPreferences). Writes go to `<file>.tmp` and are renamed over the
+ * file, so a power cut leaves the old or the new version, never half of one; an unreadable file reads as empty.
+ */
+class FileKeyValue(private val file: File) : KeyValueStore {
+    private val lock = Any()
+    private var map: Map<String, JsonPrimitive> = read()
+
+    private fun read(): Map<String, JsonPrimitive> = runCatching {
+        Json.parseToJsonElement(file.readText()).jsonObject.mapValues { it.value.jsonPrimitive }
+    }.getOrDefault(emptyMap())
+
+    private fun write(next: Map<String, JsonPrimitive>) {
+        file.parentFile?.mkdirs()
+        val tmp = File(file.path + ".tmp")
+        tmp.writeText(JsonObject(next).toString())
+        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        map = next
+    }
+
+    fun getString(key: String): String? = synchronized(lock) { map[key]?.takeIf { it.isString }?.content }
+    fun putString(key: String, value: String) = synchronized(lock) { write(map + (key to JsonPrimitive(value))) }
+    override fun getLong(key: String): Long? = synchronized(lock) { map[key]?.longOrNull }
+    override fun putLong(key: String, value: Long) = synchronized(lock) { write(map + (key to JsonPrimitive(value))) }
+    override fun remove(key: String) = synchronized(lock) { if (key in map) write(map - key) }
+}
+
+/** The signed server time anchor (the phone keeps it in SharedPreferences "loopdo_anchor"). */
+class FileAnchorStore(file: File) : AnchorStore {
+    private val kv = FileKeyValue(file)
+
+    override fun current(): SignedAnchor? = runCatching {
+        SignedAnchor(
+            TimeAnchor(Instant.parse(kv.getString("server_time")!!), kv.getLong("elapsed")!!, kv.getLong("boot")!!.toInt()),
+            kv.getString("sig")!!,
+        )
+    }.getOrNull()
+
+    override fun save(a: SignedAnchor) {
+        kv.putString("server_time", a.anchor.serverTime.toString())
+        kv.putLong("elapsed", a.anchor.elapsedRealtimeMs)
+        kv.putLong("boot", a.anchor.bootCount.toLong())
+        kv.putString("sig", a.sig)
+    }
+}
