@@ -36,6 +36,8 @@ dependencies {
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
         exclude(group = "software.amazon.awssdk", module = "apache-client")
     }
+    implementation(libs.awssdk.urlconnection) // M9: the wipe job lists and deletes an account's photos
+
 
     testImplementation(kotlin("test"))
     testImplementation(libs.ktor.server.test.host)

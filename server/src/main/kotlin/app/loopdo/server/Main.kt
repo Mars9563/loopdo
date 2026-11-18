@@ -1,5 +1,7 @@
 package app.loopdo.server
 
+import app.loopdo.server.routes.accountRoutes
+import kotlinx.coroutines.launch
 import app.loopdo.server.routes.photoRoutes
 import app.loopdo.server.routes.settingsRoutes
 import app.loopdo.server.routes.timeRoutes
@@ -64,6 +66,7 @@ fun Application.loopdoModule(deps: Deps) {
                 uploadRoutes(deps)
                 settingsRoutes(deps)
                 photoRoutes(deps)
+                accountRoutes(deps)
             }
         }
     }
@@ -84,5 +87,14 @@ fun main() {
         .rateLimited(10, 1, TimeUnit.MINUTES)
         .build()
     val deps = Deps(Db(dataSource), jwks, config.issuer, config.anchorSecret, PhotoUrls(config.r2), config.previousAnchorSecret)
+    // M9: the daily account wipe. Dry-run (claims and logs only) unless LOOPDO_WIPE_LIVE=true (owner's OK, after the M9 test).
+    val wipe = WipeJob(deps.db, S3R2Lister(config.r2), live = System.getenv("LOOPDO_WIPE_LIVE") == "true")
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+        kotlinx.coroutines.delay(5 * 60_000L)
+        while (true) {
+            runCatching { wipe.runOnce() }.onFailure { org.slf4j.LoggerFactory.getLogger("loopdo.wipe").warn("wipe job failed: ${it.javaClass.simpleName}") }
+            kotlinx.coroutines.delay(24 * 3_600_000L)
+        }
+    }
     embeddedServer(Netty, port = config.port) { loopdoModule(deps) }.start(wait = true)
 }

@@ -38,6 +38,7 @@ hikari = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
 logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
 awssdk-s3 = { module = "software.amazon.awssdk:s3", version.ref = "awssdk" }
+awssdk-urlconnection = { module = "software.amazon.awssdk:url-connection-client", version.ref = "awssdk" }
 
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 androidx-glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }

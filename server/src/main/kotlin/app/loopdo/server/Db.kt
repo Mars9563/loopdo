@@ -15,6 +15,23 @@ class DbUnavailable(cause: Throwable) : RuntimeException("database unavailable",
  * the database's row-level security applies to everything the API does.
  */
 class Db(private val dataSource: DataSource) {
+    /** As the API role itself (no user): only for the M9 wipe job's two narrow functions. */
+    fun <T> asService(block: (Connection) -> T): T {
+        val conn = try { dataSource.connection } catch (e: SQLException) { throw DbUnavailable(e) }
+        conn.use { c ->
+            try {
+                c.autoCommit = false
+                val result = block(c)
+                c.commit()
+                return result
+            } catch (e: Throwable) {
+                runCatching { c.rollback() }
+                if (e is SQLException && e.isConnectionProblem()) throw DbUnavailable(e)
+                throw e
+            }
+        }
+    }
+
     fun <T> asUser(userId: UUID, block: (Connection) -> T): T {
         val conn = try {
             dataSource.connection

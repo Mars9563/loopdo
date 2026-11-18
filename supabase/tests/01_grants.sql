@@ -29,6 +29,19 @@ begin
   if (select count(*) from pg_publication_tables where pubname = 'powersync') <> 12 then
     raise exception 'FAIL grants: powersync publication should list 12 tables';
   end if;
+  -- M9: only the API itself may claim or wipe accounts; a signed-in user may only ask/keep for their own.
+  if has_function_privilege('loopdo_user', 'public.claim_due_accounts()', 'execute')
+     or has_function_privilege('loopdo_user', 'public.wipe_claimed_accounts()', 'execute')
+     or has_function_privilege('authenticated', 'public.wipe_claimed_accounts()', 'execute') then
+    raise exception 'FAIL grants: a user role can claim or wipe accounts';
+  end if;
+  if not has_function_privilege('loopdo_api', 'public.wipe_claimed_accounts()', 'execute') then
+    raise exception 'FAIL grants: loopdo_api cannot run the wipe';
+  end if;
+  if has_column_privilege('loopdo_user', 'public.profiles', 'delete_requested_at', 'update')
+     or has_column_privilege('loopdo_user', 'public.profiles', 'wipe_claimed_at', 'update') then
+    raise exception 'FAIL grants: users can write the deletion dates directly';
+  end if;
   if not (select rolreplication and rolbypassrls from pg_roles where rolname = 'powersync_role') then
     raise exception 'FAIL grants: powersync_role needs REPLICATION and BYPASSRLS';
   end if;
