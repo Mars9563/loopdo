@@ -99,7 +99,10 @@ fun MainApp(g: DesktopGraph) {
     val status = savedLine(g)
     val rootFocus = remember { FocusRequester() }
     LaunchedEffect(place, adding, habitEditor, taskEditor) { if (!Typing.active && !adding && habitEditor == null && taskEditor == null) runCatching { rootFocus.requestFocus() } }
-    Box(Modifier.fillMaxSize().sheetEsc(habitEditor != null || taskEditor != null) { habitEditor = null; taskEditor = null }
+    LaunchedEffect(place) { if (place != Place.STATS) stats.closeReview() }
+    Box(Modifier.fillMaxSize().sheetEsc(habitEditor != null || taskEditor != null || (place == Place.STATS && rui != null)) {
+        if (habitEditor != null || taskEditor != null) { habitEditor = null; taskEditor = null } else stats.closeReview()
+    }
         .rootKeys(rootFocus, adding || habitEditor != null || taskEditor != null) { c ->
         when (c) {
             'n' -> { place = Place.TODAY; taskEditor = "" }
@@ -146,6 +149,10 @@ fun MainApp(g: DesktopGraph) {
                 onDelete = { row?.let { habits.deleteForever(java.util.UUID.fromString(it.id)) { habitEditor = null; habitPick = null } } },
                 onClose = { habitEditor = null })
         }
+        // The stats message has its own strip and timer (another message's timer must not clear it).
+        if (place == Place.STATS) smsg?.let { m ->
+            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 70.dp)) { StatsMessage(m) { stats.dismissMessage() } }
+        }
         val openTask = taskEditor
         if (place == Place.TODAY && openTask != null) model?.let { m ->
             val detail = openTask.takeIf { it.isNotEmpty() }?.let { id -> remember(id) { tasks.task(id) }.collectAsState(null).value }
@@ -162,11 +169,11 @@ fun MainApp(g: DesktopGraph) {
                 today.addTask(text, null, null, null, null, m.date, onSaved = done)
             }
         }
-        (snack?.let { it.text to it.id } ?: jsnack?.let { it.text to it.id } ?: hsnack?.let { it.text to it.id } ?: tsnack?.let { it.text to it.id } ?: smsg?.let { it to it.hashCode().toLong() })?.let { (text, id) ->
+        (snack?.let { it.text to it.id } ?: jsnack?.let { it.text to it.id } ?: hsnack?.let { it.text to it.id } ?: tsnack?.let { it.text to it.id })?.let { (text, id) ->
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp).background(Color(0xF0090F18), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
                 BasicText(text, style = LocalType.current.small.copy(color = Fern.ink))
             }
-            LaunchedEffect(id) { delay(4_000); today.dismissSnack(id); journal.dismiss(id); habits.dismiss(id); tasks.dismiss(id); if (smsg != null) stats.dismissMessage() }
+            LaunchedEffect(id) { delay(4_000); today.dismissSnack(id); journal.dismiss(id); habits.dismiss(id); tasks.dismiss(id) }
         }
     }
 }

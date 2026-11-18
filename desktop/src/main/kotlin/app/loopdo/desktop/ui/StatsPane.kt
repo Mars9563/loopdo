@@ -70,7 +70,7 @@ fun StatsPane(s: StatsUi, lastWeekSaid: List<String>, kept: Int, act: StatsActio
                 Label("${s.year} so far")
                 if (s.mode == PixelMode.MOOD) {
                     StatRow("days with a mood", "${cells.size}")
-                    StatRow("average mood", if (cells.isEmpty()) "–" else "%.1f".format(cells.average()))
+                    StatRow("average mood", if (cells.isEmpty()) "–" else "%.1f".format(java.util.Locale.ENGLISH, cells.average()))
                 } else {
                     StatRow("perfect days", "${cells.count { it == 2 }}")
                     StatRow("active days", "${cells.size}")
@@ -92,10 +92,15 @@ fun StatsPane(s: StatsUi, lastWeekSaid: List<String>, kept: Int, act: StatsActio
             Column(Modifier.weight(1f).padding(start = 26.dp)) {
                 Label("mood vs habits · 90 days")
                 val rows = s.moodRows
-                if (rows == null) BasicText("needs 30 days with a mood first.", style = t.small)
-                else if (rows.isEmpty()) BasicText("no habit moves your mood yet.", style = t.small)
+                // The phone's lines and number format (StatsScreen): "gym days … −0.6".
+                if (rows == null) BasicText("shows after 30 days with a mood.", style = t.small)
+                else if (rows.isEmpty()) BasicText("not enough days on both sides yet.", style = t.small)
                 else { val max = rows.maxOf { kotlin.math.abs(it.diff) }.takeIf { it > 0 } ?: 1.0
-                    rows.forEach { r -> Bar(r.label, (kotlin.math.abs(r.diff) / max * 100).roundToInt(), negative = r.diff < 0, value = "%+.1f".format(r.diff)) } }
+                    rows.forEach { r ->
+                        val label = if (r.label == "no journal") r.label else "${r.label} days"
+                        Bar(label, (kotlin.math.abs(r.diff) / max * 100).roundToInt(), negative = r.diff < 0,
+                            value = (if (r.diff >= 0) "+" else "\u2212") + "%.1f".format(java.util.Locale.ENGLISH, kotlin.math.abs(r.diff)))
+                    } }
                 Label("completion", rightContent = {
                     Row { Choice("30d", s.last30) { act.setLast30(true) }; Choice("all", !s.last30) { act.setLast30(false) } }
                 })
@@ -187,4 +192,13 @@ fun YearPixels(px: Array<IntArray>, mode: PixelMode, year: Int, today: LocalDate
             }
         }
     }
+}
+
+/** A stats message ("pick at most 2.") with its own 4-second timer, apart from the other bottom messages (D5 review). */
+@Composable
+fun StatsMessage(text: String, onDismiss: () -> Unit) {
+    androidx.compose.foundation.layout.Box(Modifier.background(Color(0xF0090F18), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
+        BasicText(text, style = LocalType.current.small.copy(color = Fern.ink))
+    }
+    androidx.compose.runtime.LaunchedEffect(text) { kotlinx.coroutines.delay(4_000); onDismiss() }
 }

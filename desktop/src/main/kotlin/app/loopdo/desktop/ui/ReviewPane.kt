@@ -54,7 +54,8 @@ fun ReviewPane(r: ReviewUi, act: ReviewActions) {
             Spacer(Modifier.weight(1f))
             BasicText("[‹ ${w.prevNumber}]", style = t.small.copy(color = Fern.lichen), modifier = Modifier.clickable { act.page(-1) })
             Spacer(Modifier.width(10.dp))
-            BasicText("[${w.number + 1} ›]", style = t.small.copy(color = if (r.canGoForward) Fern.lichen else Fern.moss), modifier = if (r.canGoForward) Modifier.clickable { act.page(1) } else Modifier)
+            // The next week's real ISO number (53 → 1 at a new year), and only when there is a newer week to show.
+            if (r.canGoForward) BasicText("[${app.loopdo.shared.stats.isoWeek(w.start.plusDays(7))} ›]", style = t.small.copy(color = Fern.lichen), modifier = Modifier.clickable { act.page(1) })
         }
         BasicText("week ${w.number} · ${weekRange(w.start)}" + if (r.isLastDay) " · today is its last day" else "", style = t.small, modifier = Modifier.padding(bottom = 6.dp))
         Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
