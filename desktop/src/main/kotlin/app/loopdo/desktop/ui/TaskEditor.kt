@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import app.loopdo.client.tasks.ListInfo
 import app.loopdo.client.tasks.SaveScope
@@ -81,8 +82,16 @@ fun TaskEditor(
     var asking by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val scope = detail?.let { saveScope(it.isTemplate, it.isInstance) } ?: SaveScope.ONE
+    val titleFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { titleFocus.requestFocus() } }
+    // A copy's series rule can arrive after the copy (the phone does the same): adopt it, so "this and future" never
+    // saves a series without its repeat (that would end it).
+    androidx.compose.runtime.LaunchedEffect(seriesRule) { if (detail?.repeat == null && seriesRule != null && rule == null) { rule = seriesRule; nText = ((seriesRule as? RepeatRule.EveryNDays)?.n ?: 2).toString() } }
     fun draft(): TaskDraft {
         require(title.isNotBlank()) { "why don't you give the task a title." }
+        // The phone's date picker can't pick a past day; an unchanged day (an old late task) is kept as it is.
+        require(due == null || due!! >= today || due == detail?.due) { "pick today or a later day." }
+        if (dayText.isNotBlank() && parseDay(dayText, today) == null && dayText.trim() != due?.toString()) throw IllegalArgumentException("write the day as 21 nov or 2026-11-21.")
         val tm = time.trim().takeIf { it.isNotEmpty() }?.let { runCatching { LocalTime.parse(if (it.length == 4) "0$it" else it) }.getOrElse { throw IllegalArgumentException("write the time as hh:mm.") } }
         val r = when (val x = rule) {
             is RepeatRule.EveryNDays -> x.copy(n = nText.trim().toIntOrNull()?.takeIf { it >= 2 } ?: throw IllegalArgumentException("every n days needs n of 2 or more."), anchor = due ?: today)
@@ -97,7 +106,7 @@ fun TaskEditor(
     }
     Sheet(if (detail == null) "~/tasks/new" else "~/tasks/${detail.title}", onClose) {
         BasicText("title", style = t.label, modifier = Modifier.padding(bottom = 4.dp))
-        TermField(title, { title = it; error = null }, onEnter = { if (scope == SaveScope.ASK) asking = true else save(scope) })
+        TermField(title, { title = it; error = null }, Modifier.focusRequester(titleFocus), onEnter = { if (scope == SaveScope.ASK) asking = true else save(scope) })
         BasicText("when", style = t.label, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
         Row {
             Choice("inbox", due == null) { due = null; dayText = "" }
@@ -110,7 +119,7 @@ fun TaskEditor(
             BasicText("time (hh:mm, optional)", style = t.label, modifier = Modifier.weight(1f))
         }
         Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1.3f)) { TermField(dayText, { dayText = it; parseDay(it, today)?.let { d -> due = d }; error = null }) }
+            Column(Modifier.weight(1.3f)) { TermField(dayText, { dayText = it; if (it.isBlank()) due = null else parseDay(it, today)?.let { d -> due = d }; error = null }) }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) { TermField(time, { time = it; error = null }) }
         }

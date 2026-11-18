@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import app.loopdo.client.today.countdown
 import app.loopdo.desktop.DesktopGraph
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
 
@@ -62,7 +63,18 @@ fun MainApp(g: DesktopGraph) {
     val lists by tasks.lists.collectAsState()
     val templates by tasks.templates.collectAsState()
     var taskEditor by remember { mutableStateOf<String?>(null) } // null = closed, "" = new, else the task's id
-    val taskUi = remember { TaskBinding(today, tasks) { today.state.value?.date ?: java.time.LocalDate.now() } }
+    val uiScope = androidx.compose.runtime.rememberCoroutineScope()
+    val taskUi = remember {
+        TaskBinding(tasks) { d, ok, err ->
+            uiScope.launch {
+                try { g.taskActions.saveTask(null, d); ok() }
+                catch (e: IllegalArgumentException) { err(e.message ?: "that didn't work.") }
+                catch (e: IllegalStateException) { err(e.message ?: "that didn't work.") }
+                catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) { app.loopdo.client.log.logW("loopdo_tasks", "new task failed", e); err("couldn't save that. try again.") }
+            }
+        }
+    }
     val model by today.state.collectAsState()
     val jm by journal.state.collectAsState()
     val snack by today.snack.collectAsState()
@@ -71,7 +83,8 @@ fun MainApp(g: DesktopGraph) {
     val status = savedLine(g)
     val rootFocus = remember { FocusRequester() }
     LaunchedEffect(place, adding, habitEditor, taskEditor) { if (!Typing.active && !adding && habitEditor == null && taskEditor == null) runCatching { rootFocus.requestFocus() } }
-    Box(Modifier.fillMaxSize().rootKeys(rootFocus, adding || habitEditor != null || taskEditor != null) { c ->
+    Box(Modifier.fillMaxSize().sheetEsc(habitEditor != null || taskEditor != null) { habitEditor = null; taskEditor = null }
+        .rootKeys(rootFocus, adding || habitEditor != null || taskEditor != null) { c ->
         when (c) {
             'n' -> { place = Place.TODAY; taskEditor = "" }
             'w' -> place = Place.JOURNAL
@@ -145,6 +158,11 @@ fun MainApp(g: DesktopGraph) {
 fun Modifier.placeKeys(blocked: Boolean, onChar: (Char) -> Unit): Modifier = this.then(
     Modifier.onKeyEvent { e -> handleKey(e, blocked || Typing.active, onChar) },
 )
+
+/** Esc closes an open sheet from anywhere (also when no field in it has focus). */
+fun Modifier.sheetEsc(open: Boolean, close: () -> Unit): Modifier = this.then(Modifier.onKeyEvent { e ->
+    if (open && e.key == Key.Escape && e.type == KeyEventType.KeyDown) { close(); true } else false
+})
 
 /** The app's outer box: focusable, so the rail's letters arrive when no field has the keyboard. */
 fun Modifier.rootKeys(focus: FocusRequester, blocked: Boolean, onChar: (Char) -> Unit): Modifier =

@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -108,8 +109,10 @@ fun HabitEditor(
     }
     val save = { runCatching { draft() }.onSuccess { onSave(it) { e -> error = e } }.onFailure { error = it.message } }
     Sheet(if (start == null) "~/habits/new" else "~/habits/${d0.title}", onClose) {
+        val nameFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+        androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { nameFocus.requestFocus() } }
         FieldLabel("name")
-        TermField(title, { title = it; error = null }, onEnter = { save() })
+        TermField(title, { title = it; error = null }, Modifier.focusRequester(nameFocus), onEnter = { save() })
         FieldLabel("kind")
         Row { Choice("yes/no", kind == HabitKind.YES_NO, !locked) { kind = HabitKind.YES_NO }; Choice("count", kind == HabitKind.COUNT, !locked) { kind = HabitKind.COUNT } }
         if (kind == HabitKind.COUNT) {
