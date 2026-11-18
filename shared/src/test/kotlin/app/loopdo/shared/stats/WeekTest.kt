@@ -131,4 +131,11 @@ class WeekTest {
         assertEquals(1, w.number)
         assertEquals(53, w.prevNumber)
     }
+
+    @Test fun unverifiedTickMarked() {
+        val logs = mapOf("m" to listOf(HabitLog(d(0), 1), HabitLog(d(1), 1, verified = false)))
+        val h = weekReview(input(listOf(habit("m")), logs), mon, nextMon).habits.single()
+        assertEquals(setOf(d(1)), h.unverified)
+        assertEquals(Cell.DONE, h.cells[1]) // counts the same
+    }
 }

@@ -94,6 +94,17 @@ class HabitsViewModelTest {
     }
 
     @Test
+    fun calendarMarksUnverified() {
+        val gym = row("gym", "gym")
+        val schedules = listOf(ScheduleRow("gym", d(2), Recurrence.DAILY, emptySet()))
+        val logs = listOf(LogRow("gym", d(9), 1), LogRow("gym", d(11), 1, verified = false))
+        val cells = habitDetail(gym, schedules, logs, today, YearMonth.of(2026, 11))!!.cells.associateBy { it.date }
+        kotlin.test.assertTrue(cells.getValue(d(11)).unverified) // ticked offline after a restart: time not proven
+        kotlin.test.assertFalse(cells.getValue(d(9)).unverified)
+        kotlin.test.assertEquals(CellState.DONE, cells.getValue(d(11)).state) // it still counts
+    }
+
+    @Test
     fun detailNumbersMatchSharedStreak() {
         val gymDays = setOf(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
         val gym = row("gym", "gym", reminder = LocalTime.of(18, 0))

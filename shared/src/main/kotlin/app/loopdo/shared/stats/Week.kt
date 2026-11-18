@@ -30,7 +30,8 @@ data class StatHabit(val habit: Habit, val title: String, val sortOrder: Int, va
 
 data class WeekInput(val habits: List<StatHabit>, val logs: Map<String, List<HabitLog>>, val tasks: List<StatTask>, val activeDays: Set<LocalDate>)
 
-data class HabitWeek(val id: String, val title: String, val cells: List<Cell>, val done: Int, val due: Int)
+/** [unverified]: done days whose tick couldn't be proven (offline after a restart): shown with a `?`, counted the same (M9). */
+data class HabitWeek(val id: String, val title: String, val cells: List<Cell>, val done: Int, val due: Int, val unverified: Set<LocalDate> = emptySet())
 
 data class LateTask(val title: String, val daysLate: Int)
 
@@ -57,7 +58,9 @@ internal fun habitWeek(h: StatHabit, logs: List<HabitLog>, start: LocalDate, tod
         }
     }
     val done = cells.count { it == Cell.DONE }
-    return HabitWeek(h.habit.id, h.title, cells, done, done + cells.count { it == Cell.MISSED || it == Cell.FROZEN })
+    val unproven = logs.filter { !it.verified && it.count > 0 }.map { it.date }.toSet()
+    val unverified = days(start).filterIndexed { i, d -> cells[i] == Cell.DONE && d in unproven }.toSet()
+    return HabitWeek(h.habit.id, h.title, cells, done, done + cells.count { it == Cell.MISSED || it == Cell.FROZEN }, unverified)
 }
 
 private class Counts(val done: Int, val total: Int) {

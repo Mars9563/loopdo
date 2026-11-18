@@ -77,7 +77,8 @@ fun buildHabitsList(habits: List<HabitRow>, schedules: List<ScheduleRow>, logs: 
 
 /** Month heatmap cell: filled = done, red outline = missed, ❄ = saved by a freeze, dim = not due, very dim = future. */
 enum class CellState { DONE, MISSED, FROZEN, OFF, PENDING, FUTURE }
-data class MonthCell(val date: LocalDate, val state: CellState, val today: Boolean)
+/** [unverified]: a done day whose tick couldn't be proven (offline after a restart): a small amber `?` (M9). */
+data class MonthCell(val date: LocalDate, val state: CellState, val today: Boolean, val unverified: Boolean = false)
 
 /** Locked app-screens-v2, screen 2. */
 data class HabitDetail(
@@ -111,6 +112,7 @@ fun habitDetail(habit: HabitRow, schedules: List<ScheduleRow>, logs: List<LogRow
     val byDate = records.toMap()
     val done = records.count { it.second == DayOutcome.SUCCESS }
     val missed = records.count { it.second == DayOutcome.MISS }
+    val unproven = logs.filter { it.habitId == habit.id && !it.verified && it.count > 0 }.map { it.date }.toSet()
     val cells = (1..month.lengthOfMonth()).map { month.atDay(it) }.map { date ->
         val state = when {
             date > today -> CellState.FUTURE
@@ -121,7 +123,7 @@ fun habitDetail(habit: HabitRow, schedules: List<ScheduleRow>, logs: List<LogRow
                 DayOutcome.NEUTRAL, null -> CellState.OFF
             }
         }
-        MonthCell(date, state, date == today)
+        MonthCell(date, state, date == today, unverified = state == CellState.DONE && date in unproven)
     }
     val nextDue = if (habit.archivedOn != null) null else generateSequence(today) { it.plusDays(1) }.take(400).firstOrNull { date ->
         isDue(h.schedules, date) && (date != today || byDate[today] == DayOutcome.PENDING)

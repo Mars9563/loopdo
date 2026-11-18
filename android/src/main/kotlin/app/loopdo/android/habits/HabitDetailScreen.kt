@@ -151,8 +151,12 @@ private fun DayCell(c: MonthCell) {
     Box(box.then(if (c.state == CellState.FUTURE) Modifier.alpha(0.45f) else Modifier), contentAlignment = Alignment.Center) {
         Text(c.date.dayOfMonth.toString(), style = LoopDoType.small.copy(color = color))
         if (c.state == CellState.FROZEN) Text("❄", style = LoopDoType.small.copy(fontSize = 9.sp, color = LoopDoColors.accent), modifier = Modifier.align(Alignment.TopEnd).padding(end = 3.dp))
+        if (c.unverified) Text("?", style = LoopDoType.small.copy(fontSize = 9.sp, color = UNVERIFIED), modifier = Modifier.align(Alignment.TopEnd).padding(end = 3.dp))
     }
 }
+
+/** Amber for "time not proven" (locked settings-v1 C). */
+internal val UNVERIFIED = Color(0xFFFFCF7A)
 
 private fun YearMonth.short(): String = month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH).lowercase(Locale.ENGLISH)
 private val LONG = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)

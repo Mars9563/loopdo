@@ -225,6 +225,11 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     val statsVm = viewModel { graph.statsViewModel() }
     val settingsVm = viewModel { graph.settingsViewModel() }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    // M9: today's "↑n" — re-checked every minute, since it appears once something has waited 10 minutes.
+    val waiting by remember { graph.dataSafety.waiting() }.collectAsStateWithLifecycle(null)
+    var minute by remember { mutableStateOf(0L) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(60_000); minute++ } }
+    val waitingMark = remember(waiting, minute) { waiting?.let { app.loopdo.android.settings.todayMark(it, graph.trustedClock.now().instant) } }
     var lockOn by remember { mutableStateOf(graph.appLock.enabled) }
     val toggleLock = {
         when {
@@ -256,7 +261,7 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
                         },
                     ),
                     onClose = { settingsOpen = false },
-                ) else TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = handled, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock, notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() }, onOpenSettings = { settingsOpen = true }) {
+                ) else TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = handled, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock, notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() }, onOpenSettings = { settingsOpen = true }, waitingMark = waitingMark) {
                     graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
                 }
                 Tab.JOURNAL -> app.loopdo.android.journal.JournalTab(journalVm, openWriter = pending?.write == true) { handled() }

@@ -142,7 +142,7 @@ private fun WeekGrid(r: ReviewUi) {
                     if (h.id in r.focusIds) withStyle(SpanStyle(color = LoopDoColors.accent)) { append("› ") }
                     append(h.title)
                 }, style = LoopDoType.small, modifier = Modifier.width(124.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                h.cells.forEach { c ->
+                h.cells.forEachIndexed { i, c ->
                     val (glyph, color) = when (c) {
                         Cell.DONE -> "█" to LoopDoColors.accent
                         Cell.MISSED -> "▢" to LoopDoColors.warn
@@ -151,7 +151,8 @@ private fun WeekGrid(r: ReviewUi) {
                         Cell.OPEN -> "○" to LoopDoColors.dim
                         Cell.FUTURE -> "" to LoopDoColors.dim
                     }
-                    Text(glyph, style = LoopDoType.small.copy(color = color), modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                    val unproven = c == Cell.DONE && r.review.start.plusDays(i.toLong()) in h.unverified
+                    Text(if (unproven) "$glyph?" else glyph, style = LoopDoType.small.copy(color = color), modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                 }
                 Text("${h.done}/${h.due}", style = LoopDoType.small.copy(color = if (h.done < h.due) LoopDoColors.warn else LoopDoColors.text),
                     modifier = Modifier.width(44.dp), textAlign = TextAlign.End)
