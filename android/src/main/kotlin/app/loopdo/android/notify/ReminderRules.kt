@@ -14,6 +14,8 @@ const val CH_HABITS = "habits"
 const val CH_TASKS = "tasks"
 const val CH_JOURNAL = "journal"
 const val CH_DAY_END = "day end"
+/** M8: the Sunday review ping. */
+const val CH_STATS = "stats"
 /** The day-end warning between 23:00 and 07:00: shown without sound (owner 2026-11-18). */
 const val CH_DAY_END_NIGHT = "day end · night"
 
@@ -25,11 +27,13 @@ sealed interface ItemState {
     data class Task(val title: String, val time: LocalTime, val done: Boolean) : ItemState
     /** For the journal nudge and the day-end warning: undone due habits (in order) and whether the journal has a line. */
     data class Day(val undoneHabits: List<String>, val journalWritten: Boolean) : ItemState
+    /** M8: the week ending this Sunday: its numbers, its focus so far ("gym 3/4"), and whether its review was opened today. */
+    data class Week(val number: Int, val done: Int, val total: Int, val focus: List<String>, val opened: Boolean) : ItemState
     /** Deleted, or not on this phone. */
     data object Gone : ItemState
 }
 
-/** [action]: "tick" | "plus" | "done" | "snooze" | "write". */
+/** [action]: "tick" | "plus" | "done" | "snooze" | "write" | "review". */
 data class Button(val label: String, val action: String, val step: Int = 1)
 
 /** A notification to post. [silentUpdate] = an update after a button (no sound again). */
@@ -69,6 +73,13 @@ fun decide(r: Reminder, state: ItemState, today: LocalDate?, quiet: Boolean): Sh
         ReminderKind.JOURNAL -> {
             val d = state as? ItemState.Day ?: return null
             if (d.journalWritten) null else Shown(CH_JOURNAL, "nothing written today.", "", listOf(Button("[write]", "write")))
+        }
+        ReminderKind.WEEK_REVIEW -> {
+            val w = state as? ItemState.Week ?: return null
+            if (w.opened) null else Shown(
+                CH_STATS, "week ${w.number} review: ${w.done}/${w.total} done",
+                (w.focus + "pick next week's focus").joinToString(" · "), listOf(Button("[review >]", "review")),
+            )
         }
         ReminderKind.DAY_END -> {
             val d = state as? ItemState.Day ?: return null

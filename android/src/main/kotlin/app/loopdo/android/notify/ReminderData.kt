@@ -25,7 +25,11 @@ import java.time.LocalTime
 import java.util.UUID
 
 /** What the reminders read from the phone's own database (M7): the planner's input, and an item's state when it fires. */
-class ReminderData(private val db: PowerSyncDatabase) {
+class ReminderData(
+    private val db: PowerSyncDatabase,
+    /** M8: the week ending on that Sunday, for its 20:00 review ping (null = no such ping). */
+    private val week: (suspend (sunday: LocalDate) -> ItemState)? = null,
+) {
     private class HabitRow(
         val id: String, val title: String, val yesNo: Boolean, val target: Int, val time: LocalTime?, val archivedOn: LocalDate?,
         val step: Int, val deleted: Boolean, val schedules: List<HabitSchedule>,
@@ -96,6 +100,7 @@ class ReminderData(private val db: PowerSyncDatabase) {
             else ItemState.Habit(h.title, h.yesNo, counts(r.date)[h.id] ?: 0, targetOn(h.habit, r.date), h.step, h.dueOn(r.date))
         }
         ReminderKind.TASK -> taskState(r.itemId ?: "", r.date)
+        ReminderKind.WEEK_REVIEW -> week?.invoke(r.date) ?: ItemState.Gone
         ReminderKind.JOURNAL, ReminderKind.DAY_END -> {
             val counts = counts(r.date)
             ItemState.Day(

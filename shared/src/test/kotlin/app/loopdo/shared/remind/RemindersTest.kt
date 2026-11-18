@@ -164,4 +164,12 @@ class RemindersTest {
     @Test fun replanAtIsJustAfterDayEnd() {
         assertEquals(at(2026, 11, 19, 4).plusSeconds(1), replanAt(noon, versions))
     }
+
+    @Test fun weekReviewPingOnSunday20() {
+        val sunNoon = at(2026, 11, 22, 12)
+        val rs = planReminders(sunNoon, input()).of(ReminderKind.WEEK_REVIEW)
+        assertEquals(listOf(LocalDate.of(2026, 11, 22) to at(2026, 11, 22, 20)), rs.map { it.date to it.fireAt })
+        assertEquals("week_review:-:2026-11-22:at", rs.single().key)
+        assertEquals(emptyList(), planReminders(noon, input()).of(ReminderKind.WEEK_REVIEW)) // wed + thu: none
+    }
 }

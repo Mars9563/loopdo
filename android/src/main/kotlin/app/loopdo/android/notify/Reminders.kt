@@ -190,7 +190,7 @@ fun parseKey(key: String): Reminder? = runCatching {
 /** The five channels (spec §5.2). Android fixes a channel's sound once created, so the night one is separate. */
 fun ensureChannels(context: Context) {
     val nm = context.getSystemService(NotificationManager::class.java)
-    listOf(CH_HABITS to "habits", CH_TASKS to "tasks", CH_JOURNAL to "journal", CH_DAY_END to "day end").forEach { (id, name) ->
+    listOf(CH_HABITS to "habits", CH_TASKS to "tasks", CH_JOURNAL to "journal", CH_DAY_END to "day end", CH_STATS to "weekly review").forEach { (id, name) ->
         nm.createNotificationChannel(NotificationChannel(id, name, NotificationManager.IMPORTANCE_DEFAULT).apply { enableVibration(true) })
     }
     nm.createNotificationChannel(
@@ -231,7 +231,7 @@ class AndroidPoster(private val context: Context) : Poster {
         val open = PendingIntent.getActivity(
             context, id,
             Intent(context, MainActivity::class.java)
-                .putExtra(MainActivity.EXTRA_TAB, if (r.kind == ReminderKind.JOURNAL) "journal" else "today")
+                .putExtra(MainActivity.EXTRA_TAB, when (r.kind) { ReminderKind.JOURNAL -> "journal"; ReminderKind.WEEK_REVIEW -> "stats"; else -> "today" })
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -251,7 +251,13 @@ class AndroidPoster(private val context: Context) : Poster {
     }
 
     private fun buttonIntent(b: Button, r: Reminder): PendingIntent =
-        if (b.action == "write") PendingIntent.getActivity(
+        if (b.action == "review") PendingIntent.getActivity(
+            context, notificationId(r) + 1, // not the body tap's request code (M7 review minor)
+            Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_TAB, "stats").putExtra(MainActivity.EXTRA_REVIEW, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        ) else if (b.action == "write") PendingIntent.getActivity(
             context, notificationId(r),
             Intent(context, MainActivity::class.java)
                 .putExtra(MainActivity.EXTRA_TAB, "journal").putExtra(MainActivity.EXTRA_WRITE, true)

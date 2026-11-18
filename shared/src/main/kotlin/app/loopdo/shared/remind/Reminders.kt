@@ -22,7 +22,8 @@ import java.util.UUID
 // a pure function of the local data, so the same rules can serve the desktop later. Whether a reminder is still
 // worth showing is decided again when it fires (the item may have been done meanwhile, on any device).
 
-enum class ReminderKind { HABIT, TASK, JOURNAL, DAY_END }
+/** WEEK_REVIEW (M8): Sunday 20:00, unless that week's review was opened that Sunday. */
+enum class ReminderKind { HABIT, TASK, JOURNAL, DAY_END, WEEK_REVIEW }
 
 /** BEFORE = 10 min ahead, AT = on time, SNOOZE = a task's [snooze 30m]. */
 enum class Ping { BEFORE, AT, SNOOZE }
@@ -53,6 +54,7 @@ val BEFORE: Duration = Duration.ofMinutes(10)
 val JOURNAL_AT: LocalTime = LocalTime.of(21, 0)
 val DAY_END_LEAD: Duration = Duration.ofHours(1)
 val SNOOZE: Duration = Duration.ofMinutes(30)
+val WEEK_REVIEW_AT: LocalTime = LocalTime.of(20, 0)
 private val QUIET_FROM: LocalTime = LocalTime.of(23, 0)
 private val QUIET_UNTIL: LocalTime = LocalTime.of(7, 0)
 
@@ -113,6 +115,7 @@ fun planReminders(now: Instant, input: ReminderInput): List<Reminder> {
         }
         if (day.date !in input.journalDays) add(ReminderKind.JOURNAL, null, day, reminderInstant(day.date, JOURNAL_AT, day.s), Ping.AT)
         add(ReminderKind.DAY_END, null, day, day.end.minus(DAY_END_LEAD), Ping.AT)
+        if (day.date.dayOfWeek == java.time.DayOfWeek.SUNDAY) add(ReminderKind.WEEK_REVIEW, null, day, reminderInstant(day.date, WEEK_REVIEW_AT, day.s), Ping.AT)
     }
     return out.sortedWith(compareBy<Reminder>({ it.fireAt }, { it.key }))
 }

@@ -47,6 +47,7 @@ class RemindersTest {
     }
     private val taps = mutableListOf<WidgetTap>()
     private var signedOut = true
+    private var weekOpened = false
     private val poster = object : Poster {
         var enabled = true
         val posted = mutableMapOf<Int, Shown>()
@@ -67,7 +68,7 @@ class RemindersTest {
         db.execute("INSERT INTO journal_entries (id, loopdo_date, text) VALUES (?, '2026-11-18', 'x')", listOf(UUID.randomUUID().toString()))
         db.execute("INSERT INTO journal_entries (id, loopdo_date, text) VALUES (?, '2026-11-19', 'x')", listOf(UUID.randomUUID().toString()))
         store = ReminderStore(ctx.getSharedPreferences("test-reminders-${UUID.randomUUID()}", Context.MODE_PRIVATE))
-        scheduler = ReminderScheduler(ReminderData(db), store, alarms, poster, today = { today }, trustedNow = { now }, elapsedNow = { elapsed }, signedOut = { signedOut }) { t ->
+        scheduler = ReminderScheduler(ReminderData(db) { ItemState.Week(47, 33, 40, listOf("gym 3/4"), weekOpened) }, store, alarms, poster, today = { today }, trustedNow = { now }, elapsedNow = { elapsed }, signedOut = { signedOut }) { t ->
             taps += t
             if (t.date != today) TapResult.STALE else {
                 when (t.kind) { // stands in for the widget's actions (tested in WidgetCommandsTest)
@@ -342,5 +343,21 @@ class RemindersTest {
         listOf(CH_HABITS, CH_TASKS, CH_JOURNAL, CH_DAY_END, CH_DAY_END_NIGHT).forEach { assertNotNull(it, nm.getNotificationChannel(it)) }
         assertNull(nm.getNotificationChannel(CH_DAY_END_NIGHT).sound)
         assertNotNull(nm.getNotificationChannel(CH_DAY_END).sound)
+    }
+
+    @Test
+    fun weekPingPostsUnlessOpened() = runBlocking {
+        now = Instant.parse("2026-11-22T06:30:00Z") // sun 22 nov 12:00 IST
+        today = LocalDate.of(2026, 11, 22)
+        scheduler.replan()
+        val key = reminderKey(ReminderKind.WEEK_REVIEW, null, today!!, Ping.AT)
+        assertTrue(key in alarms.set.keys)
+        now = Instant.parse("2026-11-22T14:30:00Z") // 20:00
+        weekOpened = true
+        scheduler.fire(key)
+        assertTrue(poster.posted.isEmpty())
+        weekOpened = false
+        scheduler.fire(key)
+        assertEquals("week 47 review: 33/40 done", poster.posted.values.single().title)
     }
 }

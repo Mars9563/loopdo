@@ -180,7 +180,7 @@ class AppGraph(context: android.content.Context) {
     /** M7: the phone's own reminders (alarms + notifications), ready on the same day the widget is. */
     val reminders by lazy {
         app.loopdo.android.notify.ReminderScheduler(
-            app.loopdo.android.notify.ReminderData(sync.db),
+            app.loopdo.android.notify.ReminderData(sync.db) { sunday -> weekPingState(sunday) },
             app.loopdo.android.notify.ReminderStore(appContext.getSharedPreferences("reminders", android.content.Context.MODE_PRIVATE)),
             app.loopdo.android.notify.AndroidAlarmSetter(appContext),
             app.loopdo.android.notify.AndroidPoster(appContext),
@@ -217,6 +217,20 @@ class AppGraph(context: android.content.Context) {
     fun habitsViewModel() = app.loopdo.android.habits.HabitsViewModel(todayData.rows(), habitActions) { trustedClock.now().instant }
 
     fun tasksViewModel() = app.loopdo.android.tasks.TasksViewModel(app.loopdo.android.tasks.TaskData(sync.db), taskActions)
+
+    /** M8: the Sunday ping's content: that week's numbers and its focus so far. */
+    private suspend fun weekPingState(sunday: java.time.LocalDate): app.loopdo.android.notify.ItemState {
+        val rows = app.loopdo.android.stats.StatsData(sync.db).rows().first()
+        val start = app.loopdo.shared.stats.weekStart(sunday)
+        val w = app.loopdo.shared.stats.weekReview(rows.input, start, sunday)
+        val focus = rows.focus.filter { it.weekStart == start }.map { f ->
+            when (val r = app.loopdo.shared.stats.focusResult(f, rows.input, sunday)) {
+                is app.loopdo.shared.stats.FocusResult.Habit -> "${f.title} ${r.done}/${r.goal}"
+                is app.loopdo.shared.stats.FocusResult.Task -> f.title + if (r.completedOn != null) " ✓" else ""
+            }
+        }
+        return app.loopdo.android.notify.ItemState.Week(w.number, w.done, w.total, focus, reviewOpenedOn(sunday))
+    }
 
     /** M8: the weekly focus (Sun/Mon only, at most 2; the server checks the same). */
     val focusActions by lazy {

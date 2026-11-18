@@ -100,4 +100,18 @@ class ReminderRulesTest {
         assertNotEquals(notificationId(r(ReminderKind.HABIT, "gym")), notificationId(r(ReminderKind.HABIT, "gym", date = d19)))
         assertNotEquals(notificationId(r(ReminderKind.HABIT, "gym")), notificationId(r(ReminderKind.HABIT, "kanji")))
     }
+
+    @Test fun weekReviewWording() {
+        val r = r(ReminderKind.WEEK_REVIEW, null)
+        val s = decide(r, ItemState.Week(47, 33, 40, listOf("gym 3/4"), opened = false), d18, quiet = false)!!
+        assertEquals("week 47 review: 33/40 done", s.title)
+        assertEquals("gym 3/4 · pick next week's focus", s.body)
+        assertEquals(listOf(Button("[review >]", "review")), s.buttons)
+        assertEquals(CH_STATS, s.channel)
+        assertEquals("pick next week's focus", decide(r, ItemState.Week(47, 1, 2, emptyList(), false), d18, false)!!.body)
+    }
+
+    @Test fun openedReviewShowsNothing() {
+        assertNull(decide(r(ReminderKind.WEEK_REVIEW, null), ItemState.Week(47, 33, 40, emptyList(), opened = true), d18, quiet = false))
+    }
 }
