@@ -19,6 +19,8 @@ import app.loopdo.desktop.ui.Shell
 import app.loopdo.desktop.ui.savedStatus
 import app.loopdo.desktop.ui.SignInScreen
 import app.loopdo.desktop.ui.CenterLine
+import app.loopdo.desktop.ui.BlockedScreen
+import kotlinx.coroutines.launch
 import app.loopdo.desktop.ui.Fern
 import app.loopdo.client.auth.AuthState
 import app.loopdo.client.onboarding.hasDaySettings
@@ -29,13 +31,14 @@ import app.loopdo.desktop.shell.Command
 import app.loopdo.desktop.shell.SingleInstance
 import app.loopdo.desktop.shell.parseCommand
 import app.loopdo.desktop.shell.socketFor
+import app.loopdo.desktop.shell.lockFor
 
 fun main(args: Array<String>) {
     val cmd = parseCommand(args)
     if (cmd is Command.SelfCheck) return selfCheck(File(cmd.out))
     val demo = cmd == Command.Demo
     val dir = if (demo) java.nio.file.Files.createTempDirectory("loopdo-demo").toFile() else dataDir()
-    val single = SingleInstance(socketFor(dir))
+    val single = SingleInstance(socketFor(dir), lockFor(dir))
     val shown = mutableStateOf(cmd != Command.Background)
     if (!single.tryServe { c -> if (c != Command.Background) shown.value = true }) {
         single.send(cmd) // the running loopdo_ shows itself (or quick add, from D3)
@@ -43,7 +46,11 @@ fun main(args: Array<String>) {
     }
     application {
         val graph = remember { if (demo) null else DesktopGraph(dir) }
-        val quit = { single.close(); graph?.sync?.db?.let { db -> kotlinx.coroutines.runBlocking { runCatching { db.close() } } }; exitApplication() }
+        val quit = {
+            // The database closes first; only then is the lock released for a next launch (D2 review).
+            graph?.sync?.db?.let { db -> kotlinx.coroutines.runBlocking { runCatching { db.close() } } }
+            single.close(); exitApplication()
+        }
         Tray(
             icon = androidx.compose.ui.res.painterResource("tray.png"),
             tooltip = "loopdo_",
@@ -94,10 +101,11 @@ fun Root(g: DesktopGraph, signedInApp: @Composable () -> Unit) {
     val blocked by g.sync.blocked.collectAsState()
     val status by remember { g.sync.db.currentStatus.asFlow() }.collectAsState(g.sync.db.currentStatus)
     val hasSettings by remember { g.sync.db.hasDaySettings() }.collectAsState(false)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     when {
         session is AuthState.Loading -> CenterLine("loopdo_")
         session is AuthState.SignedOut -> SignInScreen { e, p -> g.auth.signIn(e, p) }
-        blocked != null -> CenterLine(blocked!!, Fern.ember)
+        blocked != null -> BlockedScreen(blocked!!) { scope.launch { g.auth.signOut() } }
         status.hasSynced != true && !hasSettings -> CenterLine("restoring your data…")
         !hasSettings -> CenterLine("finish setting up loopdo_ on your phone first (day end + time zone).")
         else -> signedInApp()

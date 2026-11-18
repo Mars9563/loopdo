@@ -43,21 +43,31 @@ class FileKeyValue(private val file: File) : KeyValueStore {
     override fun remove(key: String) = synchronized(lock) { if (key in map) write(map - key) }
 }
 
-/** The signed server time anchor (the phone keeps it in SharedPreferences "loopdo_anchor"). */
+/**
+ * The signed server time anchor (the phone keeps it in SharedPreferences "loopdo_anchor"). Stored as ONE value and
+ * written in one atomic rename, so a reader or a crash never sees the server time of one anchor with the timers or
+ * signature of another (D2 review: a torn anchor makes ticks refused or land on the wrong day).
+ */
 class FileAnchorStore(file: File) : AnchorStore {
     private val kv = FileKeyValue(file)
 
     override fun current(): SignedAnchor? = runCatching {
+        val o = Json.parseToJsonElement(kv.getString(KEY)!!).jsonObject
         SignedAnchor(
-            TimeAnchor(Instant.parse(kv.getString("server_time")!!), kv.getLong("elapsed")!!, kv.getLong("boot")!!.toInt()),
-            kv.getString("sig")!!,
+            TimeAnchor(Instant.parse(o.getValue("server_time").jsonPrimitive.content), o.getValue("elapsed").jsonPrimitive.content.toLong(), o.getValue("boot").jsonPrimitive.content.toInt()),
+            o.getValue("sig").jsonPrimitive.content,
         )
     }.getOrNull()
 
-    override fun save(a: SignedAnchor) {
-        kv.putString("server_time", a.anchor.serverTime.toString())
-        kv.putLong("elapsed", a.anchor.elapsedRealtimeMs)
-        kv.putLong("boot", a.anchor.bootCount.toLong())
-        kv.putString("sig", a.sig)
-    }
+    override fun save(a: SignedAnchor) = kv.putString(
+        KEY,
+        JsonObject(
+            mapOf(
+                "server_time" to JsonPrimitive(a.anchor.serverTime.toString()), "elapsed" to JsonPrimitive(a.anchor.elapsedRealtimeMs),
+                "boot" to JsonPrimitive(a.anchor.bootCount), "sig" to JsonPrimitive(a.sig),
+            ),
+        ).toString(),
+    )
+
+    private companion object { const val KEY = "anchor" }
 }

@@ -13,18 +13,29 @@ import java.nio.charset.StandardCharsets
  * One running loopdo_ per data folder: the first launch listens on a Unix socket; a later launch (the menu entry,
  * Meta+J) sends its command there and exits, so two processes never open the same database.
  */
-class SingleInstance(private val socket: File) {
+class SingleInstance(private val socket: File, private val lockFile: File = File(socket.path + ".lock")) {
     private var server: ServerSocketChannel? = null
+    private var lockChannel: java.nio.channels.FileChannel? = null
+    private var lock: java.nio.channels.FileLock? = null
 
-    /** True if this process now serves; false if another one is running (then use [send]). */
+    /**
+     * True if this process now serves; false if another one is running (then use [send]). Who serves is decided by an
+     * exclusive lock on [lockFile], held for the life of the process (the OS drops it if the process dies), so two
+     * launches at the same moment can never both open the database (D2 review); the socket only carries commands.
+     */
+    @Synchronized
     fun tryServe(onCommand: (Command) -> Unit): Boolean {
-        if (reachable()) return false
-        socket.delete() // stale file from a crash
+        lockFile.parentFile?.mkdirs()
+        val lc = java.nio.channels.FileChannel.open(lockFile.toPath(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE)
+        val l = try { lc.tryLock() } catch (e: java.nio.channels.OverlappingFileLockException) { null }
+        if (l == null) { lc.close(); return false }
+        lockChannel = lc; lock = l
+        socket.delete() // stale file from a crash (we hold the lock, so nobody else is serving)
         socket.parentFile?.mkdirs()
         val ch = try {
             ServerSocketChannel.open(StandardProtocolFamily.UNIX).apply { bind(UnixDomainSocketAddress.of(socket.toPath())) }
         } catch (e: java.io.IOException) {
-            return false // another launch bound it a moment ago
+            close(); return false
         }
         server = ch
         Thread({
@@ -36,18 +47,23 @@ class SingleInstance(private val socket: File) {
         return true
     }
 
+    /** Hands [cmd] to the running loopdo_ (retries ~2 s while it is still starting up). */
     fun send(cmd: Command) {
-        SocketChannel.open(UnixDomainSocketAddress.of(socket.toPath())).use { it.write(ByteBuffer.wrap((cmd.wire() + "\n").toByteArray())) }
+        repeat(20) { i ->
+            val ok = runCatching { SocketChannel.open(UnixDomainSocketAddress.of(socket.toPath())).use { it.write(ByteBuffer.wrap((cmd.wire() + "\n").toByteArray())) } }.isSuccess
+            if (ok) return
+            if (i < 19) Thread.sleep(100)
+        }
     }
 
+    /** Stops serving; call only after the database is closed (the lock is what keeps a second launch out). */
+    @Synchronized
     fun close() {
         server?.close(); server = null
-        socket.delete()
+        if (lock != null) socket.delete()
+        runCatching { lock?.release() }; lock = null
+        runCatching { lockChannel?.close() }; lockChannel = null
     }
-
-    private fun reachable(): Boolean = socket.exists() && runCatching {
-        SocketChannel.open(UnixDomainSocketAddress.of(socket.toPath())).use { it.write(ByteBuffer.wrap("ping\n".toByteArray())) }
-    }.isSuccess
 
     private fun readLine(c: SocketChannel): String {
         val buf = ByteBuffer.allocate(64)
@@ -57,6 +73,6 @@ class SingleInstance(private val socket: File) {
     }
 }
 
-/** `$XDG_RUNTIME_DIR/loopdo-<folder hash>.sock`: one socket per data folder (the demo and tests never meet the real app). */
-fun socketFor(dataDir: File, env: Map<String, String> = System.getenv()): File =
-    File(env["XDG_RUNTIME_DIR"] ?: System.getProperty("java.io.tmpdir"), "loopdo-${Integer.toHexString(dataDir.absolutePath.hashCode())}.sock")
+/** The socket lives in the data folder itself: one per folder, and every launch finds it whatever its environment. */
+fun socketFor(dataDir: File): File = File(dataDir, "loopdo.sock")
+fun lockFor(dataDir: File): File = File(dataDir, "loopdo.lock")

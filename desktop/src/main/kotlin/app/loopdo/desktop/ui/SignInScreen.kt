@@ -100,3 +100,14 @@ fun SignInScreen(signIn: suspend (String, String) -> Result<Unit>) {
 fun CenterLine(text: String, color: Color = Fern.lichen) = Box(Modifier.fillMaxSize().background(Fern.night), contentAlignment = Alignment.Center) {
     BasicText(text, style = LocalType.current.body.copy(color = color))
 }
+
+/** Another account's changes are still on this laptop (the phone's SwitchRefused): the message and a way out. */
+@Composable
+fun BlockedScreen(message: String, onSignOut: () -> Unit) = Box(Modifier.fillMaxSize().background(Fern.night), contentAlignment = Alignment.Center) {
+    val t = LocalType.current
+    Column(Modifier.width(520.dp)) {
+        BasicText(message, style = t.body.copy(color = Fern.ember))
+        Spacer(Modifier.height(16.dp))
+        BasicText("[sign out]", style = t.body.copy(color = Fern.mint), modifier = Modifier.clickable(onClick = onSignOut))
+    }
+}
