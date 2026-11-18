@@ -50,6 +50,11 @@ class SettingsViewModel(
     private val latestProfile = profile.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val latestVersions = versions.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    /** M9: while the account waits to be deleted, the app shows only the deleting screen (every phone). */
+    val deleting: StateFlow<Deleting?> = combine(latestProfile, latestVersions) { p, v ->
+        if (v.isEmpty()) null else deletingState(p?.deleteRequestedAt, p?.wipeClaimedAt, inForceNow(v, now()).zone)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     val state: StateFlow<SettingsUi?> = combine(latestProfile, latestVersions, waiting, signups) { p, v, w, s ->
         if (v.isEmpty()) null else {
             val t = now()

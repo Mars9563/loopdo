@@ -247,6 +247,17 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (activity.askNotificationsOnce()) todayVm.showMessage("loopdo_ reminds you of habits, tasks and the journal.")
     }
+    val exportNow = { activity.pickExportFile(java.time.LocalDate.now()) { uri -> settingsVm.exportTo { activity.contentResolver.openOutputStream(uri) } } }
+    val signOut = { graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }; Unit }
+    // M9: an account waiting to be deleted shows only this (locked settings-v1 D), on every phone.
+    val deleting by settingsVm.deleting.collectAsStateWithLifecycle()
+    deleting?.let { d ->
+        val msg by settingsVm.message.collectAsStateWithLifecycle()
+        Box(Modifier.fillMaxSize().statusBarsPadding()) {
+            app.loopdo.android.settings.DeletingScreen(d, onKeep = { settingsVm.keepAccount() }, onExport = exportNow, onSignOut = signOut, message = msg)
+        }
+        return
+    }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
@@ -255,10 +266,8 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
                     app.loopdo.android.settings.SettingsHost(
                         lockOn = lockOn, onToggleLock = toggleLock,
                         notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() },
-                        onSignOut = { graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } } },
-                        onExport = {
-                            activity.pickExportFile(java.time.LocalDate.now()) { uri -> settingsVm.exportTo { activity.contentResolver.openOutputStream(uri) } }
-                        },
+                        onSignOut = signOut,
+                        onExport = exportNow,
                     ),
                     onClose = { settingsOpen = false },
                 ) else TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = handled, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock, notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() }, onOpenSettings = { settingsOpen = true }, waitingMark = waitingMark) {

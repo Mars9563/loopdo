@@ -71,3 +71,21 @@ internal fun DeleteScreen(vm: SettingsViewModel, host: SettingsHost, onBack: () 
     }
 }
 
+/** Locked settings-v1 D (bottom): for 7 days, on every phone, only this. */
+@Composable
+fun DeletingScreen(state: Deleting, onKeep: () -> Unit, onExport: () -> Unit, onSignOut: () -> Unit, message: String?) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 22.dp, vertical = 8.dp)) {
+        Spacer(Modifier.height(40.dp))
+        Text(buildAnnotatedString { append("loopdo"); withStyle(SpanStyle(color = LoopDoColors.accent)) { append("_") } }, style = LoopDoType.wordmark)
+        Spacer(Modifier.height(24.dp))
+        Text(if (state.canKeep) "this account will be deleted on ${state.deleteOnLabel}." else "this account is being deleted.", style = LoopDoType.body.copy(color = LoopDoColors.warn))
+        if (state.canKeep) Text("until then nothing is lost. sign in on any phone to change your mind.", style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(vertical = 6.dp))
+        if (state.canKeep) Bracket("keep my account", primary = true, onClick = onKeep)
+        Row {
+            Bracket("export now", idle = true, onClick = onExport)
+            Spacer(Modifier.weight(1f))
+            Bracket("sign out", idle = true, onClick = onSignOut)
+        }
+        message?.let { Text(it, style = LoopDoType.small.copy(color = LoopDoColors.warn)) }
+    }
+}
