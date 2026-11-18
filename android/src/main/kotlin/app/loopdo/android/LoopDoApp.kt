@@ -66,6 +66,7 @@ class AppGraph(context: android.content.Context) {
         userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
         series = { draft -> taskActions.saveTask(null, draft) },
         journal = journalActions,
+        debug = app.loopdo.android.BuildConfig.DEBUG,
     )
     private val appContext = context.applicationContext
 

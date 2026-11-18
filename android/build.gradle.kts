@@ -23,13 +23,6 @@ android {
         versionName = "0.9.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
-
-        // Public client config (not secrets): the publishable key is meant to ship in apps.
-        buildConfigField("String", "SUPABASE_URL", "\"https://jcnenvgdlryxlhsnkaiq.supabase.co\"")
-        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"sb_publishable_s1x-441V8Vb2tHHivRNPIQ_x61QCk8b\"")
-        buildConfigField("String", "POWERSYNC_URL", "\"https://6af99fc3e5558a7422ba3c92.powersync.journeyapps.com\"")
-        buildConfigField("String", "API_URL", "\"https://loopdo.mrsdev.in\"")
-        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"408208720715-3pr2op2dbtdhijoq1jv9cr0k2dk7m2u2.apps.googleusercontent.com\"")
     }
 
     signingConfigs {

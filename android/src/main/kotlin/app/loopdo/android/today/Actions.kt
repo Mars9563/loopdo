@@ -63,6 +63,8 @@ class Actions(
     private val series: (suspend (app.loopdo.android.tasks.TaskDraft) -> UUID)? = null,
     /** The M6 journal (stamped lines); set by the app graph. */
     private val journal: app.loopdo.android.journal.JournalActions? = null,
+    /** True only in debug builds (the app passes BuildConfig.DEBUG): allows [debugForgedTick]. */
+    private val debug: Boolean = false,
 ) : TodayActions {
     private class Moment(val now: TrustedNow, val today: LocalDate, val evidence: String) {
         val verified get() = if (now.verified) 1 else 0
@@ -111,7 +113,7 @@ class Actions(
      * server must answer 422 INVALID_EVIDENCE and the phone must undo exactly this tick.
      */
     override suspend fun debugForgedTick(habitId: UUID, shownDate: LocalDate?): Pair<Int, Int>? {
-        check(app.loopdo.android.BuildConfig.DEBUG) { "debug only" }
+        check(debug) { "debug only" }
         return changeCount(habitId, shownDate, forge = true) { kind, c, _ -> if (kind == COUNT) c + 1 else 1 }
     }
 
