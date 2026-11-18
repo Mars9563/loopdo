@@ -92,6 +92,7 @@ object OpMapper {
         "tasks" to setOf("evidence", "repeat_rule"),
         "profiles" to setOf("settings"),
         "habit_schedules" to setOf("weekdays", "evidence"),
+        "weekly_focus" to setOf("evidence"),
     )
 
     /** Decided by the server (from the token or its own rules); never sent, or the API refuses the op. */

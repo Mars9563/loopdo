@@ -72,6 +72,9 @@ class TodayData(private val db: PowerSyncDatabase) {
     /** For the actions: the settings history right now (not a watched copy). */
     suspend fun versionsNow(): List<DaySettingsVersion> = db.getAll(versionsSql) { version(it) }
 
+    /** The settings history, watched (M8 stats). */
+    fun versionsFlow(): kotlinx.coroutines.flow.Flow<List<DaySettingsVersion>> = db.watch(versionsSql) { version(it) }
+
     private val journalDaysSql = JOURNAL_DAYS_SQL
 
     fun rows(): Flow<TodayRows> {

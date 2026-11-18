@@ -41,6 +41,8 @@ object LoopDoSchema {
             columns = t("user_id", "entry_id", "stamped_at", "text", "edited_at", "deleted_at") + i("sort_order") + stamps,
             trackPreviousValues = TrackPreviousValuesOptions(columnFilter = listOf("edited_at")),
         ),
+        // M8: the weekly focus (1–2 promises a week; removed = deleted_at). evidence proves the day it was set.
+        Table("weekly_focus", t("user_id", "week_start", "kind", "item_id", "title", "deadline", "deleted_at", "evidence") + i("goal", "sort_order") + stamps),
         Table("journal_photos", t("user_id", "entry_id", "r2_key", "added_at") + i("width", "height", "bytes", "sort_order") + stamps),
         // Local-only: never uploaded.
         Table.localOnly("drafts", t("kind", "payload", "reason", "created_at")),
