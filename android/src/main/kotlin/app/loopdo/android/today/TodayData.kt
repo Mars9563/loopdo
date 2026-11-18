@@ -26,6 +26,8 @@ data class TodayRows(
     val lists: List<ListRow>,
     val journalDays: Set<LocalDate>,
     val activeDays: Set<LocalDate>,
+    /** M8: live weekly focus rows. */
+    val focus: List<app.loopdo.shared.stats.Focus> = emptyList(),
 )
 
 /** Postgres timestamptz as PowerSync syncs it ("2026-11-15 13:12:00+00") or ISO-8601. */
@@ -107,6 +109,12 @@ class TodayData(private val db: PowerSyncDatabase) {
                    UNION SELECT completed_on FROM tasks WHERE completed_on IS NOT NULL
                    UNION $journalDaysSql""",
             ) { it.date(0)!! },
+            db.watch("SELECT id, week_start, kind, item_id, title, goal, deadline FROM weekly_focus WHERE deleted_at IS NULL") {
+                app.loopdo.shared.stats.Focus(
+                    it.str(0)!!, it.date(1)!!, if (it.str(2) == "task") app.loopdo.shared.stats.FocusKind.TASK else app.loopdo.shared.stats.FocusKind.HABIT,
+                    it.str(3)!!, it.str(4)!!, it.getLong(5)?.toInt(), it.date(6),
+                )
+            },
         )
         @Suppress("UNCHECKED_CAST")
         return combine(flows) { r ->
@@ -120,6 +128,7 @@ class TodayData(private val db: PowerSyncDatabase) {
                 lists = r[6] as List<ListRow>,
                 journalDays = (r[7] as List<LocalDate>).toSet(),
                 activeDays = (r[8] as List<LocalDate>).toSet(),
+                focus = r[9] as List<app.loopdo.shared.stats.Focus>,
             )
         }
     }
@@ -138,6 +147,6 @@ fun TodayRows.toModel(now: Instant): Pair<TodayModel, Instant>? {
         now = now, dateAt = dateAt, dayEndAt = end,
         since = onboardedAt?.let(dateAt)?.coerceAtMost(today) ?: today,
         habits = habits, schedules = schedules, logs = logs, tasks = tasks, lists = lists,
-        journalDays = journalDays, activeDays = activeDays,
+        journalDays = journalDays, activeDays = activeDays, focus = focus,
     ) to end
 }

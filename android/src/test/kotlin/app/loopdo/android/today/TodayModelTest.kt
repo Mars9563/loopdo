@@ -168,4 +168,35 @@ class TodayModelTest {
         )
         assertEquals(emptyList<String>(), m.late.filter { it.title == "water plants" }.map { it.id })
     }
+
+    // --- M8: the weekly focus marked on Today (locked weekly-review-v1, mock C) ---------------------------------
+
+    private val week = d(9) // mon 9 – sun 15 nov
+    private fun withFocus(vararg f: app.loopdo.shared.stats.Focus, extraLogs: List<LogRow> = emptyList()) = buildToday(
+        now = now, dateAt = istAt, dayEndAt = dayEndInstant(d(14), ist), since = since,
+        habits = habits, schedules = schedules, logs = logs + extraLogs, tasks = tasks, lists = lists,
+        journalDays = emptySet(), activeDays = emptySet(), focus = f.toList(),
+    )
+
+    @Test
+    fun focusHabitGetsWeekProgress() {
+        val f = app.loopdo.shared.stats.Focus("f", week, app.loopdo.shared.stats.FocusKind.HABIT, "gym", "gym", 4, null)
+        val m = withFocus(f, extraLogs = listOf(LogRow("gym", d(9), 1), LogRow("gym", d(11), 1)))
+        assertEquals(FocusMark(2, 4), m.habitsOpen.single { it.id == "gym" }.focus)
+        assertEquals(null, m.habitsOpen.single { it.id == "water" }.focus)
+    }
+
+    @Test
+    fun focusTaskMarked() {
+        val f = app.loopdo.shared.stats.Focus("f", week, app.loopdo.shared.stats.FocusKind.TASK, "i2", "fix bike brake", null, d(15))
+        val m = withFocus(f)
+        assertTrue(m.inbox.single { it.id == "i2" }.focus)
+        assertEquals(listOf("i2"), m.inbox.filter { it.focus }.map { it.id })
+    }
+
+    @Test
+    fun lastWeeksFocusNotMarked() {
+        val f = app.loopdo.shared.stats.Focus("f", week.minusDays(7), app.loopdo.shared.stats.FocusKind.HABIT, "gym", "gym", 4, null)
+        assertEquals(null, withFocus(f).habitsOpen.single { it.id == "gym" }.focus)
+    }
 }

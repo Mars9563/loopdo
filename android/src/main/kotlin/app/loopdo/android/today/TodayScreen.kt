@@ -259,7 +259,9 @@ private fun TodaySections(m: TodayModel, vm: TodayUi, extras: TodayExtras?) {
             false, h.title, onClick = { if (isCount) vm.complete(h) else vm.tick(h) },
             onLongClick = if (isCount) ({ countSheet = h }) else null,
             onName = extras?.let { e -> { e.onOpenHabit(h.id) } },
+            focus = h.focus != null,
         ) {
+            h.focus?.let { f -> Text("${f.done}/${f.goal} this week", style = LoopDoType.small.copy(color = LoopDoColors.dim)) }
             when {
                 isCount -> {
                     Text("${h.count}/${h.target}" + h.unit.orEmpty().let { if (it.isEmpty()) "" else " $it" }, style = LoopDoType.small)
@@ -330,7 +332,7 @@ private fun TodaySections(m: TodayModel, vm: TodayUi, extras: TodayExtras?) {
 private fun TaskLine(t: TaskItem, vm: TodayUi, extras: TodayExtras?) {
     TaskRow(t, vm, extras) {
         if (!t.done) {
-            val tag = listOfNotNull(t.dueTime?.let { "@$it" }, t.listName?.let { "# $it" }).joinToString(" ")
+            val tag = listOfNotNull(t.dueTime?.let { "@$it" }, if (t.focus) "focus" else t.listName?.let { "# $it" }).joinToString(" ")
             if (tag.isNotEmpty()) Text(tag, style = LoopDoType.small.copy(color = LoopDoColors.dim), maxLines = 1)
         }
     }
@@ -367,7 +369,7 @@ private fun TaskRow(t: TaskItem, vm: TodayUi, extras: TodayExtras?, trailing: @C
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(if (t.done) "[x]" else "[ ]", style = LoopDoType.body.copy(color = color))
-        Text(t.title, style = LoopDoType.body.copy(color = color), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(focusTitle(t.title, t.focus && !t.done), style = LoopDoType.body.copy(color = color), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         trailing()
     }
 }
@@ -401,7 +403,7 @@ private fun Toggle(label: String, onClick: () -> Unit) = Row(Modifier.fillMaxWid
 @Composable
 private fun CheckRow(
     done: Boolean, title: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null,
-    onName: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {},
+    onName: (() -> Unit)? = null, focus: Boolean = false, trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val color = if (done) LoopDoColors.done else LoopDoColors.text
     val tick by androidx.compose.runtime.rememberUpdatedState(onClick)
@@ -430,9 +432,15 @@ private fun CheckRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(if (done) "[x]" else "[ ]", style = LoopDoType.body.copy(color = color))
-        Text(title, style = LoopDoType.body.copy(color = color), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(focusTitle(title, focus), style = LoopDoType.body.copy(color = color), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         trailing()
     }
+}
+
+/** M8 (locked weekly-review-v1, mock C): a focus item's name gets an accent `›`. */
+private fun focusTitle(title: String, focus: Boolean) = androidx.compose.ui.text.buildAnnotatedString {
+    if (focus) withStyle(androidx.compose.ui.text.SpanStyle(color = LoopDoColors.accent)) { append("› ") }
+    append(title)
 }
 
 /**

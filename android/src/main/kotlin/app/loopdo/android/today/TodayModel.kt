@@ -45,13 +45,20 @@ data class StreakLine(val journal: Int, val perfect: Int, val active: Int, val f
 data class HabitItem(
     val id: String, val title: String, val kind: HabitKind, val count: Int, val target: Int, val streak: Int, val reminderTime: LocalTime?,
     val step: Int = 1, val unit: String? = null,
+    /** M8: this week's focus on this habit — done days so far / the goal (null = not a focus). */
+    val focus: FocusMark? = null,
 )
+
+/** M8: a focus habit's progress this week ("2/4 this week" on Today). */
+data class FocusMark(val done: Int, val goal: Int)
 /** [listId] and [due] are for the long-press menu (M5). */
 data class TaskItem(
     val id: String, val title: String, val lateSince: LocalDate?, val listName: String?, val dueTime: LocalTime?, val done: Boolean,
     val listId: String? = null, val due: LocalDate? = null,
     /** A repeating task's other missed copies (shown as "missed N" on its one late copy). */
     val missed: Int = 0,
+    /** M8: a focus of this week (an accent `›` and a dim "focus" on Today). */
+    val focus: Boolean = false,
 )
 data class ListGroup(val id: String, val name: String, val items: List<TaskItem>)
 
@@ -86,8 +93,11 @@ fun buildToday(
     lists: List<ListRow>,
     journalDays: Set<LocalDate>,
     activeDays: Set<LocalDate>,
+    /** M8: the live weekly focus rows (any week; only this week's are marked). */
+    focus: List<app.loopdo.shared.stats.Focus> = emptyList(),
 ): TodayModel {
     val today = dateAt(now)
+    val thisWeek = focus.filter { it.weekStart == app.loopdo.shared.stats.weekStart(today) }
     val schedulesBy = schedules.groupBy { it.habitId }
     val logsBy = logs.groupBy { it.habitId }
     val shared = habits.map { h ->
@@ -105,11 +115,19 @@ fun buildToday(
     val items = dueToday.map { (row, h) ->
         val count = logsBy[row.id].orEmpty().filter { it.date == today }.maxOfOrNull { it.count } ?: 0
         val streak = computeStreak(habitOutcomes(h, sharedLogs[row.id].orEmpty(), today)).current
-        HabitItem(row.id, row.title, row.kind, count, targetOn(h, today), streak, row.reminderTime, row.step, row.unit)
+        val mark = thisWeek.firstOrNull { it.kind == app.loopdo.shared.stats.FocusKind.HABIT && it.itemId == row.id }?.let { f ->
+            val input = app.loopdo.shared.stats.WeekInput(listOf(app.loopdo.shared.stats.StatHabit(h, row.title, row.sortOrder)), sharedLogs, emptyList(), emptySet())
+            (app.loopdo.shared.stats.focusResult(f, input, today) as app.loopdo.shared.stats.FocusResult.Habit).let { FocusMark(it.done, it.goal) }
+        }
+        HabitItem(row.id, row.title, row.kind, count, targetOn(h, today), streak, row.reminderTime, row.step, row.unit, mark)
     }
 
     val listNames = lists.associate { it.id to it.name }
-    fun item(t: TaskRow) = TaskItem(t.id, t.title, lateSince(t.dueDate, t.completedOn, today), t.listId?.let(listNames::get), t.dueTime, t.completedOn != null, t.listId, t.dueDate)
+    val focusTasks = thisWeek.filter { it.kind == app.loopdo.shared.stats.FocusKind.TASK }.map { it.itemId }.toSet()
+    fun item(t: TaskRow) = TaskItem(
+        t.id, t.title, lateSince(t.dueDate, t.completedOn, today), t.listId?.let(listNames::get), t.dueTime, t.completedOn != null, t.listId, t.dueDate,
+        focus = t.id in focusTasks,
+    )
     val ordered = tasks.sortedWith(compareBy({ it.sortOrder }, { it.title }))
     val states = ordered.associateWith { taskState(it.dueDate, it.completedOn, today) }
 
