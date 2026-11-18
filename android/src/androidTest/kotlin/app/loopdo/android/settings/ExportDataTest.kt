@@ -29,6 +29,7 @@ class ExportDataTest {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         db = PowerSyncDatabase(DatabaseDriverFactory(ctx), LoopDoSchema.schema, dbFilename = "test-${UUID.randomUUID()}.db")
         db.execute("INSERT INTO day_settings_versions (id, effective_at, time_zone, day_end) VALUES (?, '1970-01-01T00:00:00Z', 'Asia/Kolkata', '04:00')", listOf(UUID.randomUUID().toString()))
+        Unit
     }
 
     @After
