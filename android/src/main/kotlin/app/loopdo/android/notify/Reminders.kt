@@ -114,7 +114,7 @@ class ReminderScheduler(
         val now = trustedNow()
         val input = data.input(now)
         val snoozes = old.filter { it.ping == Ping.SNOOZE && it.fireAt > now }
-        val plan = planReminders(now, input) + snoozes
+        val plan = planReminders(now, input).filterNot { silenced(it, snoozes) } + snoozes
         val keys = plan.map { it.key }.toSet()
         old.filter { it.key !in keys }.forEach { alarms.cancel(it.key) }
         plan.forEach { alarms.set(it.key, elapsedFor(it.fireAt)) }
@@ -132,6 +132,10 @@ class ReminderScheduler(
         store.pruneShown(day.minusDays(1))
     }
 
+    /** [p] is another ping of a snoozed item, due before its snooze rings. */
+    private fun silenced(p: Reminder, snoozes: List<Reminder>) =
+        p.ping != Ping.SNOOZE && snoozes.any { it.ping == Ping.SNOOZE && notificationId(it) == notificationId(p) && p.fireAt < it.fireAt }
+
     /** An alarm went off: show [key]'s reminder if it still applies. */
     suspend fun fire(key: String) = lock.withLock {
         if (key in store.shown()) return@withLock // already shown by a catch-up
@@ -148,7 +152,10 @@ class ReminderScheduler(
             poster.cancel(id)
             if (at == null) return@withLock // it would ring after the day ends
             val s = r.copy(key = reminderKey(r.kind, r.itemId, r.date, Ping.SNOOZE), fireAt = at, ping = Ping.SNOOZE)
-            store.setScheduled(store.scheduled().filter { it.key != s.key } + s)
+            // A snooze means quiet until it rings: the item's pings before it are dropped (owner's test, 2026-11-18).
+            val quiet = store.scheduled().filter { it.key == s.key || silenced(it, listOf(s)) }
+            quiet.filter { it.key != s.key }.forEach { alarms.cancel(it.key) }
+            store.setScheduled(store.scheduled() - quiet.toSet() + s)
             store.unmarkShown(s.key)
             alarms.set(s.key, elapsedFor(at))
             return@withLock

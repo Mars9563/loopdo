@@ -306,6 +306,24 @@ class RemindersTest {
     }
 
     @Test
+    fun snoozeSilencesTheItemsEarlierPings() = runBlocking {
+        val t = UUID.randomUUID().toString()
+        db.execute("INSERT INTO tasks (id, title, due_date, due_time, sort_order) VALUES (?, 'pay rent', '2026-11-18', '18:00', 0)", listOf(t))
+        scheduler.replan()
+        now = Instant.parse("2026-11-18T12:20:00Z") // 17:50 IST: the 10-min ping
+        val before = reminderKey(ReminderKind.TASK, t, d18, Ping.BEFORE)
+        val at = reminderKey(ReminderKind.TASK, t, d18, Ping.AT)
+        scheduler.fire(before)
+        scheduler.act("snooze", before, 1) // until 18:20, so the 18:00 ping must stay quiet
+        assertFalse(at in alarms.set.keys)
+        scheduler.replan()
+        assertFalse(at in alarms.set.keys)
+        now = Instant.parse("2026-11-18T12:30:00Z")
+        scheduler.fire(at) // an alarm already on its way
+        assertTrue(poster.posted.isEmpty())
+    }
+
+    @Test
     fun staleTapSaysTheDayHasEnded() = runBlocking {
         val gym = habit("gym", "18:00")
         shownAt1820(key(gym))
