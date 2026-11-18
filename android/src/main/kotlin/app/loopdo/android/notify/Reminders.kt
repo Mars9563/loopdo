@@ -76,6 +76,8 @@ interface AlarmSetter {
 interface Poster {
     fun post(id: Int, shown: Shown, r: Reminder): Boolean
     fun cancel(id: Int)
+    /** Every reminder notification (sign-out, another account). */
+    fun cancelAll()
 }
 
 class ReminderScheduler(
@@ -87,6 +89,8 @@ class ReminderScheduler(
     private val today: suspend () -> LocalDate?,
     private val trustedNow: () -> Instant,
     private val elapsedNow: () -> Long,
+    /** True only when nobody is signed in (or another account is blocked); false while the session is still loading. */
+    private val signedOut: suspend () -> Boolean = { true },
     /** A button's habit/task change, through the widget's commands (same rules, trusted clock, time proof). */
     private val tap: suspend (WidgetTap) -> TapResult = { TapResult.FAILED },
 ) {
@@ -99,7 +103,10 @@ class ReminderScheduler(
         val day = today()
         val old = store.scheduled()
         if (day == null) {
-            old.forEach { alarms.cancel(it.key); poster.cancel(notificationId(it)) }
+            // Still loading (a cold boot): keep everything; the next redraw plans again (final review, minor 3).
+            if (!signedOut()) return@withLock
+            old.forEach { alarms.cancel(it.key) }
+            poster.cancelAll() // also those caught up earlier (final review I1)
             alarms.cancel(REPLAN)
             store.clear()
             return@withLock
@@ -117,15 +124,17 @@ class ReminderScheduler(
         old.filter { it.key in store.shown() && it.key !in missed.map { m -> m.key } }.forEach { r ->
             if (decide(r, data.state(r), day, quiet = false) == null) poster.cancel(notificationId(r))
         }
-        // Today's reminders that were shown stay known, so their buttons work and a later replan can still clear them.
-        val shownToday = old.filter { it.key in store.shown() && it.date == day && it.key !in keys }
-        store.setScheduled(plan + shownToday)
-        store.pruneShown(day.minusDays(1))
         missed.forEach { show(it, day, now) }
+        // Today's reminders that were shown (caught-up ones included) stay known, so their buttons work and a
+        // later replan can still clear them when the item is done elsewhere (final review I1).
+        val shown = store.shown()
+        store.setScheduled(plan + old.filter { it.key in shown && it.date == day && it.key !in keys })
+        store.pruneShown(day.minusDays(1))
     }
 
     /** An alarm went off: show [key]'s reminder if it still applies. */
     suspend fun fire(key: String) = lock.withLock {
+        if (key in store.shown()) return@withLock // already shown by a catch-up
         val r = store.scheduled().firstOrNull { it.key == key } ?: return@withLock
         show(r, today(), trustedNow())
     }
@@ -249,6 +258,7 @@ class AndroidPoster(private val context: Context) : Poster {
         )
 
     override fun cancel(id: Int) = NotificationManagerCompat.from(context).cancel(id)
+    override fun cancelAll() = NotificationManagerCompat.from(context).cancelAll()
 }
 
 const val ACTION_FIRE = "app.loopdo.android.notify.FIRE"

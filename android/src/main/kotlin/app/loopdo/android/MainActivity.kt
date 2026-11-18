@@ -64,6 +64,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     /** Where a launch asked to go (tab, habit, task). Also set by onNewIntent: the app may already be open. */
     private val link = kotlinx.coroutines.flow.MutableStateFlow<Link?>(null)
 
+    /** A link is handed to the signed-in app once: after the app lock it must not open the same writer again (M7 review). */
+    fun linkHandedOver(l: Link) { link.compareAndSet(l, null) }
+
     /** Fingerprint or the phone's PIN/pattern (BiometricPrompt); success opens the app. */
     fun askToUnlock(graph: AppGraph) {
         // The phone can't ask any more (its screen lock was removed): switch the lock off rather than trap the
@@ -196,7 +199,7 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     // A link is handed to its tab once; the tab clears it when it has opened it, so switching tabs
     // and coming back doesn't open the same task or habit again.
     var pending by remember { mutableStateOf<Link?>(null) }
-    androidx.compose.runtime.LaunchedEffect(link) { link?.let { tab = it.tab ?: tab; pending = it } }
+    androidx.compose.runtime.LaunchedEffect(link) { link?.let { tab = it.tab ?: tab; pending = it; activity.linkHandedOver(it) } }
     val todayVm = viewModel { graph.todayViewModel() }
     val habitsVm = viewModel { graph.habitsViewModel() }
     val tasksVm = viewModel { graph.tasksViewModel() }

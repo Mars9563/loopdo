@@ -187,6 +187,7 @@ class AppGraph(context: android.content.Context) {
             today = { (widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready)?.model?.date },
             trustedNow = { trustedClock.now().instant },
             elapsedNow = { android.os.SystemClock.elapsedRealtime() },
+            signedOut = { sync.blocked.value != null || auth.session.value is app.loopdo.android.auth.AuthState.SignedOut },
         ) { widgetCommands.handle(it) }
     }
 

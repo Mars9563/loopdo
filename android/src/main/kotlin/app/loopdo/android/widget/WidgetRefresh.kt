@@ -77,6 +77,9 @@ class WidgetRefreshReceiver : BroadcastReceiver() {
         graph.scope.launch {
             try {
                 graph.redrawWidget()
+                // M7: plan the reminders before the receiver finishes; after a boot the process may be killed as
+                // soon as it is idle, before the replan redrawWidget only launches (final review I2).
+                runCatching { graph.reminders.replan() }
             } finally {
                 done.finish()
             }

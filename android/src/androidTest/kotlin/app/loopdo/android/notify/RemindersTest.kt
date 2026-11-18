@@ -46,12 +46,14 @@ class RemindersTest {
         override fun cancel(key: String) { set.remove(key); cancelled += key }
     }
     private val taps = mutableListOf<WidgetTap>()
+    private var signedOut = true
     private val poster = object : Poster {
         var enabled = true
         val posted = mutableMapOf<Int, Shown>()
         val cancelled = mutableListOf<Int>()
         override fun post(id: Int, shown: Shown, r: Reminder): Boolean { if (!enabled) return false; posted[id] = shown; return true }
         override fun cancel(id: Int) { posted.remove(id); cancelled += id }
+        override fun cancelAll() { posted.clear() }
     }
 
     @Before
@@ -65,7 +67,7 @@ class RemindersTest {
         db.execute("INSERT INTO journal_entries (id, loopdo_date, text) VALUES (?, '2026-11-18', 'x')", listOf(UUID.randomUUID().toString()))
         db.execute("INSERT INTO journal_entries (id, loopdo_date, text) VALUES (?, '2026-11-19', 'x')", listOf(UUID.randomUUID().toString()))
         store = ReminderStore(ctx.getSharedPreferences("test-reminders-${UUID.randomUUID()}", Context.MODE_PRIVATE))
-        scheduler = ReminderScheduler(ReminderData(db), store, alarms, poster, today = { today }, trustedNow = { now }, elapsedNow = { elapsed }) { t ->
+        scheduler = ReminderScheduler(ReminderData(db), store, alarms, poster, today = { today }, trustedNow = { now }, elapsedNow = { elapsed }, signedOut = { signedOut }) { t ->
             taps += t
             if (t.date != today) TapResult.STALE else {
                 when (t.kind) { // stands in for the widget's actions (tested in WidgetCommandsTest)
@@ -170,6 +172,51 @@ class RemindersTest {
         poster.posted.clear()
         scheduler.replan()
         assertTrue(poster.posted.isEmpty())
+    }
+
+    @Test
+    fun caughtUpNotificationIsClearedWhenDoneElsewhere() = runBlocking {
+        val gym = habit("gym", "18:00")
+        scheduler.replan()
+        now = Instant.parse("2026-11-18T12:50:00Z") // the phone was off through 18:00
+        scheduler.replan()
+        assertEquals(1, poster.posted.size)
+        tick(gym)
+        scheduler.replan()
+        assertTrue(poster.posted.isEmpty())
+    }
+
+    @Test
+    fun alarmAfterCatchUpDoesNotRingAgain() = runBlocking {
+        val gym = habit("gym", "18:00")
+        scheduler.replan()
+        now = Instant.parse("2026-11-18T12:50:00Z")
+        scheduler.replan()
+        poster.posted.clear()
+        scheduler.fire(key(gym)) // the late alarm itself arrives after the catch-up
+        assertTrue(poster.posted.isEmpty())
+    }
+
+    @Test
+    fun signOutClearsCaughtUpNotificationsToo() = runBlocking {
+        habit("gym", "18:00")
+        scheduler.replan()
+        now = Instant.parse("2026-11-18T12:50:00Z")
+        scheduler.replan()
+        today = null
+        scheduler.replan()
+        assertTrue(poster.posted.isEmpty())
+    }
+
+    @Test
+    fun slowStartDoesNotWipe() = runBlocking {
+        val gym = habit("gym", "18:00")
+        scheduler.replan()
+        today = null
+        signedOut = false // the saved session is still loading after a reboot
+        scheduler.replan()
+        assertTrue(key(gym) in alarms.set.keys)
+        assertTrue(store.scheduled().any { it.key == key(gym) })
     }
 
     @Test
