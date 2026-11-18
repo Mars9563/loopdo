@@ -36,7 +36,8 @@ fun taskDeadline(due: LocalDate?, weekStart: LocalDate): LocalDate {
 }
 
 sealed interface FocusResult {
-    data class Habit(val done: Int, val goal: Int) : FocusResult
+    /** [left] = the week's due days still to come (today included while open): could the goal still be met? */
+    data class Habit(val done: Int, val goal: Int, val left: Int = 0) : FocusResult
     data class Task(val completedOn: LocalDate?, val deadline: LocalDate) : FocusResult
 }
 
@@ -48,7 +49,12 @@ fun FocusResult.kept(): Boolean = when (this) {
 fun focusResult(f: Focus, input: WeekInput, today: LocalDate): FocusResult = when (f.kind) {
     FocusKind.HABIT -> {
         val h = input.habits.firstOrNull { it.habit.id == f.itemId }
-        FocusResult.Habit(h?.let { habitWeek(it, input.logs[it.habit.id].orEmpty(), f.weekStart, today).done } ?: 0, f.goal ?: 1)
+        val week = h?.let { habitWeek(it, input.logs[it.habit.id].orEmpty(), f.weekStart, today) }
+        val left = if (h == null) 0 else (0L until 7L).map { f.weekStart.plusDays(it) }.count { d ->
+            (d > today || week!!.cells[(d.toEpochDay() - f.weekStart.toEpochDay()).toInt()] == Cell.OPEN) &&
+                (h.habit.archivedOn == null || d < h.habit.archivedOn) && isDue(h.habit.schedules, d)
+        }
+        FocusResult.Habit(week?.done ?: 0, f.goal ?: 1, left)
     }
     FocusKind.TASK -> FocusResult.Task(
         input.tasks.firstOrNull { it.id == f.itemId }?.completedOn?.takeIf { it <= today },
@@ -64,7 +70,7 @@ fun focusLine(f: Focus, r: FocusResult, today: LocalDate): String {
     return when (r) {
         is FocusResult.Habit -> "${f.title} ${r.goal}×  →  ${r.done}/${r.goal}" + when {
             r.kept() -> " ✓"
-            !weekOver -> " so far"
+            !weekOver && r.done + r.left >= r.goal -> " so far" // the review on a sunday evening says it plainly (locked mock A)
             else -> " · missed by ${r.goal - r.done}"
         }
         is FocusResult.Task -> "${f.title}  →  " + when {

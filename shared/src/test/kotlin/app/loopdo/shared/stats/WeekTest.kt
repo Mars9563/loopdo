@@ -116,4 +116,19 @@ class WeekTest {
         assertEquals(2, w.perfectDays) // mon, wed
         assertEquals(4, w.activeDays)
     }
+
+    @Test fun hiddenHabitCountsForPerfectDaysButIsNotListed() {
+        val habits = listOf(habit("a"), StatHabit(Habit("gone", HabitKind.YES_NO, 1, daily), "gone", 1, hidden = true))
+        val w = weekReview(input(habits, mapOf("a" to ticks(0, 1))), mon, nextMon)
+        assertEquals(listOf("a"), w.habits.map { it.title })
+        assertEquals(0, w.perfectDays) // "gone" was due and not done, as the perfect-day streak counts it
+        assertEquals(2 to 7, w.done to w.total)
+    }
+
+    @Test fun previousWeekNumberAcrossTheYear() {
+        val firstOf2027 = LocalDate.of(2027, 1, 4)
+        val w = weekReview(input(emptyList()), firstOf2027, firstOf2027.plusDays(7))
+        assertEquals(1, w.number)
+        assertEquals(53, w.prevNumber)
+    }
 }

@@ -97,4 +97,19 @@ class FocusTest {
         assertEquals("pay rent  →  not done", focusLine(f, open, d(7)))
         assertEquals("pay rent  →  due wed", focusLine(f, open, d(1)))
     }
+
+    @Test fun sundayVerdictWhenTheGoalCanNoLongerBeReached() {
+        // gym is due mon/wed/fri/sat; done mon, wed, fri; missed sat. On sunday (not a gym day) 4 can't be reached.
+        val logs = listOf(HabitLog(d(0), 1), HabitLog(d(2), 1), HabitLog(d(4), 1))
+        val r = focusResult(focusHabit(4), input(logs), d(6))
+        assertEquals("gym 4×  →  3/4 · missed by 1", focusLine(focusHabit(4), r, d(6)))
+        // On wednesday, with fri and sat still to come, it can: "so far".
+        val mid = focusResult(focusHabit(4), input(listOf(HabitLog(d(0), 1))), d(2))
+        assertEquals("gym 4×  →  1/4 so far", focusLine(focusHabit(4), mid, d(2)))
+    }
+
+    @Test fun focusOnAHiddenHabitStillCounts() {
+        val hidden = WeekInput(listOf(StatHabit(gym, "gym", 0, hidden = true)), mapOf("gym" to (0..6).map { HabitLog(d(it), 1) }), emptyList(), emptySet())
+        assertTrue(focusResult(focusHabit(4), hidden, d(7)).kept())
+    }
 }

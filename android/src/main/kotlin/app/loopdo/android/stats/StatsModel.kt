@@ -69,8 +69,8 @@ fun buildReview(rows: StatsRows, today: LocalDate, weekStart: LocalDate?): Revie
     val results = promises.map { it to focusResult(it, rows.input, today) }
     val next = start.plusDays(7)
     val canEdit = focusWindowOpen(next, today)
-    val picker = rows.input.habits.sortedBy { it.sortOrder }
-        .filter { h -> (0L until 7L).any { isDue(h.habit.schedules, next.plusDays(it)) } }
+    val picker = rows.input.habits.filter { !it.hidden }.sortedBy { it.sortOrder }
+        .filter { h -> (0L until 7L).map { next.plusDays(it) }.any { d -> (h.habit.archivedOn == null || d < h.habit.archivedOn) && isDue(h.habit.schedules, d) } }
         .map { h -> defaultGoal(h.habit, next).let { g -> PickItem(FocusKind.HABIT, h.habit.id, h.title, g, null, "$g due") } } +
         rows.input.tasks.filter { it.completedOn == null }.sortedWith(compareBy(nullsLast()) { it.due }).map { t ->
             val due = t.due
@@ -94,6 +94,13 @@ fun buildReview(rows: StatsRows, today: LocalDate, weekStart: LocalDate?): Revie
         canGoForward = start < reviewWeekFor(today),
         picker = picker,
     )
+}
+
+/** "16–22 nov", or "30 nov–6 dec" across months. */
+fun weekRange(start: LocalDate): String {
+    val end = start.plusDays(6)
+    val f = java.time.format.DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
+    return (if (start.month == end.month) "${start.dayOfMonth}–${end.format(f)}" else "${start.format(f)}–${end.format(f)}").lowercase()
 }
 
 /** Opening the review on a Sunday silences that Sunday's 20:00 ping (spec §4.3); any other day doesn't. */

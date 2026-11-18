@@ -99,4 +99,9 @@ class StatsModelTest {
         val p = buildStats(rows(), wed, year = 2026, mode = PixelMode.PERFECT, last30 = true)
         assertEquals(2, p.pixels[10][15]) // gym done on 16 nov: a perfect day
     }
+
+    @Test fun weekRangeAcrossMonths() {
+        assertEquals("16–22 nov", weekRange(w47))
+        assertEquals("30 nov–6 dec", weekRange(LocalDate.of(2026, 11, 30)))
+    }
 }

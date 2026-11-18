@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.loopdo.shared.day.dateResolver
 import app.loopdo.shared.stats.PixelMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,17 +33,18 @@ class StatsViewModel(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
-    private val shared = rows.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    // M8 review: built off the main thread, and only while the stats tab is on screen.
+    private val shared = rows.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private fun today(r: StatsRows) = dateResolver(r.versions)(now())
 
     val stats: StateFlow<StatsUi?> = combine(shared, mode, year, last30) { r, m, y, l ->
         if (r == null || r.versions.isEmpty()) null else today(r).let { t -> buildStats(r, t, y ?: t.year, m, l) }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val review: StateFlow<ReviewUi?> = combine(shared, reviewWeek) { r, (open, week) ->
         if (!open || r == null || r.versions.isEmpty()) null else buildReview(r, today(r), week)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun setMode(m: PixelMode) { mode.value = m }
     fun shiftYear(by: Int) { stats.value?.let { year.value = it.year + by } }

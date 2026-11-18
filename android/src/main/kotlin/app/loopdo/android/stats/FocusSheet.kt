@@ -50,7 +50,7 @@ internal fun FocusSheet(r: ReviewUi, onPick: (PickItem, Int?) -> Unit, onCancel:
         ) {
             Row(Modifier.fillMaxWidth().height(36.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("~/focus ", style = LoopDoType.title.copy(color = LoopDoColors.accent))
-                Text("${r.nextWeek.dayOfMonth}–${end.format(DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)).lowercase()}", style = LoopDoType.title, modifier = Modifier.weight(1f))
+                Text(weekRange(r.nextWeek), style = LoopDoType.title, modifier = Modifier.weight(1f))
                 Text("${r.next.size + 1} of 2", style = LoopDoType.small.copy(color = LoopDoColors.dim))
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {

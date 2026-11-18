@@ -55,8 +55,8 @@ internal fun ReviewScreen(r: ReviewUi, vm: StatsViewModel) {
                     withStyle(SpanStyle(color = LoopDoColors.accent)) { append("~/stats/") }
                     append("review")
                 }, style = LoopDoType.title, modifier = Modifier.weight(1f))
-                Bracket("< ${w.number - 1}", idle = true) { vm.page(-1) }
-                if (r.canGoForward) Bracket("${w.number + 1} >", idle = true) { vm.page(1) }
+                Bracket("< ${w.prevNumber}", idle = true) { vm.page(-1) }
+                if (r.canGoForward) Bracket("${app.loopdo.shared.stats.isoWeek(w.start.plusDays(7))} >", idle = true) { vm.page(1) }
             }
             Text(buildAnnotatedString {
                 append(weekTitle(w))
@@ -100,8 +100,7 @@ internal fun ReviewScreen(r: ReviewUi, vm: StatsViewModel) {
                 }
             }
             DashedRule(Modifier.padding(vertical = 6.dp))
-            val end = r.nextWeek.plusDays(6)
-            SectionLabel("next week · ${r.nextWeek.dayOfMonth}–${end.format(dayMonth).lowercase()}") { Text(r.nextNote, style = LoopDoType.label) }
+            SectionLabel("next week · ${weekRange(r.nextWeek)}") { Text(r.nextNote, style = LoopDoType.label) }
             Column(
                 Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     .border(1.dp, LoopDoColors.accent.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
@@ -116,7 +115,10 @@ internal fun ReviewScreen(r: ReviewUi, vm: StatsViewModel) {
                         if (r.canEdit) Bracket("×", idle = true) { vm.removeFocus(f.id) }
                     }
                 }
-                if (r.canEdit && r.next.size < 2) Bracket("+ focus", primary = true) { picking = true }
+                if (r.canEdit && r.next.size < 2) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Bracket("+ focus", primary = true) { picking = true }
+                    Text("sun or mon only", style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                }
                 if (r.next.isEmpty() && !r.canEdit) Text("the focus can be set on sunday or monday.", style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(vertical = 8.dp))
             }
             message?.let { Text(it, style = LoopDoType.small.copy(color = LoopDoColors.warn), modifier = Modifier.padding(vertical = 6.dp)) }
@@ -155,6 +157,6 @@ private fun WeekGrid(r: ReviewUi) {
                     modifier = Modifier.width(44.dp), textAlign = TextAlign.End)
             }
         }
-        Text("█ done · ▢ missed · ❄\uFE0E freeze · · not due · ○ open today", style = LoopDoType.small.copy(color = LoopDoColors.dim, fontSize = 10.sp))
+        Text("█ done · ▢ missed · ❄\uFE0E freeze · · not due · ○ still open today", style = LoopDoType.small.copy(color = LoopDoColors.dim, fontSize = 10.sp))
     }
 }

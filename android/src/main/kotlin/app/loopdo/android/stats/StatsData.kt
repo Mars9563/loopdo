@@ -32,14 +32,15 @@ data class StatsRows(
 private fun SqlCursor.date(i: Int) = getString(i)?.let { LocalDate.parse(it.take(10)) }
 
 class StatsData(private val db: PowerSyncDatabase) {
-    private class HabitRow(val id: String, val title: String, val count: Boolean, val target: Int, val archivedOn: LocalDate?, val order: Int)
+    private class HabitRow(val id: String, val title: String, val count: Boolean, val target: Int, val archivedOn: LocalDate?, val order: Int, val hidden: Boolean)
 
     fun rows(): Flow<StatsRows> {
         val flows: List<Flow<List<Any>>> = listOf(
             TodayData(db).versionsFlow(),
-            // Deleted-forever habits are hidden everywhere (their history still counts for the day streaks).
-            db.watch("SELECT id, title, kind, target, archived_on, sort_order FROM habits WHERE deleted_at IS NULL") {
-                HabitRow(it.getString(0)!!, it.getString(1)!!, it.getString(2) == "count", (it.getLong(3)?.toInt() ?: 1).coerceAtLeast(1), it.date(4), it.getLong(5)?.toInt() ?: 0)
+            // Deleted-forever habits are hidden from per-habit rows, but still count for perfect days and promises
+            // (as the perfect-day streak counts them; M8 review).
+            db.watch("SELECT id, title, kind, target, archived_on, sort_order, deleted_at FROM habits") {
+                HabitRow(it.getString(0)!!, it.getString(1)!!, it.getString(2) == "count", (it.getLong(3)?.toInt() ?: 1).coerceAtLeast(1), it.date(4), it.getLong(5)?.toInt() ?: 0, it.getString(6) != null)
             },
             db.watch("SELECT habit_id, valid_from, recurrence, weekdays, target FROM habit_schedules") {
                 it.getString(0)!! to HabitSchedule(it.date(1)!!, parseRecurrence(it.getString(2)), parseWeekdays(it.getString(3)), it.getLong(4)?.toInt())
@@ -69,7 +70,7 @@ class StatsData(private val db: PowerSyncDatabase) {
         return combine(flows) { r ->
             val schedules = (r[2] as List<Pair<String, HabitSchedule>>).groupBy({ it.first }, { it.second })
             val habits = (r[1] as List<HabitRow>).map { h ->
-                StatHabit(Habit(h.id, if (h.count) HabitKind.COUNT else HabitKind.YES_NO, h.target, schedules[h.id].orEmpty(), h.archivedOn), h.title, h.order)
+                StatHabit(Habit(h.id, if (h.count) HabitKind.COUNT else HabitKind.YES_NO, h.target, schedules[h.id].orEmpty(), h.archivedOn), h.title, h.order, h.hidden)
             }
             StatsRows(
                 versions = r[0] as List<DaySettingsVersion>,

@@ -122,6 +122,10 @@ class UploaderTest {
             SetAside("BACKDATED", keptDraft = true).message(),
         )
         assertEquals("the server refused a change (BAD_OP), so it was undone.", SetAside("BAD_OP", keptDraft = false).message())
+        // M8 (review): the weekly focus refusals in plain words.
+        assertEquals("the focus can only change on sunday or monday, so that change was undone.", SetAside("FOCUS_CLOSED", false).message())
+        assertEquals("that week already has 2 focus items, so this one was undone.", SetAside("FOCUS_FULL", false).message())
+        assertEquals("that focus couldn't be saved as it was, so it was undone.", SetAside("INVALID_FOCUS", false).message())
     }
 
     @Test

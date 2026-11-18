@@ -72,17 +72,13 @@ internal fun KeyValue(key: String, value: @Composable () -> Unit) {
 
 private val dayMonth = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 
-internal fun weekTitle(w: WeekReview): String {
-    val end = w.start.plusDays(6)
-    val range = if (w.start.month == end.month) "${w.start.dayOfMonth}–${end.format(dayMonth)}" else "${w.start.format(dayMonth)}–${end.format(dayMonth)}"
-    return "week ${w.number} · ${range.lowercase()}"
-}
+internal fun weekTitle(w: WeekReview): String = "week ${w.number} · ${weekRange(w.start)}"
 
 internal fun doneLine(w: WeekReview, vsWeek: Boolean = false) = buildAnnotatedString {
     withStyle(SpanStyle(color = LoopDoColors.bright)) { append("${w.done}/${w.total}") }
     withStyle(SpanStyle(color = LoopDoColors.dim)) {
         append(" ${w.percent}%")
-        w.deltaPoints?.let { d -> append(" · ${if (d >= 0) "▲" else "▼"}${abs(d)}%"); if (vsWeek) append(" vs ${w.number - 1}") }
+        w.deltaPoints?.let { d -> append(" · ${if (d >= 0) "▲" else "▼"}${abs(d)}%"); if (vsWeek) append(" vs ${w.prevNumber}") }
     }
 }
 

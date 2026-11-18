@@ -51,7 +51,7 @@ private fun avgDiff(a: List<Int>, b: List<Int>): Double? =
 fun moodVsHabits(moods: Map<LocalDate, Int>, journalDays: Set<LocalDate>, input: WeekInput, today: LocalDate): List<MoodRow>? {
     val window = (1L..MOOD_WINDOW).map { today.minusDays(it) }.filter { it in moods }.toSet()
     if (window.size < MOOD_DAYS_NEEDED) return null
-    val rows = input.habits.sortedBy { it.sortOrder }.mapNotNull { h ->
+    val rows = input.habits.filter { !it.hidden }.sortedBy { it.sortOrder }.mapNotNull { h ->
         val outcomes = habitOutcomes(h.habit, input.logs[h.habit.id].orEmpty(), today).filter { it.first in window }
         val done = outcomes.filter { it.second == DayOutcome.SUCCESS }.map { moods.getValue(it.first) }
         val missed = outcomes.filter { it.second == DayOutcome.MISS }.map { moods.getValue(it.first) }
@@ -66,7 +66,7 @@ data class Completion(val title: String, val percent: Int)
 /** Per habit: done ÷ (done + missed) — a frozen day is a miss, today counts only once done. Last 30 days or all time. */
 fun completion(input: WeekInput, today: LocalDate, last30: Boolean): List<Completion> {
     val from = if (last30) today.minusDays(29) else LocalDate.MIN
-    return input.habits.sortedBy { it.sortOrder }.mapNotNull { h ->
+    return input.habits.filter { !it.hidden }.sortedBy { it.sortOrder }.mapNotNull { h ->
         val o = habitOutcomes(h.habit, input.logs[h.habit.id].orEmpty(), today).filter { it.first >= from }
         val done = o.count { it.second == DayOutcome.SUCCESS }
         val total = done + o.count { it.second == DayOutcome.MISS }

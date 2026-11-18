@@ -150,6 +150,9 @@ fun SetAside.message(): String {
         "FUTURE" -> "that tick was dated in the future, so it was undone."
         "BEFORE_LAST_ANCHOR" -> "that tick was older than the phone's last time check, so it was undone."
         "SERVER_ERROR" -> "the server kept failing on a change for a day, so it was undone."
+        "FOCUS_CLOSED" -> "the focus can only change on sunday or monday, so that change was undone."
+        "FOCUS_FULL" -> "that week already has 2 focus items, so this one was undone."
+        "INVALID_FOCUS" -> "that focus couldn't be saved as it was, so it was undone."
         else -> "the server refused a change ($code), so it was undone."
     }
     return if (keptDraft) "$what your text is saved as a draft." else what
