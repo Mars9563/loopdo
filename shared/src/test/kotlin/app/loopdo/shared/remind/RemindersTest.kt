@@ -32,7 +32,8 @@ class RemindersTest {
     private fun input(
         habits: List<HabitPlan> = emptyList(), done: Set<Pair<String, LocalDate>> = emptySet(), tasks: List<TaskPlan> = emptyList(),
         series: List<SeriesPlan> = emptyList(), journal: Set<LocalDate> = setOf(d18, d19), v: List<DaySettingsVersion> = versions,
-    ) = ReminderInput(v, habits, done, tasks, series, journal)
+        prefs: ReminderPrefs = ReminderPrefs(),
+    ) = ReminderInput(v, habits, done, tasks, series, journal, prefs)
     private fun List<Reminder>.of(kind: ReminderKind) = filter { it.kind == kind }
 
     @Test fun habitPingsTenBeforeAndAt() {
@@ -171,5 +172,41 @@ class RemindersTest {
         assertEquals(listOf(LocalDate.of(2026, 11, 22) to at(2026, 11, 22, 20)), rs.map { it.date to it.fireAt })
         assertEquals("week_review:-:2026-11-22:at", rs.single().key)
         assertEquals(emptyList(), planReminders(noon, input()).of(ReminderKind.WEEK_REVIEW)) // wed + thu: none
+    }
+
+    // --- M9: the owner's reminder settings ---------------------------------------------------------------------
+
+    @Test fun kindOffPlansNothing() {
+        val rs = planReminders(noon, input(habits = listOf(habit("gym", "18:00")), journal = emptySet(), prefs = ReminderPrefs(habits = false)))
+        assertEquals(emptyList(), rs.of(ReminderKind.HABIT))
+        assertEquals(2, rs.of(ReminderKind.JOURNAL).size) // the others still ring
+        val none = planReminders(noon, input(journal = emptySet(), prefs = ReminderPrefs(journal = false, dayEnd = false)))
+        assertEquals(emptyList(), none.of(ReminderKind.JOURNAL) + none.of(ReminderKind.DAY_END))
+    }
+
+    @Test fun journalAtFromPrefs() {
+        val rs = planReminders(noon, input(journal = emptySet(), prefs = ReminderPrefs(journalAt = LocalTime.of(22, 30)))).of(ReminderKind.JOURNAL)
+        assertEquals(at(2026, 11, 18, 22, 30), rs.first().fireAt)
+    }
+
+    @Test fun dayEndLeadFromPrefs() {
+        val rs = planReminders(noon, input(prefs = ReminderPrefs(dayEndLead = java.time.Duration.ofMinutes(30)))).of(ReminderKind.DAY_END)
+        assertEquals(at(2026, 11, 19, 3, 30), rs.first().fireAt)
+    }
+
+    @Test fun weekReviewAtFromPrefs() {
+        val rs = planReminders(at(2026, 11, 22, 12), input(prefs = ReminderPrefs(weekReviewAt = LocalTime.of(19, 0)))).of(ReminderKind.WEEK_REVIEW)
+        assertEquals(at(2026, 11, 22, 19), rs.single().fireAt)
+        assertEquals(emptyList(), planReminders(at(2026, 11, 22, 12), input(prefs = ReminderPrefs(weekReview = false))).of(ReminderKind.WEEK_REVIEW))
+    }
+
+    @Test fun prefsFromFieldsDefaultsAndBadValues() {
+        assertEquals(ReminderPrefs(), reminderPrefs())
+        assertEquals(
+            ReminderPrefs(habits = false, journalAt = LocalTime.of(22, 30), dayEnd = false, dayEndLead = java.time.Duration.ofMinutes(120), weekReviewAt = LocalTime.of(19, 0)),
+            reminderPrefs(habits = false, journalAt = "22:30", dayEnd = false, leadMinutes = 120, weekReviewAt = "19:00"),
+        )
+        assertEquals(DAY_END_LEAD, reminderPrefs(leadMinutes = 45).dayEndLead) // only 30/60/120
+        assertEquals(JOURNAL_AT, reminderPrefs(journalAt = "25:99").journalAt)
     }
 }

@@ -48,7 +48,38 @@ data class ReminderInput(
     val series: List<SeriesPlan>,
     /** Days whose journal has something (the journal streak's rule). */
     val journalDays: Set<LocalDate>,
+    /** M9: the owner's reminder settings (synced in profiles.settings). */
+    val prefs: ReminderPrefs = ReminderPrefs(),
 )
+
+/** M9 (spec §3.3): on/off per kind and the three times. Habit and task times stay on each habit/task. */
+data class ReminderPrefs(
+    val habits: Boolean = true,
+    val tasks: Boolean = true,
+    val journal: Boolean = true,
+    val journalAt: LocalTime = JOURNAL_AT,
+    val dayEnd: Boolean = true,
+    val dayEndLead: Duration = DAY_END_LEAD,
+    val weekReview: Boolean = true,
+    val weekReviewAt: LocalTime = WEEK_REVIEW_AT,
+)
+
+/** The day-end warning can come 30 min, 1 h or 2 h before (spec §2.1). */
+val DAY_END_LEADS: List<Duration> = listOf(Duration.ofMinutes(30), Duration.ofMinutes(60), Duration.ofMinutes(120))
+
+/** Settings as stored (strings/numbers, maybe missing or odd) → prefs; anything missing or invalid keeps the default. */
+fun reminderPrefs(
+    habits: Boolean? = null, tasks: Boolean? = null, journal: Boolean? = null, journalAt: String? = null,
+    dayEnd: Boolean? = null, leadMinutes: Int? = null, weekReview: Boolean? = null, weekReviewAt: String? = null,
+): ReminderPrefs {
+    fun time(s: String?, default: LocalTime) = s?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: default
+    val d = ReminderPrefs()
+    return ReminderPrefs(
+        habits ?: d.habits, tasks ?: d.tasks, journal ?: d.journal, time(journalAt, d.journalAt),
+        dayEnd ?: d.dayEnd, leadMinutes?.let { m -> DAY_END_LEADS.firstOrNull { it.toMinutes() == m.toLong() } } ?: d.dayEndLead,
+        weekReview ?: d.weekReview, time(weekReviewAt, d.weekReviewAt),
+    )
+}
 
 val BEFORE: Duration = Duration.ofMinutes(10)
 val JOURNAL_AT: LocalTime = LocalTime.of(21, 0)
@@ -99,23 +130,24 @@ fun planReminders(now: Instant, input: ReminderInput): List<Reminder> {
         add(kind, id, day, at, Ping.AT)
     }
     val taskIds = input.tasks.map { it.id }.toSet()
+    val p = input.prefs
     for (day in days(now, input.versions)) {
-        for (h in input.habits) {
+        if (p.habits) for (h in input.habits) {
             val time = h.reminderTime ?: continue
             if (h.deleted || (h.archivedOn != null && day.date >= h.archivedOn)) continue
             if (!isDue(h.schedules, day.date) || (h.id to day.date) in input.doneHabits) continue
             twoPings(ReminderKind.HABIT, h.id, day, time)
         }
-        for (t in input.tasks) if (!t.done && t.dueDate == day.date) twoPings(ReminderKind.TASK, t.id, day, t.dueTime)
-        for (s in input.series) {
+        if (p.tasks) for (t in input.tasks) if (!t.done && t.dueDate == day.date) twoPings(ReminderKind.TASK, t.id, day, t.dueTime)
+        if (p.tasks) for (s in input.series) {
             val from = maxOf(s.start, s.generatedThrough?.plusDays(1) ?: s.start)
             if (day.date !in occurrences(s.rule, from, day.date)) continue
             val id = instanceId(s.templateId, day.date).toString()
             if (id !in taskIds) twoPings(ReminderKind.TASK, id, day, s.dueTime)
         }
-        if (day.date !in input.journalDays) add(ReminderKind.JOURNAL, null, day, reminderInstant(day.date, JOURNAL_AT, day.s), Ping.AT)
-        add(ReminderKind.DAY_END, null, day, day.end.minus(DAY_END_LEAD), Ping.AT)
-        if (day.date.dayOfWeek == java.time.DayOfWeek.SUNDAY) add(ReminderKind.WEEK_REVIEW, null, day, reminderInstant(day.date, WEEK_REVIEW_AT, day.s), Ping.AT)
+        if (p.journal && day.date !in input.journalDays) add(ReminderKind.JOURNAL, null, day, reminderInstant(day.date, p.journalAt, day.s), Ping.AT)
+        if (p.dayEnd) add(ReminderKind.DAY_END, null, day, day.end.minus(p.dayEndLead), Ping.AT)
+        if (p.weekReview && day.date.dayOfWeek == java.time.DayOfWeek.SUNDAY) add(ReminderKind.WEEK_REVIEW, null, day, reminderInstant(day.date, p.weekReviewAt, day.s), Ping.AT)
     }
     return out.sortedWith(compareBy<Reminder>({ it.fireAt }, { it.key }))
 }

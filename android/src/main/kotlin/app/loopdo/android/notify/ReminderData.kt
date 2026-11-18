@@ -23,6 +23,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
 
 /** What the reminders read from the phone's own database (M7): the planner's input, and an item's state when it fires. */
 class ReminderData(
@@ -85,10 +88,11 @@ class ReminderData(
                 )
             })
         }.flatten()
+        val settings = db.getOptional("SELECT settings FROM profiles LIMIT 1") { listOf(it.getString(0)) }?.firstOrNull()
         return ReminderInput(
             versions,
             habits.map { HabitPlan(it.id, it.time, it.schedules, it.archivedOn, it.deleted) },
-            done.toSet(), tasks, series, journalDays(),
+            done.toSet(), tasks, series, journalDays(), reminderPrefsFromSettings(settings),
         )
     }
 
@@ -130,4 +134,20 @@ class ReminderData(
             )
         }.flatten().firstOrNull() ?: ItemState.Gone
     }
+}
+
+/** profiles.settings JSON → the owner's reminder settings (M9, spec §3.3); missing or odd = the defaults. */
+fun reminderPrefsFromSettings(json: String?): app.loopdo.shared.remind.ReminderPrefs {
+    val r = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(json!!).jsonObject["reminders"]!!.jsonObject }.getOrNull()
+        ?: return app.loopdo.shared.remind.ReminderPrefs()
+    fun obj(k: String) = r[k] as? kotlinx.serialization.json.JsonObject
+    fun flag(e: kotlinx.serialization.json.JsonElement?) = (e as? kotlinx.serialization.json.JsonPrimitive)?.booleanOrNull
+    fun text(e: kotlinx.serialization.json.JsonElement?) = (e as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+    fun num(e: kotlinx.serialization.json.JsonElement?) = (e as? kotlinx.serialization.json.JsonPrimitive)?.intOrNull
+    return app.loopdo.shared.remind.reminderPrefs(
+        habits = flag(r["habits"]), tasks = flag(r["tasks"]),
+        journal = flag(obj("journal")?.get("on")), journalAt = text(obj("journal")?.get("at")),
+        dayEnd = flag(obj("dayEnd")?.get("on")), leadMinutes = num(obj("dayEnd")?.get("leadMinutes")),
+        weekReview = flag(obj("weekReview")?.get("on")), weekReviewAt = text(obj("weekReview")?.get("at")),
+    )
 }
