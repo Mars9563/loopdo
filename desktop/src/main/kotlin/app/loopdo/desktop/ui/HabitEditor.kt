@@ -56,7 +56,7 @@ fun Sheet(title: String, onClose: () -> Unit, content: @Composable () -> Unit) {
     val t = LocalType.current
     Box(Modifier.fillMaxSize().background(Color(0x73050810)).clickable(onClick = onClose, indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() })) {
         Column(
-            Modifier.align(Alignment.CenterEnd).width(430.dp).fillMaxHeight().background(Color(0xF0090F18)).dashedLeft()
+            Modifier.align(Alignment.CenterEnd).width(430.dp).fillMaxHeight().background(Color(0xFC090F18)).dashedLeft()
                 .clickable(enabled = false) {}.onPreviewKeyEvent { if (it.key == Key.Escape && it.type == KeyEventType.KeyDown) { onClose(); true } else false }
                 .padding(horizontal = 26.dp, vertical = 22.dp).verticalScroll(rememberScrollState()),
         ) {

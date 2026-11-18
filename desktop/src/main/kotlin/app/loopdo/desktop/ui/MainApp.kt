@@ -57,6 +57,12 @@ fun MainApp(g: DesktopGraph) {
     val hsnack by habits.message.collectAsState()
     var habitPick by remember { mutableStateOf<String?>(null) }
     var habitEditor by remember { mutableStateOf<String?>(null) } // null = closed, "" = new, else the habit's id
+    val tasks = remember { g.tasksViewModel() }
+    val tsnack by tasks.message.collectAsState()
+    val lists by tasks.lists.collectAsState()
+    val templates by tasks.templates.collectAsState()
+    var taskEditor by remember { mutableStateOf<String?>(null) } // null = closed, "" = new, else the task's id
+    val taskUi = remember { TaskBinding(today, tasks) { today.state.value?.date ?: java.time.LocalDate.now() } }
     val model by today.state.collectAsState()
     val jm by journal.state.collectAsState()
     val snack by today.snack.collectAsState()
@@ -64,10 +70,10 @@ fun MainApp(g: DesktopGraph) {
     var adding by remember { mutableStateOf(false) }
     val status = savedLine(g)
     val rootFocus = remember { FocusRequester() }
-    LaunchedEffect(place, adding, habitEditor) { if (!Typing.active && !adding && habitEditor == null) runCatching { rootFocus.requestFocus() } }
-    Box(Modifier.fillMaxSize().rootKeys(rootFocus, adding || habitEditor != null) { c ->
+    LaunchedEffect(place, adding, habitEditor, taskEditor) { if (!Typing.active && !adding && habitEditor == null && taskEditor == null) runCatching { rootFocus.requestFocus() } }
+    Box(Modifier.fillMaxSize().rootKeys(rootFocus, adding || habitEditor != null || taskEditor != null) { c ->
         when (c) {
-            'n' -> { place = Place.TODAY; adding = true }
+            'n' -> { place = Place.TODAY; taskEditor = "" }
             'w' -> place = Place.JOURNAL
             else -> placeForKey(c)?.let { place = it }
         }
@@ -83,7 +89,7 @@ fun MainApp(g: DesktopGraph) {
             when (place) {
                 Place.TODAY -> model?.let { m ->
                     TodayPane(m, today, jm?.today, focusLine(m.habitsOpen + m.habitsDone, m.dueToday + m.late + m.inbox),
-                        onWrite = { place = Place.JOURNAL }, onAdd = { adding = true },
+                        onWrite = { place = Place.JOURNAL }, onAdd = { taskEditor = "" }, onOpenTask = { taskEditor = it }, onDeleteList = { id -> tasks.deleteList(id) {} },
                         writer = jm?.let { j -> {
                             val v by journalUi.draftVersion.collectAsState()
                             val wd = remember(v, j.today.date) { writerDate(j.today.date, journalUi) }
@@ -107,16 +113,27 @@ fun MainApp(g: DesktopGraph) {
                 onDelete = { row?.let { habits.deleteForever(java.util.UUID.fromString(it.id)) { habitEditor = null; habitPick = null } } },
                 onClose = { habitEditor = null })
         }
+        val openTask = taskEditor
+        if (place == Place.TODAY && openTask != null) model?.let { m ->
+            val detail = openTask.takeIf { it.isNotEmpty() }?.let { id -> remember(id) { tasks.task(id) }.collectAsState(null).value }
+            if (openTask.isEmpty() || detail != null) {
+                val steps = openTask.takeIf { it.isNotEmpty() }?.let { id -> remember(id) { tasks.subtasks(id) }.collectAsState(emptyList()).value }.orEmpty()
+                val seriesRule = detail?.templateId?.let { tid -> templates.firstOrNull { it.id == tid }?.rule }
+                androidx.compose.runtime.key(openTask, detail?.id) {
+                    TaskEditor(detail, seriesRule, steps, lists, m.date, taskUi) { taskEditor = null }
+                }
+            }
+        }
         if (adding) model?.let { m ->
             AddLine(onDone = { adding = false }) { text, done ->
                 today.addTask(text, null, null, null, null, m.date, onSaved = done)
             }
         }
-        (snack?.let { it.text to it.id } ?: jsnack?.let { it.text to it.id } ?: hsnack?.let { it.text to it.id })?.let { (text, id) ->
+        (snack?.let { it.text to it.id } ?: jsnack?.let { it.text to it.id } ?: hsnack?.let { it.text to it.id } ?: tsnack?.let { it.text to it.id })?.let { (text, id) ->
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp).background(Color(0xF0090F18), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
                 BasicText(text, style = LocalType.current.small.copy(color = Fern.ink))
             }
-            LaunchedEffect(id) { delay(4_000); today.dismissSnack(id); journal.dismiss(id); habits.dismiss(id) }
+            LaunchedEffect(id) { delay(4_000); today.dismissSnack(id); journal.dismiss(id); habits.dismiss(id); tasks.dismiss(id) }
         }
     }
 }

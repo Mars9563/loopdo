@@ -58,14 +58,15 @@ fun Label(left: String, right: String = "", leftColor: androidx.compose.ui.graph
 
 /** One 34 dp row: box, title, a right-aligned meta. */
 @Composable
-fun ItemRow(box: String, title: AnnotatedString, done: Boolean = false, onBox: (() -> Unit)? = null, meta: @Composable () -> Unit = {}) {
+fun ItemRow(box: String, title: AnnotatedString, done: Boolean = false, onBox: (() -> Unit)? = null, onTitle: (() -> Unit)? = null, meta: @Composable () -> Unit = {}) {
     val t = LocalType.current
     Row(Modifier.fillMaxWidth().height(34.dp), verticalAlignment = Alignment.CenterVertically) {
         if (box.isNotEmpty()) {
             BasicText(box, style = t.body.copy(color = if (done) Fern.moss else Fern.lichen), modifier = if (onBox != null) Modifier.clickable(onClick = onBox) else Modifier)
             Spacer(Modifier.width(10.dp))
         }
-        BasicText(title, style = t.body.copy(color = if (done) Fern.moss else Fern.ink), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        BasicText(title, style = t.body.copy(color = if (done) Fern.moss else Fern.ink), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).then(if (onTitle != null) Modifier.clickable(onClick = onTitle) else Modifier))
         Spacer(Modifier.width(8.dp))
         meta()
     }
@@ -78,7 +79,10 @@ private fun focusTitle(title: String, focus: Boolean) = buildAnnotatedString {
 
 /** The locked desktop-v1 A: header, streak + focus line, habits | tasks | today's journal. */
 @Composable
-fun TodayPane(m: TodayModel, ui: TodayUi, journal: DayView?, focusLine: String, onWrite: () -> Unit, onAdd: (String) -> Unit, writer: (@Composable () -> Unit)? = null) {
+fun TodayPane(
+    m: TodayModel, ui: TodayUi, journal: DayView?, focusLine: String, onWrite: () -> Unit, onAdd: (String) -> Unit,
+    writer: (@Composable () -> Unit)? = null, onOpenTask: (String) -> Unit = {}, onDeleteList: (String) -> Unit = {},
+) {
     val t = LocalType.current
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.height(40.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -106,7 +110,7 @@ fun TodayPane(m: TodayModel, ui: TodayUi, journal: DayView?, focusLine: String, 
                 HabitsColumn(m, ui)
             }
             Column(Modifier.weight(1f).fillMaxHeight().dashedRight().padding(top = 14.dp, start = 26.dp, end = 26.dp).verticalScroll(rememberScrollState())) {
-                TasksColumn(m, ui, onAdd)
+                TasksColumn(m, ui, onAdd, onOpenTask, onDeleteList)
             }
             Column(Modifier.weight(1.05f).fillMaxHeight().padding(top = 14.dp, start = 26.dp).verticalScroll(rememberScrollState())) {
                 JournalColumn(journal, onWrite, writer)
@@ -148,31 +152,45 @@ private fun HabitLine(h: HabitItem, ui: TodayUi, done: Boolean) {
 }
 
 @Composable
-private fun ColumnScope.TasksColumn(m: TodayModel, ui: TodayUi, onAdd: (String) -> Unit) {
+private fun ColumnScope.TasksColumn(m: TodayModel, ui: TodayUi, onAdd: (String) -> Unit, onOpen: (String) -> Unit, onDeleteList: (String) -> Unit) {
     val t = LocalType.current
     if (m.late.isNotEmpty()) {
         Label("late", "${m.late.size}", leftColor = Fern.ember)
-        m.late.forEach { task -> TaskLine(task, ui) { BasicText(task.lateSince?.let { "since ${it.short()}" } ?: "late", style = t.small.copy(color = Fern.ember)) } }
+        m.late.forEach { task -> TaskLine(task, ui, onOpen) { BasicText(task.lateSince?.let { "since ${it.short()}" } ?: "late", style = t.small.copy(color = Fern.ember)) } }
         Spacer(Modifier.height(14.dp))
     }
     val left = m.dueToday.count { !it.done }
     Label("today", "$left left")
     if (m.dueToday.isEmpty()) BasicText("nothing due today.", style = t.small)
-    m.dueToday.forEach { task -> TaskLine(task, ui) { BasicText(if (task.focus) "focus" else task.listName?.let { "# $it" } ?: task.dueTime?.format(hm).orEmpty(), style = t.small) } }
+    m.dueToday.forEach { task -> TaskLine(task, ui, onOpen) { BasicText(if (task.focus) "focus" else task.listName?.let { "# $it" } ?: task.dueTime?.format(hm).orEmpty(), style = t.small) } }
     Spacer(Modifier.height(14.dp))
     Label("inbox", "${m.inbox.size}")
     if (m.inbox.isEmpty()) BasicText("inbox is empty. [+ add] puts tasks here.", style = t.small)
-    m.inbox.forEach { task -> TaskLine(task, ui) { BasicText(task.due?.short().orEmpty(), style = t.small) } }
+    m.inbox.forEach { task -> TaskLine(task, ui, onOpen) { BasicText(task.due?.short().orEmpty(), style = t.small) } }
     if (m.lists.isNotEmpty()) {
         Spacer(Modifier.height(14.dp))
         Label("lists")
-        m.lists.forEach { l -> ItemRow("", AnnotatedString("# ${l.name}")) { BasicText("${l.items.size}", style = t.small) } }
+        m.lists.forEach { l -> ListGroupRows(l, ui, onOpen, onDeleteList) }
     }
 }
 
 @Composable
-private fun TaskLine(task: TaskItem, ui: TodayUi, meta: @Composable () -> Unit) =
-    ItemRow(if (task.done) "[x]" else "[ ]", focusTitle(task.title, task.focus), task.done, onBox = { ui.toggleTask(task) }) { if (!task.done) meta() }
+private fun TaskLine(task: TaskItem, ui: TodayUi, onOpen: (String) -> Unit, meta: @Composable () -> Unit) =
+    ItemRow(if (task.done) "[x]" else "[ ]", focusTitle(task.title, task.focus), task.done, onBox = { ui.toggleTask(task) }, onTitle = { onOpen(task.id) }) { if (!task.done) meta() }
+
+/** `# work 3 [>]`: click to open the list's tasks under it; right-click to delete the list (its tasks go to the inbox). */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun ListGroupRows(l: app.loopdo.client.today.ListGroup, ui: TodayUi, onOpen: (String) -> Unit, onDelete: (String) -> Unit) {
+    val t = LocalType.current
+    var open by remember { mutableStateOf(false) }
+    androidx.compose.foundation.ContextMenuArea(items = { listOf(androidx.compose.foundation.ContextMenuItem("delete list") { onDelete(l.id) }) }) {
+        ItemRow("", AnnotatedString("# ${l.name}"), onTitle = { open = !open }) {
+            BasicText("${l.items.size} ${if (open) "[^]" else "[>]"}", style = t.small, modifier = Modifier.clickable { open = !open })
+        }
+    }
+    if (open) Column(Modifier.padding(start = 16.dp)) { l.items.forEach { task -> TaskLine(task, ui, onOpen) { BasicText(task.due?.short().orEmpty(), style = t.small) } } }
+}
 
 @Composable
 private fun ColumnScope.JournalColumn(day: DayView?, onWrite: () -> Unit, writer: (@Composable () -> Unit)?) {

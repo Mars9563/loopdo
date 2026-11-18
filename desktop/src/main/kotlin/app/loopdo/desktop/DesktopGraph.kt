@@ -98,6 +98,8 @@ class DesktopGraph(val dataDir: File) {
         photoFile = { id, path -> photoCache.file(id, path) }, uploadSoon = { photoLoop.kick() }, drafts = drafts,
     )
 
+    fun tasksViewModel() = app.loopdo.client.tasks.TasksViewModel(app.loopdo.client.tasks.TaskData(sync.db), taskActions)
+
     fun habitsViewModel() = app.loopdo.client.habits.HabitsViewModel(todayData.rows(), habitActions) { trustedClock.now().instant }
 
     fun todayViewModel() = TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
