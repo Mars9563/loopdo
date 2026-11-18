@@ -141,5 +141,31 @@ class TodayModelTest {
         assertTrue((m.habitsOpen + m.habitsDone).none { it.id == "gym" })
         assertEquals(build().streaks.perfect, m.streaks.perfect) // the hidden gym still counts for perfect days
     }
-}
 
+    // Owner, 2026-11-18: a daily series missed for days shows ONE late copy with "missed N"; every copy stays (stats).
+    @Test
+    fun missedDaysCollapseIntoOneLateCopy() {
+        val series = (8..13).map { day -> TaskRow("w$day", null, "water plants", d(day), null, null, 10, templateId = "w", occurrence = d(day)) }
+        val m = buildToday(
+            now = now, dateAt = istAt, dayEndAt = dayEndInstant(d(14), ist), since = since,
+            habits = habits, schedules = schedules, logs = logs, tasks = tasks + series, lists = lists,
+            journalDays = emptySet(), activeDays = setOf(d(14)),
+        )
+        val water = m.late.filter { it.title == "water plants" }
+        assertEquals(listOf("w13" to 5), water.map { it.id to it.missed }) // the newest copy, 5 others missed
+        assertEquals(listOf("pay rent"), m.late.filter { it.title != "water plants" }.map { it.title }) // one-off tasks unchanged
+    }
+
+    @Test
+    fun copiesBeforeTheLastTickedOneStayMissed() {
+        // Ticking the late copy (the 13th) leaves the older ones as misses: they don't come back one by one.
+        val series = (8..12).map { day -> TaskRow("w$day", null, "water plants", d(day), null, null, 10, templateId = "w", occurrence = d(day), seriesDoneThrough = d(13)) } +
+            TaskRow("w13", null, "water plants", d(13), null, d(14), 10, templateId = "w", occurrence = d(13), seriesDoneThrough = d(13))
+        val m = buildToday(
+            now = now, dateAt = istAt, dayEndAt = dayEndInstant(d(14), ist), since = since,
+            habits = habits, schedules = schedules, logs = logs, tasks = tasks + series, lists = lists,
+            journalDays = emptySet(), activeDays = setOf(d(14)),
+        )
+        assertEquals(emptyList<String>(), m.late.filter { it.title == "water plants" }.map { it.id })
+    }
+}

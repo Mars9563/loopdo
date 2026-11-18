@@ -29,7 +29,14 @@ data class HabitRow(
 )
 data class ScheduleRow(val habitId: String, val validFrom: LocalDate, val recurrence: Recurrence, val weekdays: Set<DayOfWeek>, val target: Int? = null)
 data class LogRow(val habitId: String, val date: LocalDate, val count: Int, val verified: Boolean = true)
-data class TaskRow(val id: String, val listId: String?, val title: String, val dueDate: LocalDate?, val dueTime: LocalTime?, val completedOn: LocalDate?, val sortOrder: Int)
+/**
+ * [templateId] / [occurrence]: a repeating task's copy; [seriesDoneThrough] = the latest occurrence of its series
+ * that was ticked (older open copies stay as misses, owner 2026-11-18).
+ */
+data class TaskRow(
+    val id: String, val listId: String?, val title: String, val dueDate: LocalDate?, val dueTime: LocalTime?, val completedOn: LocalDate?, val sortOrder: Int,
+    val templateId: String? = null, val occurrence: LocalDate? = null, val seriesDoneThrough: LocalDate? = null,
+)
 data class ListRow(val id: String, val name: String, val sortOrder: Int)
 
 // What the today screen shows (docs/design/app, screen 1).
@@ -43,6 +50,8 @@ data class HabitItem(
 data class TaskItem(
     val id: String, val title: String, val lateSince: LocalDate?, val listName: String?, val dueTime: LocalTime?, val done: Boolean,
     val listId: String? = null, val due: LocalDate? = null,
+    /** A repeating task's other missed copies (shown as "missed N" on its one late copy). */
+    val missed: Int = 0,
 )
 data class ListGroup(val id: String, val name: String, val items: List<TaskItem>)
 
@@ -114,7 +123,7 @@ fun buildToday(
             active = computeStreak(activeDayOutcomes(activeDays, since, today)).current,
             freezes = journal.freezesHeld,
         ),
-        late = ordered.filter { states[it] == TaskState.LATE }.sortedBy { it.dueDate }.map(::item),
+        late = lateTasks(ordered.filter { states[it] == TaskState.LATE }, ::item),
         habitsOpen = items.filter { it.count < it.target },
         habitsDone = items.filter { it.count >= it.target },
         dueToday = ordered.filter { t ->
@@ -126,4 +135,19 @@ fun buildToday(
         },
         journalToday = today in journalDays,
     )
+}
+
+/**
+ * Owner, 2026-11-18: a repeating task missed for days shows ONE late copy, the newest, with "missed N" (the
+ * other open copies since the series was last ticked). Copies older than the last ticked one stay as misses
+ * (every copy is kept for the stats) and are not shown again. One-off tasks are listed as they are.
+ */
+internal fun lateTasks(late: List<TaskRow>, item: (TaskRow) -> TaskItem): List<TaskItem> {
+    val (copies, single) = late.partition { it.templateId != null }
+    val open = copies.filter { c -> c.seriesDoneThrough == null || c.occurrence == null || c.occurrence > c.seriesDoneThrough }
+    val collapsed = open.groupBy { it.templateId }.values.map { series ->
+        val newest = series.maxBy { it.dueDate!! }
+        newest to item(newest).copy(missed = series.size - 1)
+    }
+    return (single.map { it to item(it) } + collapsed).sortedBy { it.first.dueDate }.map { it.second }
 }

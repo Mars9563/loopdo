@@ -234,7 +234,9 @@ private fun TodaySections(m: TodayModel, vm: TodayUi, extras: TodayExtras?) {
         Label("LATE ${m.late.size}", color = LoopDoColors.warn)
         m.late.forEach { t ->
             TaskRow(t, vm, extras) {
-                Text("since " + t.lateSince!!.short().substringAfter(' '), style = LoopDoType.small.copy(color = LoopDoColors.warn))
+                // Owner, 2026-11-18: a series missed for days is one late copy with how many others were missed.
+                val missed = if (t.missed > 0) "missed ${t.missed} · " else ""
+                Text(missed + "since " + t.lateSince!!.short().substringAfter(' '), style = LoopDoType.small.copy(color = LoopDoColors.warn))
             }
         }
     }

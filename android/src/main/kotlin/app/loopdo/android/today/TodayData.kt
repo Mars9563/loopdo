@@ -88,9 +88,11 @@ class TodayData(private val db: PowerSyncDatabase) {
             },
             // Recurring templates are not tasks of their own (M4); long-done tasks are not shown.
             db.watch(
-                """SELECT id, list_id, title, due_date, due_time, completed_on, sort_order FROM tasks
-                   WHERE repeat_rule IS NULL AND (completed_on IS NULL OR completed_on >= date('now', '-3 days'))""",
-            ) { TaskRow(it.str(0)!!, it.str(1), it.str(2)!!, it.date(3), it.time(4), it.date(5), it.int(6)) },
+                """SELECT t.id, t.list_id, t.title, t.due_date, t.due_time, t.completed_on, t.sort_order, t.template_id, t.occurrence_date,
+                          (SELECT max(c.occurrence_date) FROM tasks c WHERE t.template_id IS NOT NULL AND c.template_id = t.template_id AND c.completed_on IS NOT NULL)
+                   FROM tasks t
+                   WHERE t.repeat_rule IS NULL AND (t.completed_on IS NULL OR t.completed_on >= date('now', '-3 days'))""",
+            ) { TaskRow(it.str(0)!!, it.str(1), it.str(2)!!, it.date(3), it.time(4), it.date(5), it.int(6), it.str(7), it.date(8), it.date(9)) },
             db.watch("SELECT id, name, sort_order FROM lists") { ListRow(it.str(0)!!, it.str(1)!!, it.int(2)) },
             db.watch(journalDaysSql) { it.date(0)!! },
             // Active day (spec 6.4): any habit tick, task completion or journal entry.
