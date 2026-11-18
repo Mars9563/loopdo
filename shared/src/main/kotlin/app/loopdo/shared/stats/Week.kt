@@ -41,7 +41,7 @@ data class WeekReview(
 
 private fun days(start: LocalDate) = (0L until 7L).map { start.plusDays(it) }
 
-private fun habitWeek(h: StatHabit, logs: List<HabitLog>, start: LocalDate, today: LocalDate): HabitWeek {
+internal fun habitWeek(h: StatHabit, logs: List<HabitLog>, start: LocalDate, today: LocalDate): HabitWeek {
     val outcomes = habitOutcomes(h.habit, logs, today)
     val byDate = outcomes.toMap()
     val frozen = computeStreak(outcomes).frozenDays
