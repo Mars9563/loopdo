@@ -108,7 +108,7 @@ fun OnboardingScreen(onboarding: Onboarding, settingsAlreadySaved: Boolean = fal
 }
 
 @Composable
-private fun ZonePicker(onPick: (String) -> Unit, onBack: () -> Unit) {
+internal fun ZonePicker(onPick: (String) -> Unit, onBack: () -> Unit) {
     var q by rememberSaveable { mutableStateOf("") }
     val results = remember(q) { if (q.isBlank()) Zones.all() else Zones.search(q) }
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().padding(horizontal = 22.dp)) {

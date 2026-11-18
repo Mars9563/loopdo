@@ -96,7 +96,7 @@ object OpMapper {
     )
 
     /** Decided by the server (from the token or its own rules); never sent, or the API refuses the op. */
-    private val serverOwned = setOf("user_id", "verified", "completed_on", "late_since", "created_at", "updated_at")
+    private val serverOwned = setOf("user_id", "verified", "completed_on", "late_since", "created_at", "updated_at", "delete_requested_at", "wipe_claimed_at")
 
     fun toJson(op: PendingOp): JsonObject = buildJsonObject {
         put("op", op.op)

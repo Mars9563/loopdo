@@ -107,6 +107,16 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         graph.scope.launch { runCatching { graph.reminders.replan() } }
     }
 
+    /** M9: Android's "save as" for the export ZIP; [onExportFile] gets the place the owner picked. */
+    private var onExportFile: ((android.net.Uri) -> Unit)? = null
+    private val exportDocument = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        uri?.let { onExportFile?.invoke(it) }
+    }
+    fun pickExportFile(today: java.time.LocalDate, onPicked: (android.net.Uri) -> Unit) {
+        onExportFile = onPicked
+        exportDocument.launch("loopdo-export-$today.zip")
+    }
+
     /** Asks for notifications once ever (M7, spec §5.2); later only the [⚙] row offers Android's settings. */
     fun askNotificationsOnce(): Boolean {
         val prefs = getSharedPreferences("reminders-ui", MODE_PRIVATE)
@@ -213,6 +223,8 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     val tasksVm = viewModel { graph.tasksViewModel() }
     val journalVm = viewModel { graph.journalViewModel() }
     val statsVm = viewModel { graph.statsViewModel() }
+    val settingsVm = viewModel { graph.settingsViewModel() }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var lockOn by remember { mutableStateOf(graph.appLock.enabled) }
     val toggleLock = {
         when {
@@ -233,7 +245,18 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
-                Tab.TODAY -> TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = handled, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock, notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() }) {
+                Tab.TODAY -> if (settingsOpen) app.loopdo.android.settings.SettingsScreen(
+                    settingsVm,
+                    app.loopdo.android.settings.SettingsHost(
+                        lockOn = lockOn, onToggleLock = toggleLock,
+                        notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() },
+                        onSignOut = { graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } } },
+                        onExport = {
+                            activity.pickExportFile(java.time.LocalDate.now()) { uri -> settingsVm.exportTo { activity.contentResolver.openOutputStream(uri) } }
+                        },
+                    ),
+                    onClose = { settingsOpen = false },
+                ) else TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = handled, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock, notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() }, onOpenSettings = { settingsOpen = true }) {
                     graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
                 }
                 Tab.JOURNAL -> app.loopdo.android.journal.JournalTab(journalVm, openWriter = pending?.write == true) { handled() }

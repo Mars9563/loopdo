@@ -246,6 +246,27 @@ class AppGraph(context: android.content.Context) {
     val reviewOpened by lazy { appContext.getSharedPreferences("stats", android.content.Context.MODE_PRIVATE) }
     fun reviewOpenedOn(sunday: java.time.LocalDate): Boolean = reviewOpened.getBoolean("reviewed:$sunday", false)
 
+    /** M9: ~/settings. */
+    fun settingsViewModel() = app.loopdo.android.settings.SettingsViewModel(
+        profile = sync.db.watch("SELECT display_name, settings, is_admin, delete_requested_at, wipe_claimed_at FROM profiles LIMIT 1") {
+            app.loopdo.android.settings.ProfileRow(
+                it.getString(0).orEmpty(), it.getString(1), (it.getLong(2) ?: 0L) != 0L,
+                it.getString(3)?.let { s -> app.loopdo.android.today.parseInstant(s) }, it.getString(4)?.let { s -> app.loopdo.android.today.parseInstant(s) },
+            )
+        }.map { it.firstOrNull() },
+        versions = todayData.versionsFlow(),
+        waiting = dataSafety.waiting(),
+        db = sync.db,
+        daySettings = app.loopdo.android.onboarding.KtorSettingsApi(http, token),
+        account = accountApi,
+        export = { out -> exportData.export(out, app.loopdo.shared.day.dateResolver(todayData.versionsNow())(trustedClock.now().instant)) },
+        now = { trustedClock.now().instant },
+        version = app.loopdo.android.BuildConfig.VERSION_NAME,
+    )
+    val dataSafety by lazy { app.loopdo.android.settings.DataSafety(sync.db, appContext) { trustedClock.now().instant } }
+    val accountApi by lazy { app.loopdo.android.settings.KtorAccountApi(http, token) }
+    val exportData by lazy { app.loopdo.android.settings.ExportData(sync.db) { id, path -> photoCache.file(id, path) } }
+
     fun statsViewModel() = app.loopdo.android.stats.StatsViewModel(
         app.loopdo.android.stats.StatsData(sync.db).rows(), focusActions, now = { trustedClock.now().instant },
     ) { today ->

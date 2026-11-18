@@ -77,11 +77,13 @@ class TodayExtras(
     /** M7: notifications refused → [⚙] offers Android's notification settings. */
     val notificationsOff: Boolean = false,
     val onAllowNotifications: () -> Unit = {},
+    /** M9: [⚙] opens ~/settings (lock, notifications and sign out moved there). */
+    val onOpenSettings: (() -> Unit)? = null,
 )
 
 /** Locked screen 1 (docs/design/app/app-screens-v2.html), plus the task editor, quick menu and lists (M5). [openTask] = a deep link. */
 @Composable
-fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onLinkHandled: () -> Unit = {}, onOpenHabit: (String) -> Unit = {}, lockOn: Boolean? = null, onToggleLock: () -> Unit = {}, notificationsOff: Boolean = false, onAllowNotifications: () -> Unit = {}, onSignOut: () -> Unit) {
+fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onLinkHandled: () -> Unit = {}, onOpenHabit: (String) -> Unit = {}, lockOn: Boolean? = null, onToggleLock: () -> Unit = {}, notificationsOff: Boolean = false, onAllowNotifications: () -> Unit = {}, onOpenSettings: (() -> Unit)? = null, onSignOut: () -> Unit) {
     val model by vm.state.collectAsStateWithLifecycle()
     val snack by vm.snack.collectAsStateWithLifecycle()
     val templates by tasks.templates.collectAsStateWithLifecycle()
@@ -104,7 +106,7 @@ fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewMod
                 TodayExtras(
                     repeating = today?.let { app.loopdo.android.tasks.repeatingRows(templates, it) }.orEmpty(),
                     onOpenTask = { route = "task:$it" }, onTaskMenu = { menu = it }, onOpenLists = { route = "lists" }, onOpenHabit = onOpenHabit, lockOn = lockOn, onToggleLock = onToggleLock,
-                    notificationsOff = notificationsOff, onAllowNotifications = onAllowNotifications,
+                    notificationsOff = notificationsOff, onAllowNotifications = onAllowNotifications, onOpenSettings = onOpenSettings,
                 ),
             )
         }
@@ -152,7 +154,7 @@ fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -
                     ),
                 )
                 model?.let { Text("⏳ " + it.endsIn.countdown(), style = LoopDoType.small.copy(color = LoopDoColors.dim)) }
-                Bracket("⚙", idle = !settingsOpen) { settingsOpen = !settingsOpen }
+                Bracket("⚙", idle = !settingsOpen) { extras?.onOpenSettings?.invoke() ?: run { settingsOpen = !settingsOpen } }
             }
             // Until the M9 settings screen, [⚙] offers sign out, and lists (M5).
             if (settingsOpen) BracketRow(

@@ -15,7 +15,7 @@ object LoopDoSchema {
     private val stamps = t("created_at", "updated_at")
 
     val schema = Schema(
-        Table("profiles", t("display_name", "onboarded_at", "settings") + i("is_admin") + stamps),
+        Table("profiles", t("display_name", "onboarded_at", "settings", "delete_requested_at", "wipe_claimed_at") + i("is_admin") + stamps),
         Table("day_settings_versions", t("user_id", "effective_at", "time_zone", "day_end", "floor_date") + stamps),
         // evidence: proof of when an archive was made, sent up only (the server checks it, never stores it).
         Table("habits", t("user_id", "title", "kind", "reminder_time", "archived_on", "unit", "deleted_at", "evidence") + i("target", "sort_order", "step") + stamps),
