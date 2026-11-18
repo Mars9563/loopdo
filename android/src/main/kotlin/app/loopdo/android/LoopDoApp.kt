@@ -130,6 +130,9 @@ class AppGraph(context: android.content.Context) {
         app.loopdo.android.widget.LoopDoWidget().updateAll(appContext)
         val ready = widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready
         widgetRefresher.schedule(ready?.model?.dayEndAt, trustedClock.now().instant)
+        // M7: every redraw trigger (a change, sync, sign-in/out, boot, clock change, app update) also re-plans the
+        // reminders. Launched, not awaited: a reminder button redraws from inside the scheduler's lock.
+        scope.launch { runCatching { reminders.replan() }.onFailure { android.util.Log.w("loopdo_remind", "replan failed", it) } }
     }
 
     init {
@@ -150,6 +153,7 @@ class AppGraph(context: android.content.Context) {
                     .onFailure { android.util.Log.w("loopdo_journal", "moving old journal text failed", it) }
             }
         }
+        runCatching { app.loopdo.android.notify.ensureChannels(appContext) }
         // Background sync every ~15 min while online (owner, 2026-11-16).
         runCatching { app.loopdo.android.sync.SyncWorker.schedule(appContext) }
         // Photos taken earlier (offline, or before a restart) go up as soon as there is a network.

@@ -55,9 +55,12 @@ import java.time.LocalDate
 import java.util.Locale
 import java.util.UUID
 
-/** Locked journal-log-v2: `~/journal 🔥 34d` with `[today] | [feed] | [calendar]`. */
+/**
+ * Locked journal-log-v2: `~/journal 🔥 34d` with `[today] | [feed] | [calendar]`.
+ * [openWriter]: open today's writer once (the journal reminder's [write], M7), then [onWriterOpened].
+ */
 @Composable
-fun JournalTab(vm: JournalViewModel) {
+fun JournalTab(vm: JournalViewModel, openWriter: Boolean = false, onWriterOpened: () -> Unit = {}) {
     val m by vm.state.collectAsStateWithLifecycle()
     val snack by vm.snack.collectAsStateWithLifecycle()
     var view by rememberSaveable { mutableStateOf("today") }
@@ -66,6 +69,7 @@ fun JournalTab(vm: JournalViewModel) {
     var draft by rememberSaveable { mutableStateOf("") }
     var draftLoaded by rememberSaveable { mutableStateOf<String?>(null) }
     var writerError by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(openWriter) { if (openWriter) { view = "today"; writing = true; writerError = null; onWriterOpened() } }
     /** "date|stored line" being edited, its new text, or deleted. */
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     var editText by rememberSaveable { mutableStateOf("") }

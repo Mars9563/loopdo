@@ -74,11 +74,14 @@ class TodayExtras(
     /** The app lock switch under [⚙] (M6); null = not offered. */
     val lockOn: Boolean? = null,
     val onToggleLock: () -> Unit = {},
+    /** M7: notifications refused → [⚙] offers Android's notification settings. */
+    val notificationsOff: Boolean = false,
+    val onAllowNotifications: () -> Unit = {},
 )
 
 /** Locked screen 1 (docs/design/app/app-screens-v2.html), plus the task editor, quick menu and lists (M5). [openTask] = a deep link. */
 @Composable
-fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onLinkHandled: () -> Unit = {}, onOpenHabit: (String) -> Unit = {}, lockOn: Boolean? = null, onToggleLock: () -> Unit = {}, onSignOut: () -> Unit) {
+fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewModel, openTask: OpenTask?, onLinkHandled: () -> Unit = {}, onOpenHabit: (String) -> Unit = {}, lockOn: Boolean? = null, onToggleLock: () -> Unit = {}, notificationsOff: Boolean = false, onAllowNotifications: () -> Unit = {}, onSignOut: () -> Unit) {
     val model by vm.state.collectAsStateWithLifecycle()
     val snack by vm.snack.collectAsStateWithLifecycle()
     val templates by tasks.templates.collectAsStateWithLifecycle()
@@ -101,6 +104,7 @@ fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewMod
                 TodayExtras(
                     repeating = today?.let { app.loopdo.android.tasks.repeatingRows(templates, it) }.orEmpty(),
                     onOpenTask = { route = "task:$it" }, onTaskMenu = { menu = it }, onOpenLists = { route = "lists" }, onOpenHabit = onOpenHabit, lockOn = lockOn, onToggleLock = onToggleLock,
+                    notificationsOff = notificationsOff, onAllowNotifications = onAllowNotifications,
                 ),
             )
         }
@@ -155,6 +159,7 @@ fun TodayContent(model: TodayModel?, snack: Snack?, vm: TodayUi, onSignOut: () -
                 *listOfNotNull(
                     extras?.let { e -> BracketItem("lists") { settingsOpen = false; e.onOpenLists() } },
                     extras?.lockOn?.let { on -> BracketItem(if (on) "lock: on" else "lock: off", primary = on, idle = !on) { settingsOpen = false; extras.onToggleLock() } },
+                    extras?.takeIf { it.notificationsOff }?.let { e -> BracketItem("notifications off · allow") { settingsOpen = false; e.onAllowNotifications() } },
                     BracketItem("sign out", primary = true) { settingsOpen = false; onSignOut() },
                     BracketItem("cancel", idle = true) { settingsOpen = false },
                 ).toTypedArray(),

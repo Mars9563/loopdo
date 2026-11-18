@@ -96,6 +96,29 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     fun canLock(): Boolean =
         androidx.biometric.BiometricManager.from(this).canAuthenticate(LOCK_AUTHENTICATORS) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
 
+    /** M7: Android's "allow notifications?" prompt; afterwards the reminders are planned again. */
+    private val notificationPermission = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {
+        val graph = (application as LoopDoApp).graph
+        graph.scope.launch { runCatching { graph.reminders.replan() } }
+    }
+
+    /** Asks for notifications once ever (M7, spec §5.2); later only the [⚙] row offers Android's settings. */
+    fun askNotificationsOnce(): Boolean {
+        val prefs = getSharedPreferences("reminders-ui", MODE_PRIVATE)
+        if (prefs.getBoolean("notif_asked", false) || notificationsAllowed()) return false
+        prefs.edit().putBoolean("notif_asked", true).apply()
+        notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        return true
+    }
+
+    fun notificationsAllowed(): Boolean =
+        checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
+
+    fun openNotificationSettings() = startActivity(
+        android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName),
+    )
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -150,18 +173,21 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 }
 
 /** A launch's destination; [nonce] makes the same link work again later. */
-data class Link(val tab: Tab?, val habit: String?, val task: String?, val nonce: Long = System.nanoTime())
+/** [write]: open today's journal writer (the journal reminder's [write], M7). */
+data class Link(val tab: Tab?, val habit: String?, val task: String?, val write: Boolean = false, val nonce: Long = System.nanoTime())
 
-private fun linkOf(intent: android.content.Intent?): Link? {
-    intent ?: return null
-    val habit = intent.getStringExtra(MainActivity.EXTRA_HABIT)
-    val task = intent.getStringExtra(MainActivity.EXTRA_TASK)
+private fun linkOf(intent: android.content.Intent?): Link? = intent?.let {
+    linkFrom(it.getStringExtra(MainActivity.EXTRA_TAB), it.getStringExtra(MainActivity.EXTRA_HABIT), it.getStringExtra(MainActivity.EXTRA_TASK), it.getBooleanExtra(MainActivity.EXTRA_WRITE, false))
+}
+
+/** Where a launch goes; [write] only means something on the journal tab. */
+internal fun linkFrom(tabName: String?, habit: String?, task: String?, write: Boolean): Link? {
     val tab = when {
         habit != null -> Tab.HABITS
         task != null -> Tab.TODAY
-        else -> Tab.entries.firstOrNull { it.name.equals(intent.getStringExtra(MainActivity.EXTRA_TAB), ignoreCase = true) }
+        else -> Tab.entries.firstOrNull { it.name.equals(tabName, ignoreCase = true) }
     }
-    return if (tab == null) null else Link(tab, habit, task)
+    return if (tab == null) null else Link(tab, habit, task, write = write && tab == Tab.JOURNAL)
 }
 
 @Composable
@@ -183,13 +209,22 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
             else -> todayVm.showMessage("set a screen lock or fingerprint on the phone first.")
         }
     }
+    // M7: notifications are asked for once, with one line first; if refused, [⚙] shows a row to Android's settings.
+    var notificationsOff by remember { mutableStateOf(!activity.notificationsAllowed()) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        notificationsOff = !activity.notificationsAllowed()
+        onPauseOrDispose { }
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (activity.askNotificationsOnce()) todayVm.showMessage("loopdo_ reminds you of habits, tasks and the journal.")
+    }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxSize().statusBarsPadding()) {
             when (tab) {
-                Tab.TODAY -> TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = { pending = null }, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock) {
+                Tab.TODAY -> TodayScreen(todayVm, tasksVm, pending?.task?.let { app.loopdo.android.today.OpenTask(it, pending!!.nonce) }, onLinkHandled = { pending = null }, onOpenHabit = { id -> pending = Link(Tab.HABITS, id, null); tab = Tab.HABITS }, lockOn = lockOn, onToggleLock = toggleLock, notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() }) {
                     graph.scope.launch { graph.auth.signOut().onFailure { todayVm.showMessage(it.message ?: "couldn't sign out. try again.") } }
                 }
-                Tab.JOURNAL -> app.loopdo.android.journal.JournalTab(journalVm)
+                Tab.JOURNAL -> app.loopdo.android.journal.JournalTab(journalVm, openWriter = pending?.write == true) { pending = null }
                 Tab.HABITS -> app.loopdo.android.habits.HabitsTab(habitsVm, pending?.habit, pending?.nonce ?: 0L) { pending = null }
                 else -> ComingSoon(tab)
             }
