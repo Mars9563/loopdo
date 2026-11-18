@@ -1,9 +1,19 @@
 package app.loopdo.android.sync
 
+import app.loopdo.client.sync.KtorUploadApi
+import app.loopdo.client.sync.LoopDoConnector
+import app.loopdo.client.sync.LoopDoSchema
+import app.loopdo.client.sync.PowerSyncDraftStore
+import app.loopdo.client.sync.PowerSyncUploadState
+import app.loopdo.client.sync.SetAsideNotices
+import app.loopdo.client.sync.SwitchAction
+import app.loopdo.client.sync.Uploader
+import app.loopdo.client.sync.accountSwitch
+
 import android.content.Context
 import android.util.Log
-import app.loopdo.android.auth.AuthRepository
-import app.loopdo.android.auth.AuthState
+import app.loopdo.client.auth.AuthRepository
+import app.loopdo.client.auth.AuthState
 import com.powersync.DatabaseDriverFactory
 import com.powersync.PowerSyncDatabase
 import io.ktor.client.HttpClient
@@ -24,7 +34,7 @@ class SyncModule(
     context: Context,
     private val auth: AuthRepository,
     scope: CoroutineScope,
-    private val anchors: app.loopdo.android.time.AnchorRefresher? = null,
+    private val anchors: app.loopdo.client.time.AnchorRefresher? = null,
     /** Trusted time, so the 24 h server-error patience can't be skipped by changing the phone's clock. */
     now: () -> Instant = Instant::now,
 ) {

@@ -1,8 +1,12 @@
 package app.loopdo.android.settings
 
+import app.loopdo.client.settings.EXPORT_TABLES
+import app.loopdo.client.settings.ExportData
+import app.loopdo.client.settings.ExportDay
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.loopdo.android.sync.LoopDoSchema
+import app.loopdo.client.sync.LoopDoSchema
 import com.powersync.DatabaseDriverFactory
 import com.powersync.PowerSyncDatabase
 import kotlinx.coroutines.runBlocking

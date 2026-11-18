@@ -1,5 +1,12 @@
 package app.loopdo.android.journal
 
+import app.loopdo.client.journal.CalDay
+import app.loopdo.client.journal.JournalModel
+import app.loopdo.client.journal.canGoBack
+import app.loopdo.client.journal.canGoForward
+import app.loopdo.client.journal.journalMonth
+import app.loopdo.client.journal.moodShade
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,7 +28,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.loopdo.android.habits.short
+import app.loopdo.client.habits.short
 import app.loopdo.android.ui.theme.Bracket
 import app.loopdo.android.ui.theme.LoopDoColors
 import app.loopdo.android.ui.theme.LoopDoType

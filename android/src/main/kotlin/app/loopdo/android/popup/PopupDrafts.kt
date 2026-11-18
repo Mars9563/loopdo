@@ -1,5 +1,7 @@
 package app.loopdo.android.popup
 
+import app.loopdo.client.popup.PopupDrafts
+
 import android.content.Context
 
 class PrefsPopupDrafts(context: Context) : PopupDrafts {

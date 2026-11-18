@@ -1,5 +1,7 @@
 package app.loopdo.android.popup
 
+import app.loopdo.client.popup.journalDateToOpen
+
 import android.content.Intent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -17,7 +19,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.loopdo.android.LoopDoApp
 import app.loopdo.android.MainActivity
-import app.loopdo.android.today.short
+import app.loopdo.client.today.short
 import app.loopdo.android.ui.theme.LoopDoTheme
 import kotlinx.coroutines.launch
 

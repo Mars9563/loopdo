@@ -1,5 +1,11 @@
 package app.loopdo.android.habits
 
+import app.loopdo.client.habits.short
+
+import app.loopdo.client.habits.EditorStart
+import app.loopdo.client.habits.HabitDraft
+import app.loopdo.client.habits.targetChangeNote
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,7 +45,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import app.loopdo.android.today.short
+import app.loopdo.client.today.short
 import app.loopdo.android.ui.theme.Bracket
 import app.loopdo.android.ui.theme.BracketItem
 import app.loopdo.android.ui.theme.BracketRow

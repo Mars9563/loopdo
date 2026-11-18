@@ -1,10 +1,20 @@
 package app.loopdo.android.notify
 
+import app.loopdo.client.notify.CH_DAY_END
+import app.loopdo.client.notify.CH_DAY_END_NIGHT
+import app.loopdo.client.notify.CH_HABITS
+import app.loopdo.client.notify.CH_JOURNAL
+import app.loopdo.client.notify.CH_TASKS
+import app.loopdo.client.notify.DAY_ENDED
+import app.loopdo.client.notify.ItemState
+import app.loopdo.client.notify.ReminderData
+import app.loopdo.client.notify.Shown
+
 import android.app.NotificationManager
 import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.loopdo.android.sync.LoopDoSchema
+import app.loopdo.client.sync.LoopDoSchema
 import app.loopdo.android.widget.TapKind
 import app.loopdo.android.widget.TapResult
 import app.loopdo.android.widget.WidgetTap

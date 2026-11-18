@@ -1,12 +1,16 @@
 package app.loopdo.android.tasks
 
+import app.loopdo.client.tasks.TaskActions
+import app.loopdo.client.tasks.TaskDraft
+import app.loopdo.client.tasks.template
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.loopdo.android.sync.LoopDoSchema
-import app.loopdo.android.time.AnchorStore
-import app.loopdo.android.time.DeviceClocks
-import app.loopdo.android.time.SignedAnchor
-import app.loopdo.android.time.TrustedClock
+import app.loopdo.client.sync.LoopDoSchema
+import app.loopdo.client.time.AnchorStore
+import app.loopdo.client.time.DeviceClocks
+import app.loopdo.client.time.SignedAnchor
+import app.loopdo.client.time.TrustedClock
 import app.loopdo.shared.day.DaySettings
 import app.loopdo.shared.day.loopDoDate
 import app.loopdo.shared.task.RepeatRule
@@ -224,7 +228,7 @@ class TaskActionsTest {
     // M6.5 (M5 item 4): a move carries proof of the day it was made, so an on-time move made offline isn't late.
     @Test
     fun aMoveCarriesProofOfItsDay() = runBlocking {
-        val withProof = TaskActions(db, { user }, { loopDoDate(it, ist) }, TrustedClock(clocks, anchors), app.loopdo.android.time.EvidenceFactory(clocks, anchors))
+        val withProof = TaskActions(db, { user }, { loopDoDate(it, ist) }, TrustedClock(clocks, anchors), app.loopdo.client.time.EvidenceFactory(clocks, anchors))
         val t = withProof.saveTask(null, draft("call home", due = today))
         withProof.moveTask(t, nov(20), null)
         val move = ops().last { it.table == "tasks" }

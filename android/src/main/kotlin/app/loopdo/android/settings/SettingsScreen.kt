@@ -1,5 +1,9 @@
 package app.loopdo.android.settings
 
+import app.loopdo.client.settings.leadLabel
+import app.loopdo.client.settings.nextLead
+import app.loopdo.client.settings.versionLabel
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

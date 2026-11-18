@@ -29,11 +29,11 @@ import app.loopdo.android.today.TodayScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.loopdo.android.onboarding.FirstSyncScreen
 import app.loopdo.android.onboarding.OnboardingScreen
-import app.loopdo.android.onboarding.StartState
-import app.loopdo.android.onboarding.hasDaySettings
-import app.loopdo.android.onboarding.isOnboarded
-import app.loopdo.android.onboarding.localRowCount
-import app.loopdo.android.onboarding.startState
+import app.loopdo.client.onboarding.StartState
+import app.loopdo.client.onboarding.hasDaySettings
+import app.loopdo.client.onboarding.isOnboarded
+import app.loopdo.client.onboarding.localRowCount
+import app.loopdo.client.onboarding.startState
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.flow.map
 import app.loopdo.android.ui.nav.LoopDoNavBar

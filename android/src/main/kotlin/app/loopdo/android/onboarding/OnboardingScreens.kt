@@ -1,5 +1,8 @@
 package app.loopdo.android.onboarding
 
+import app.loopdo.client.onboarding.Onboarding
+import app.loopdo.client.onboarding.Zones
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement

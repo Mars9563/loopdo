@@ -1,6 +1,6 @@
 package app.loopdo.android.widget
 
-import app.loopdo.android.today.TodayActions
+import app.loopdo.client.today.TodayActions
 import kotlinx.coroutines.test.runTest
 import java.time.LocalDate
 import java.time.LocalTime

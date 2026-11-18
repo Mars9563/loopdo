@@ -1,5 +1,11 @@
 package app.loopdo.android.journal
 
+import app.loopdo.client.journal.DayView
+import app.loopdo.client.journal.LineRow
+import app.loopdo.client.journal.LogItem
+import app.loopdo.client.journal.Lru
+import app.loopdo.client.journal.shown
+
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi

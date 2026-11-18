@@ -1,4 +1,6 @@
 package app.loopdo.android.today
+
+import app.loopdo.client.today.short
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 
@@ -164,13 +166,13 @@ fun AddSheet(
                             }
                         }
                     }
-                    Chip(app.loopdo.android.tasks.repeatChipLabel(repeat), repeat != null) {
-                        repeatJson = app.loopdo.android.tasks.repeatChipCycle(repeat, due ?: today)?.toJson()
+                    Chip(app.loopdo.client.tasks.repeatChipLabel(repeat), repeat != null) {
+                        repeatJson = app.loopdo.client.tasks.repeatChipCycle(repeat, due ?: today)?.toJson()
                     }
                 }
                 repeat?.let { r ->
                     if (r is app.loopdo.shared.task.RepeatRule.Weekly) app.loopdo.android.tasks.RepeatDetails(r, due ?: today, showNext = false) { repeatJson = it.toJson() }
-                    Text("· " + app.loopdo.android.tasks.repeatLine(r, due ?: today), style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(bottom = 4.dp))
+                    Text("· " + app.loopdo.client.tasks.repeatLine(r, due ?: today), style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(bottom = 4.dp))
                 }
             }
             BracketRow(

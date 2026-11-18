@@ -1,4 +1,12 @@
 package app.loopdo.android.today
+
+import app.loopdo.client.today.countdown
+import app.loopdo.client.today.short
+
+import app.loopdo.client.today.HabitItem
+import app.loopdo.client.today.TaskItem
+import app.loopdo.client.today.TaskRow
+import app.loopdo.client.today.TodayModel
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onLongClick
@@ -65,7 +73,7 @@ import kotlinx.coroutines.delay
  * opens the quick menu, list headers open the lists screen, and the REPEATING section.
  */
 class TodayExtras(
-    val repeating: List<app.loopdo.android.tasks.RepeatingRow>,
+    val repeating: List<app.loopdo.client.tasks.RepeatingRow>,
     val onOpenTask: (String) -> Unit,
     val onTaskMenu: (TaskItem) -> Unit,
     val onOpenLists: () -> Unit,
@@ -106,7 +114,7 @@ fun TodayScreen(vm: TodayViewModel, tasks: app.loopdo.android.tasks.TasksViewMod
             else -> TodayContent(
                 model, snack, vm, onSignOut,
                 TodayExtras(
-                    repeating = today?.let { app.loopdo.android.tasks.repeatingRows(templates, it) }.orEmpty(),
+                    repeating = today?.let { app.loopdo.client.tasks.repeatingRows(templates, it) }.orEmpty(),
                     onOpenTask = { route = "task:$it" }, onTaskMenu = { menu = it }, onOpenLists = { route = "lists" }, onOpenHabit = onOpenHabit, lockOn = lockOn, onToggleLock = onToggleLock,
                     notificationsOff = notificationsOff, onAllowNotifications = onAllowNotifications, onOpenSettings = onOpenSettings, waitingMark = waitingMark,
                 ),

@@ -1,9 +1,19 @@
 package app.loopdo.android.today
 
+import app.loopdo.client.today.toModel
+
+import app.loopdo.client.today.HabitItem
+import app.loopdo.client.today.StaleDayException
+import app.loopdo.client.today.TaskItem
+import app.loopdo.client.today.TodayActions
+import app.loopdo.client.today.TodayModel
+import app.loopdo.client.today.TodayRows
+import app.loopdo.client.today.ticker
+
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.loopdo.android.sync.message
+import app.loopdo.client.sync.message
 import app.loopdo.shared.day.dayEndAt
 import app.loopdo.shared.habit.HabitKind
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +59,7 @@ interface TodayUi {
 class TodayViewModel(
     rows: kotlinx.coroutines.flow.Flow<TodayRows>,
     private val actions: TodayActions,
-    notices: app.loopdo.android.sync.SetAsideNotices,
+    notices: app.loopdo.client.sync.SetAsideNotices,
     private val now: () -> Instant,
 ) : ViewModel(), TodayUi {
 
@@ -150,7 +160,7 @@ class TodayViewModel(
         if (repeat != null) {
             actions.addRepeatingTask(title, due, time, listId?.let(UUID::fromString), repeat)
             onSaved()
-            _snack.value = Snack("added. ${app.loopdo.android.tasks.repeatLine(repeat, due ?: today)}. it's under ↻ repeating.", null)
+            _snack.value = Snack("added. ${app.loopdo.client.tasks.repeatLine(repeat, due ?: today)}. it's under ↻ repeating.", null)
             return@run
         }
         actions.addTask(title, due, time, listId?.let(UUID::fromString))

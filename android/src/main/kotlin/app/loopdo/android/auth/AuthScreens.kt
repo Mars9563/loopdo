@@ -1,5 +1,8 @@
 package app.loopdo.android.auth
 
+import app.loopdo.client.auth.AuthProblem
+import app.loopdo.client.auth.AuthRepository
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement

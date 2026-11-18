@@ -1,6 +1,6 @@
 package app.loopdo.android.widget
 
-import app.loopdo.android.onboarding.StartState
+import app.loopdo.client.onboarding.StartState
 import app.loopdo.android.today.TodayFixture
 import app.loopdo.android.today.TodayFixture.d
 import kotlin.test.Test

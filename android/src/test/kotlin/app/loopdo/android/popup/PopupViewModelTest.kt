@@ -1,6 +1,8 @@
 package app.loopdo.android.popup
 
-import app.loopdo.android.today.TodayActions
+import app.loopdo.client.popup.PopupDrafts
+
+import app.loopdo.client.today.TodayActions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher

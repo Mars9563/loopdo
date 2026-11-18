@@ -1,5 +1,11 @@
 package app.loopdo.android.journal
 
+import app.loopdo.client.journal.preview
+
+import app.loopdo.client.journal.LogItem
+import app.loopdo.client.journal.canAddPhoto
+import app.loopdo.client.journal.parseLines
+
 import android.graphics.ImageDecoder
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -45,7 +51,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.loopdo.android.habits.Fab
-import app.loopdo.android.popup.MOODS
+import app.loopdo.client.popup.MOODS
 import app.loopdo.android.ui.theme.Bracket
 import app.loopdo.android.ui.theme.LoopDoColors
 import app.loopdo.android.ui.theme.LoopDoType

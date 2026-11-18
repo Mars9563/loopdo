@@ -1,13 +1,19 @@
 package app.loopdo.android.habits
 
+import app.loopdo.client.habits.HabitCommands
+import app.loopdo.client.habits.HabitDraft
+import app.loopdo.client.habits.HabitsList
+import app.loopdo.client.habits.buildHabitsList
+import app.loopdo.client.habits.short
+
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.loopdo.android.today.HabitRow
-import app.loopdo.android.today.LogRow
-import app.loopdo.android.today.ScheduleRow
-import app.loopdo.android.today.TodayRows
-import app.loopdo.android.today.ticker
+import app.loopdo.client.today.HabitRow
+import app.loopdo.client.today.LogRow
+import app.loopdo.client.today.ScheduleRow
+import app.loopdo.client.today.TodayRows
+import app.loopdo.client.today.ticker
 import app.loopdo.shared.day.dateResolver
 import app.loopdo.shared.day.dayEndAt
 import kotlinx.coroutines.Dispatchers

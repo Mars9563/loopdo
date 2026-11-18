@@ -10,7 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import app.loopdo.android.LoopDoApp
-import app.loopdo.android.auth.AuthState
+import app.loopdo.client.auth.AuthState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.TimeUnit

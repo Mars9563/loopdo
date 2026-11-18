@@ -1,5 +1,7 @@
 package app.loopdo.android.sync
 
+import app.loopdo.client.sync.LoopDoSchema
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.powersync.DatabaseDriverFactory

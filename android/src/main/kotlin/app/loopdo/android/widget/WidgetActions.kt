@@ -6,8 +6,8 @@ import android.content.BroadcastReceiver
 import android.content.Intent
 import kotlinx.coroutines.launch
 import app.loopdo.android.LoopDoApp
-import app.loopdo.android.today.StaleDayException
-import app.loopdo.android.today.TodayActions
+import app.loopdo.client.today.StaleDayException
+import app.loopdo.client.today.TodayActions
 import java.time.LocalDate
 import java.util.UUID
 

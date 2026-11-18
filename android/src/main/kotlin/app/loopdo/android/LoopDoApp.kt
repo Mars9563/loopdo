@@ -1,10 +1,10 @@
 package app.loopdo.android
 
 import android.app.Application
-import app.loopdo.android.auth.AuthRepository
+import app.loopdo.client.auth.AuthRepository
 import app.loopdo.android.auth.GoogleSignIn
-import app.loopdo.android.auth.SupabaseAuthBackend
-import app.loopdo.android.config.AppConfig
+import app.loopdo.client.auth.SupabaseAuthBackend
+import app.loopdo.client.config.AppConfig
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.CoroutineScope
@@ -16,9 +16,9 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import androidx.glance.appwidget.updateAll
-import app.loopdo.android.onboarding.hasDaySettings
-import app.loopdo.android.onboarding.isOnboarded
-import app.loopdo.android.today.toModel
+import app.loopdo.client.onboarding.hasDaySettings
+import app.loopdo.client.onboarding.isOnboarded
+import app.loopdo.client.today.toModel
 
 /** Manual dependency graph: one of each, alive for the app's lifetime. */
 class AppGraph(context: android.content.Context) {
@@ -38,32 +38,32 @@ class AppGraph(context: android.content.Context) {
     val google = GoogleSignIn(AppConfig.googleWebClientId)
     val clocks = app.loopdo.android.time.AndroidDeviceClocks(context)
     val anchorStore = app.loopdo.android.time.PrefsAnchorStore(context)
-    val trustedClock = app.loopdo.android.time.TrustedClock(clocks, anchorStore)
-    val evidence = app.loopdo.android.time.EvidenceFactory(clocks, anchorStore)
+    val trustedClock = app.loopdo.client.time.TrustedClock(clocks, anchorStore)
+    val evidence = app.loopdo.client.time.EvidenceFactory(clocks, anchorStore)
     private val http = io.ktor.client.HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
         install(io.ktor.client.plugins.HttpTimeout) { requestTimeoutMillis = 15_000 }
     }
     private val token: suspend () -> String? = { auth.freshToken() }
-    private val timeApi = app.loopdo.android.time.KtorTimeApi(http, token)
+    private val timeApi = app.loopdo.client.time.KtorTimeApi(http, token)
     val sync = app.loopdo.android.sync.SyncModule(
-        context, auth, scope, app.loopdo.android.time.AnchorRefresher(timeApi, anchorStore, clocks),
+        context, auth, scope, app.loopdo.client.time.AnchorRefresher(timeApi, anchorStore, clocks),
     ) { trustedClock.now().instant }
-    val onboarding = app.loopdo.android.onboarding.Onboarding(
-        app.loopdo.android.onboarding.KtorSettingsApi(http, token),
-        app.loopdo.android.onboarding.PowerSyncProfileWriter(sync.db) { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+    val onboarding = app.loopdo.client.onboarding.Onboarding(
+        app.loopdo.client.onboarding.KtorSettingsApi(http, token),
+        app.loopdo.client.onboarding.PowerSyncProfileWriter(sync.db) { (auth.session.value as? app.loopdo.client.auth.AuthState.SignedIn)?.userId },
         logFailure = { android.util.Log.w("loopdo_onboarding", "setup failed", it) },
     )
-    val todayData = app.loopdo.android.today.TodayData(sync.db)
-    val journalActions = app.loopdo.android.journal.JournalActions(
+    val todayData = app.loopdo.client.today.TodayData(sync.db)
+    val journalActions = app.loopdo.client.journal.JournalActions(
         sync.db, trustedClock,
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
         settingsAt = { t -> app.loopdo.shared.day.settingsAt(todayData.versionsNow(), t) },
-        userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+        userId = { (auth.session.value as? app.loopdo.client.auth.AuthState.SignedIn)?.userId },
     )
-    val actions = app.loopdo.android.today.Actions(
+    val actions = app.loopdo.client.today.Actions(
         sync.db, trustedClock, evidence,
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
-        userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+        userId = { (auth.session.value as? app.loopdo.client.auth.AuthState.SignedIn)?.userId },
         series = { draft -> taskActions.saveTask(null, draft) },
         journal = journalActions,
         debug = app.loopdo.android.BuildConfig.DEBUG,
@@ -74,17 +74,17 @@ class AppGraph(context: android.content.Context) {
     val appLock = app.loopdo.android.lock.AppLock(app.loopdo.android.lock.PrefsLockStore(context.applicationContext)) { android.os.SystemClock.elapsedRealtime() }
 
     // M6 photos: rows sync with PowerSync; files go to R2 through the API's signed URLs.
-    private val photoApi = app.loopdo.android.journal.KtorPhotoApi(http, token)
-    val photoUploader = app.loopdo.android.journal.PhotoUploader(
+    private val photoApi = app.loopdo.client.journal.KtorPhotoApi(http, token)
+    val photoUploader = app.loopdo.client.journal.PhotoUploader(
         photoApi,
         pending = {
             sync.db.getAll(
                 "SELECT f.id, f.path, p.entry_id, p.bytes FROM photo_files f JOIN journal_photos p ON p.id = f.id WHERE f.uploaded = 0",
-            ) { app.loopdo.android.journal.PendingPhoto(java.util.UUID.fromString(it.getString(0)!!), it.getString(1)!!, it.getString(2)!!, it.getLong(3) ?: 0L) }
+            ) { app.loopdo.client.journal.PendingPhoto(java.util.UUID.fromString(it.getString(0)!!), it.getString(1)!!, it.getString(2)!!, it.getLong(3) ?: 0L) }
         },
         onError = { android.util.Log.i("loopdo_photos", "upload later: ${it.message}") },
     ) { id -> sync.db.execute("UPDATE photo_files SET uploaded = 1 WHERE id = ?", listOf(id.toString())) }
-    val photoCache = app.loopdo.android.journal.PhotoCache(java.io.File(appContext.cacheDir, "photos"), photoApi)
+    val photoCache = app.loopdo.client.journal.PhotoCache(java.io.File(appContext.cacheDir, "photos"), photoApi)
     suspend fun pendingPhotoCount(): Long = sync.db.get(app.loopdo.android.sync.PENDING_PHOTOS_SQL) { it.getLong(0) ?: 0L }
     /** Frees the phone's own copies of photos already in R2 for 90 days (they download again when opened). */
     suspend fun freeOldPhotoCopies() {
@@ -101,9 +101,9 @@ class AppGraph(context: android.content.Context) {
 
     private val widgetRefresher = app.loopdo.android.widget.WidgetRefresher(appContext)
 
-    val taskActions = app.loopdo.android.tasks.TaskActions(
+    val taskActions = app.loopdo.client.tasks.TaskActions(
         sync.db,
-        userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+        userId = { (auth.session.value as? app.loopdo.client.auth.AuthState.SignedIn)?.userId },
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
         clock = trustedClock,
         evidence = evidence,
@@ -181,14 +181,14 @@ class AppGraph(context: android.content.Context) {
     /** M7: the phone's own reminders (alarms + notifications), ready on the same day the widget is. */
     val reminders by lazy {
         app.loopdo.android.notify.ReminderScheduler(
-            app.loopdo.android.notify.ReminderData(sync.db) { sunday -> weekPingState(sunday) },
+            app.loopdo.client.notify.ReminderData(sync.db) { sunday -> weekPingState(sunday) },
             app.loopdo.android.notify.ReminderStore(appContext.getSharedPreferences("reminders", android.content.Context.MODE_PRIVATE)),
             app.loopdo.android.notify.AndroidAlarmSetter(appContext),
             app.loopdo.android.notify.AndroidPoster(appContext),
             today = { (widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready)?.model?.date },
             trustedNow = { trustedClock.now().instant },
             elapsedNow = { android.os.SystemClock.elapsedRealtime() },
-            signedOut = { sync.blocked.value != null || auth.session.value is app.loopdo.android.auth.AuthState.SignedOut },
+            signedOut = { sync.blocked.value != null || auth.session.value is app.loopdo.client.auth.AuthState.SignedOut },
         ) { widgetCommands.handle(it) }
     }
 
@@ -196,23 +196,23 @@ class AppGraph(context: android.content.Context) {
     suspend fun widgetSnapshot(): app.loopdo.android.widget.WidgetState {
         if (sync.blocked.value != null) return app.loopdo.android.widget.WidgetState.SignedOut // another account's data: show none of it
         val session = kotlinx.coroutines.withTimeoutOrNull(3_000) {
-            auth.session.first { it !is app.loopdo.android.auth.AuthState.Loading }
+            auth.session.first { it !is app.loopdo.client.auth.AuthState.Loading }
         } ?: auth.session.value
-        val start = app.loopdo.android.onboarding.startState(
+        val start = app.loopdo.client.onboarding.startState(
             session, sync.db.currentStatus.hasSynced, sync.db.hasDaySettings().first(), sync.db.isOnboarded().first(),
         )
-        val built = if (start == app.loopdo.android.onboarding.StartState.Ready) todayData.rows().first().toModel(trustedClock.now().instant) else null
+        val built = if (start == app.loopdo.client.onboarding.StartState.Ready) todayData.rows().first().toModel(trustedClock.now().instant) else null
         return app.loopdo.android.widget.widgetState(start, built?.first, built?.second)
     }
 
     /** Today for a pop-up, or null when the app isn't ready (same gate as the widget). */
-    suspend fun todayForPopup(): app.loopdo.android.today.TodayModel? =
+    suspend fun todayForPopup(): app.loopdo.client.today.TodayModel? =
         if (widgetSnapshot() is app.loopdo.android.widget.WidgetState.Ready) todayData.rows().first().toModel(trustedClock.now().instant)?.first else null
 
-    val habitActions = app.loopdo.android.habits.HabitActions(
+    val habitActions = app.loopdo.client.habits.HabitActions(
         sync.db, trustedClock, evidence,
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
-        userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
+        userId = { (auth.session.value as? app.loopdo.client.auth.AuthState.SignedIn)?.userId },
     )
 
     fun habitsViewModel() = app.loopdo.android.habits.HabitsViewModel(todayData.rows(), habitActions) { trustedClock.now().instant }
@@ -220,8 +220,8 @@ class AppGraph(context: android.content.Context) {
     fun tasksViewModel() = app.loopdo.android.tasks.TasksViewModel(app.loopdo.android.tasks.TaskData(sync.db), taskActions)
 
     /** M8: the Sunday ping's content: that week's numbers and its focus so far. */
-    private suspend fun weekPingState(sunday: java.time.LocalDate): app.loopdo.android.notify.ItemState {
-        val rows = app.loopdo.android.stats.StatsData(sync.db).rows().first()
+    private suspend fun weekPingState(sunday: java.time.LocalDate): app.loopdo.client.notify.ItemState {
+        val rows = app.loopdo.client.stats.StatsData(sync.db).rows().first()
         val start = app.loopdo.shared.stats.weekStart(sunday)
         val w = app.loopdo.shared.stats.weekReview(rows.input, start, sunday)
         val focus = rows.focus.filter { it.weekStart == start }.map { f ->
@@ -230,14 +230,14 @@ class AppGraph(context: android.content.Context) {
                 is app.loopdo.shared.stats.FocusResult.Task -> f.title + if (r.completedOn != null) " ✓" else ""
             }
         }
-        return app.loopdo.android.notify.ItemState.Week(w.number, w.done, w.total, focus, reviewOpenedOn(sunday))
+        return app.loopdo.client.notify.ItemState.Week(w.number, w.done, w.total, focus, reviewOpenedOn(sunday))
     }
 
     /** M8: the weekly focus (Sun/Mon only, at most 2; the server checks the same). */
     val focusActions by lazy {
-        app.loopdo.android.stats.FocusActions(
+        app.loopdo.client.stats.FocusActions(
             sync.db,
-            userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId?.toString() },
+            userId = { (auth.session.value as? app.loopdo.client.auth.AuthState.SignedIn)?.userId?.toString() },
             today = { app.loopdo.shared.day.dateResolver(todayData.versionsNow())(trustedClock.now().instant) },
             evidence = evidence,
         )
@@ -252,33 +252,33 @@ class AppGraph(context: android.content.Context) {
         profile = sync.db.watch("SELECT display_name, settings, is_admin, delete_requested_at, wipe_claimed_at FROM profiles LIMIT 1") {
             app.loopdo.android.settings.ProfileRow(
                 it.getString(0).orEmpty(), it.getString(1), (it.getLong(2) ?: 0L) != 0L,
-                it.getString(3)?.let { s -> app.loopdo.android.today.parseInstant(s) }, it.getString(4)?.let { s -> app.loopdo.android.today.parseInstant(s) },
+                it.getString(3)?.let { s -> app.loopdo.client.today.parseInstant(s) }, it.getString(4)?.let { s -> app.loopdo.client.today.parseInstant(s) },
             )
         }.map { it.firstOrNull() },
         versions = todayData.versionsFlow(),
         waiting = dataSafety.waiting(),
         db = sync.db,
-        daySettings = app.loopdo.android.onboarding.KtorSettingsApi(http, token),
+        daySettings = app.loopdo.client.onboarding.KtorSettingsApi(http, token),
         account = accountApi,
         export = { out -> exportData.export(out, app.loopdo.shared.day.dateResolver(todayData.versionsNow())(trustedClock.now().instant)) },
         now = { trustedClock.now().instant },
         version = app.loopdo.android.BuildConfig.VERSION_NAME,
     )
     val dataSafety by lazy { app.loopdo.android.settings.DataSafety(sync.db, appContext) { trustedClock.now().instant } }
-    val accountApi by lazy { app.loopdo.android.settings.KtorAccountApi(http, token) }
-    val exportData by lazy { app.loopdo.android.settings.ExportData(sync.db) { id, path -> photoCache.file(id, path) } }
+    val accountApi by lazy { app.loopdo.client.settings.KtorAccountApi(http, token) }
+    val exportData by lazy { app.loopdo.client.settings.ExportData(sync.db) { id, path -> photoCache.file(id, path) } }
 
     fun statsViewModel() = app.loopdo.android.stats.StatsViewModel(
-        app.loopdo.android.stats.StatsData(sync.db).rows(), focusActions, now = { trustedClock.now().instant },
+        app.loopdo.client.stats.StatsData(sync.db).rows(), focusActions, now = { trustedClock.now().instant },
     ) { today ->
-        app.loopdo.android.stats.sundayToSilence(today)?.let { reviewOpened.edit().putBoolean("reviewed:$it", true).apply() }
+        app.loopdo.client.stats.sundayToSilence(today)?.let { reviewOpened.edit().putBoolean("reviewed:$it", true).apply() }
         scope.launch { runCatching { reminders.replan() } }
     }
 
     fun journalViewModel() = app.loopdo.android.journal.JournalViewModel(
         todayData.rows(), app.loopdo.android.journal.JournalData(sync.db), journalActions, { trustedClock.now().instant },
         photoFile = { id, path -> photoCache.file(id, path) }, uploadSoon = { uploadPhotosSoon() },
-        drafts = app.loopdo.android.journal.LineDrafts(app.loopdo.android.popup.PrefsPopupDrafts(appContext)),
+        drafts = app.loopdo.client.journal.LineDrafts(app.loopdo.android.popup.PrefsPopupDrafts(appContext)),
     )
 
     fun todayViewModel() = app.loopdo.android.today.TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }

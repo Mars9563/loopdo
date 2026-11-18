@@ -1,5 +1,9 @@
 package app.loopdo.android.habits
 
+import app.loopdo.client.habits.HabitDraft
+import app.loopdo.client.habits.checkDraft
+import app.loopdo.client.habits.short
+
 import app.loopdo.shared.habit.HabitKind
 import app.loopdo.shared.habit.Recurrence
 import org.junit.Assert.assertEquals

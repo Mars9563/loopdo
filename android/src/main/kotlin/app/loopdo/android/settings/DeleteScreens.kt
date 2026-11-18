@@ -1,5 +1,8 @@
 package app.loopdo.android.settings
 
+import app.loopdo.client.settings.Deleting
+import app.loopdo.client.settings.deleteEnabled
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column

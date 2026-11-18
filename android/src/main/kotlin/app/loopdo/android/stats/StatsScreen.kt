@@ -1,5 +1,8 @@
 package app.loopdo.android.stats
 
+import app.loopdo.client.stats.StatsUi
+import app.loopdo.client.stats.weekRange
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

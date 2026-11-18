@@ -1,5 +1,11 @@
 package app.loopdo.android.journal
 
+import app.loopdo.client.journal.PendingPhoto
+import app.loopdo.client.journal.PhotoApi
+import app.loopdo.client.journal.PhotoCache
+import app.loopdo.client.journal.PhotoUploader
+import app.loopdo.client.journal.PresignResult
+
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

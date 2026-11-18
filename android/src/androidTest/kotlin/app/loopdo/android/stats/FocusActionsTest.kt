@@ -1,12 +1,15 @@
 package app.loopdo.android.stats
 
+import app.loopdo.client.stats.FocusActions
+import app.loopdo.client.stats.StatsData
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.loopdo.android.sync.LoopDoSchema
-import app.loopdo.android.time.AnchorStore
-import app.loopdo.android.time.DeviceClocks
-import app.loopdo.android.time.EvidenceFactory
-import app.loopdo.android.time.SignedAnchor
+import app.loopdo.client.sync.LoopDoSchema
+import app.loopdo.client.time.AnchorStore
+import app.loopdo.client.time.DeviceClocks
+import app.loopdo.client.time.EvidenceFactory
+import app.loopdo.client.time.SignedAnchor
 import app.loopdo.shared.stats.FocusKind
 import com.powersync.DatabaseDriverFactory
 import com.powersync.PowerSyncDatabase

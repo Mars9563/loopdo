@@ -1,5 +1,11 @@
 package app.loopdo.android.habits
 
+import app.loopdo.client.habits.short
+
+import app.loopdo.client.habits.CellState
+import app.loopdo.client.habits.HabitDetail
+import app.loopdo.client.habits.MonthCell
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -31,7 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.loopdo.android.today.short
+import app.loopdo.client.today.short
 import app.loopdo.android.ui.theme.Bracket
 import app.loopdo.android.ui.theme.DashedRule
 import app.loopdo.android.ui.theme.LoopDoColors

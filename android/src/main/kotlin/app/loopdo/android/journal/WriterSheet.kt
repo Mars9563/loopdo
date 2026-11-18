@@ -39,7 +39,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.loopdo.android.popup.MOODS
+import app.loopdo.client.popup.MOODS
 import app.loopdo.android.ui.theme.Bracket
 import app.loopdo.android.ui.theme.DashedRule
 import app.loopdo.android.ui.theme.LoopDoColors

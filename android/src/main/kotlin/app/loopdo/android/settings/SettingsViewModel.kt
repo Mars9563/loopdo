@@ -1,9 +1,22 @@
 package app.loopdo.android.settings
 
+import app.loopdo.client.settings.AccountApi
+import app.loopdo.client.settings.Deleting
+import app.loopdo.client.settings.ExportResult
+import app.loopdo.client.settings.adminRow
+import app.loopdo.client.settings.deletingState
+import app.loopdo.client.settings.exportResultLine
+import app.loopdo.client.settings.inForceNow
+import app.loopdo.client.settings.keepLabel
+import app.loopdo.client.settings.pendingLine
+import app.loopdo.client.settings.withDayEnd
+import app.loopdo.client.settings.withPrefs
+import app.loopdo.client.settings.withZone
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.loopdo.android.notify.reminderPrefsFromSettings
-import app.loopdo.android.onboarding.SettingsApi
+import app.loopdo.client.notify.reminderPrefsFromSettings
+import app.loopdo.client.onboarding.SettingsApi
 import app.loopdo.shared.day.DaySettingsVersion
 import app.loopdo.shared.remind.ReminderPrefs
 import com.powersync.PowerSyncDatabase

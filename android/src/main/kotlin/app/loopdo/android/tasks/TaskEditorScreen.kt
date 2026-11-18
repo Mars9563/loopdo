@@ -1,5 +1,10 @@
 package app.loopdo.android.tasks
 
+import app.loopdo.client.tasks.SaveScope
+import app.loopdo.client.tasks.TaskDraft
+import app.loopdo.client.tasks.nextLine
+import app.loopdo.client.tasks.saveScope
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,8 +46,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.loopdo.android.habits.short as dayShort
-import app.loopdo.android.today.short
+import app.loopdo.client.habits.short as dayShort
+import app.loopdo.client.today.short
 import app.loopdo.android.ui.theme.Bracket
 import app.loopdo.android.ui.theme.BracketItem
 import app.loopdo.android.ui.theme.BracketRow

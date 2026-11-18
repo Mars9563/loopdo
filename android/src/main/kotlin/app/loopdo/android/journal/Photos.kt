@@ -1,5 +1,7 @@
 package app.loopdo.android.journal
 
+import app.loopdo.client.journal.PreparedPhoto
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder

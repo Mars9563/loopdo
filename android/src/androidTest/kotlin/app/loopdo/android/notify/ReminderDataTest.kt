@@ -1,8 +1,11 @@
 package app.loopdo.android.notify
 
+import app.loopdo.client.notify.ItemState
+import app.loopdo.client.notify.ReminderData
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.loopdo.android.sync.LoopDoSchema
+import app.loopdo.client.sync.LoopDoSchema
 import app.loopdo.shared.remind.Ping
 import app.loopdo.shared.remind.Reminder
 import app.loopdo.shared.remind.ReminderKind

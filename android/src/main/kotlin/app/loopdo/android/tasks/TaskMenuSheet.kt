@@ -33,8 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import app.loopdo.android.today.TaskItem
-import app.loopdo.android.today.short
+import app.loopdo.client.today.TaskItem
+import app.loopdo.client.today.short
 import app.loopdo.android.ui.theme.Bracket
 import app.loopdo.android.ui.theme.BracketItem
 import app.loopdo.android.ui.theme.BracketRow

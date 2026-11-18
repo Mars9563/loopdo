@@ -1,13 +1,16 @@
 package app.loopdo.android.today
 
+import app.loopdo.client.today.Actions
+import app.loopdo.client.today.StaleDayException
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import app.loopdo.android.sync.LoopDoSchema
-import app.loopdo.android.time.AnchorStore
-import app.loopdo.android.time.DeviceClocks
-import app.loopdo.android.time.EvidenceFactory
-import app.loopdo.android.time.SignedAnchor
-import app.loopdo.android.time.TrustedClock
+import app.loopdo.client.sync.LoopDoSchema
+import app.loopdo.client.time.AnchorStore
+import app.loopdo.client.time.DeviceClocks
+import app.loopdo.client.time.EvidenceFactory
+import app.loopdo.client.time.SignedAnchor
+import app.loopdo.client.time.TrustedClock
 import app.loopdo.shared.day.DaySettings
 import app.loopdo.shared.day.loopDoDate
 import app.loopdo.shared.task.instanceId
@@ -120,7 +123,7 @@ class ActionsTest {
         // M6.5: [+ add]'s journal line is a row of today's day (one day row per date, deterministic id).
         val withJournal = Actions(
             db, TrustedClock(clocks, anchors), EvidenceFactory(clocks, anchors), { loopDoDate(it, ist) }, { user },
-            journal = app.loopdo.android.journal.JournalActions(db, TrustedClock(clocks, anchors), { loopDoDate(it, ist) }, { ist }, { user }),
+            journal = app.loopdo.client.journal.JournalActions(db, TrustedClock(clocks, anchors), { loopDoDate(it, ist) }, { ist }, { user }),
         )
         withJournal.appendJournalLine("pizza was good")
         withJournal.appendJournalLine("  long walk  ")

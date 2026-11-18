@@ -1,5 +1,11 @@
 package app.loopdo.android.sync
 
+import app.loopdo.client.sync.LoopDoSchema
+import app.loopdo.client.sync.OpMapper
+import app.loopdo.client.sync.PowerSyncDraftStore
+import app.loopdo.client.sync.PowerSyncTransaction
+import app.loopdo.client.sync.PowerSyncUploadState
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.powersync.DatabaseDriverFactory

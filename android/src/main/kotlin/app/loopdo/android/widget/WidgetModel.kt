@@ -1,11 +1,11 @@
 package app.loopdo.android.widget
 
-import app.loopdo.android.onboarding.StartState
-import app.loopdo.android.today.StreakLine
-import app.loopdo.android.today.TodayModel
-import app.loopdo.android.today.compact
-import app.loopdo.android.today.countdown
-import app.loopdo.android.today.short
+import app.loopdo.client.onboarding.StartState
+import app.loopdo.client.today.StreakLine
+import app.loopdo.client.today.TodayModel
+import app.loopdo.client.today.compact
+import app.loopdo.client.today.countdown
+import app.loopdo.client.today.short
 import app.loopdo.shared.habit.HabitKind
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.map

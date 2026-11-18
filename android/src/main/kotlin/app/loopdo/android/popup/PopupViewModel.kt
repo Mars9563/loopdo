@@ -1,8 +1,10 @@
 package app.loopdo.android.popup
 
+import app.loopdo.client.popup.PopupDrafts
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.loopdo.android.today.TodayActions
+import app.loopdo.client.today.TodayActions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,7 +47,7 @@ class PopupViewModel(
     }
 
     /** M6: the day's unsaved line (shared with the app's writer) and when it was last edited on its own day. */
-    private val lines = app.loopdo.android.journal.LineDrafts(drafts)
+    private val lines = app.loopdo.client.journal.LineDrafts(drafts)
     fun lineDraft(date: LocalDate): Pair<String, java.time.Instant?> = lines.line(date)
     fun keepLineDraft(date: LocalDate, text: String, at: java.time.Instant, earlierDay: Boolean = false) = lines.keep(date, text, at, earlierDay)
 
