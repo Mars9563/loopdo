@@ -1,6 +1,8 @@
 package app.loopdo.android.popup
 
 import android.content.Intent
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -55,9 +57,18 @@ class JournalPopupActivity : ComponentActivity() {
                 LoopDoTheme(backdrop = false) {
                     var text by rememberSaveable { mutableStateOf(startText) }
                     var mood by rememberSaveable { mutableStateOf(entry?.mood) }
+                    // The stamp a save gets now: it follows the clock while the pop-up stays open (M6 minor).
+                    var shownStamp by remember { mutableStateOf(stamp) }
+                    if (!earlier) LaunchedEffect(Unit) {
+                        while (true) {
+                            kotlinx.coroutines.delay(10_000)
+                            val t = graph.trustedClock.now().instant.atZone(zone).toLocalTime()
+                            shownStamp = String.format(java.util.Locale.ROOT, "[%02d:%02d]", t.hour, t.minute)
+                        }
+                    }
                     val error by vm.error.collectAsStateWithLifecycle()
                     app.loopdo.android.journal.WriterSheet(
-                        title = "~/journal ${date.short()}", stamp = stamp,
+                        title = "~/journal ${date.short()}", stamp = shownStamp,
                         text = text, onText = { text = it; vm.keepLineDraft(date, it, graph.trustedClock.now().instant, earlierDay = earlier) },
                         mood = mood, onMood = { mood = it; vm.setMood(date, it) },
                         error = error, onPhoto = null, notice = notice,

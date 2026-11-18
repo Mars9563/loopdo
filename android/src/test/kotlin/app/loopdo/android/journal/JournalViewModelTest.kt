@@ -92,4 +92,17 @@ class JournalViewModelTest {
         val items = day.preview().blocks.flatMap { it.items }.filterIsInstance<LogItem.Line>().map { it.line.text }
         assertEquals(listOf("a", "b"), items)
     }
+
+    // M6 minor: a past day's times show in the zone that day was in (a trip abroad doesn't shift old stamps).
+    @Test
+    fun aPastDayShowsItsOwnZone() {
+        val london = ZoneId.of("Europe/London")
+        val m = buildJournal(
+            listOf(EntryRow("e13", d(2026, 11, 13), "", null)), emptyList(), today, london, LocalTime.of(4, 0), 0,
+            lines = listOf(LineRow("l", "e13", Instant.parse("2026-11-13T13:30:00Z"), "lunch", 0)), // 19:00 IST
+            zoneOn = { day -> if (day < today) ist else london },
+        )
+        val line = m.feed.single().blocks.flatMap { it.items }.filterIsInstance<LogItem.Line>().single()
+        assertEquals(LocalTime.of(19, 0), line.line.time)
+    }
 }

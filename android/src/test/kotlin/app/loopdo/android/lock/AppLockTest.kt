@@ -53,4 +53,16 @@ class AppLockTest {
         assertFalse(l.locked.value)
         assertFalse(store.enabled)
     }
+
+    // M6 minor checked: the phone's PIN screen sends the app to the background; a PIN typed slowly (> 1 min) must
+    // not lock it again right after it opened, in either order of the callbacks.
+    @Test
+    fun aSlowPinDoesNotRelock() {
+        val a = lock(Store(enabled = true))
+        a.onBackground(); clock += 70_000; a.unlocked(); a.onForeground() // success first
+        assertFalse(a.locked.value)
+        val b = lock(Store(enabled = true))
+        b.onBackground(); clock += 70_000; b.onForeground(); b.unlocked() // back first
+        assertFalse(b.locked.value)
+    }
 }

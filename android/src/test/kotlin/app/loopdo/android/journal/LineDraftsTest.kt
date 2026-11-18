@@ -36,4 +36,14 @@ class LineDraftsTest {
         assertEquals("" to null, LineDrafts(store).line(fri))
         assertEquals(emptySet<LocalDate>(), LineDrafts(store).dates())
     }
+
+    // M6 minor: a pre-M6 whole-entry draft that was edited in the middle keeps only its new lines (the saved entry
+    // isn't added again as new lines).
+    @Test
+    fun anEditedPreM6DraftKeepsOnlyItsNewLines() {
+        val store = Memory()
+        store.save("journal:2026-11-13", "walk, then gym\ncalled mom")
+        store.save("journal:2026-11-13:base", "walk\ncalled mom")
+        assertEquals("walk, then gym", LineDrafts(store).line(java.time.LocalDate.of(2026, 11, 13)).first)
+    }
 }

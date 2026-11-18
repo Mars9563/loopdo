@@ -79,7 +79,10 @@ class JournalViewModel(
         combine(ticker(now) { dayEndAt(r.versions, now()) }, data.entries(), data.lines(), data.photos()) { t, entries, lines, photos ->
             val (today, _) = r.toModel(t) ?: return@combine null
             val s = settingsAt(r.versions, t)
-            buildJournal(entries, photos, today.date, s.zone, s.dayEnd, today.streaks.journal, lines).copy(now = t.atZone(s.zone).toLocalTime())
+            buildJournal(
+                entries, photos, today.date, s.zone, s.dayEnd, today.streaks.journal, lines,
+                zoneOn = { d -> settingsAt(r.versions, d.atTime(12, 0).atZone(java.time.ZoneOffset.UTC).toInstant()).zone },
+            ).copy(now = t.atZone(s.zone).toLocalTime())
         }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

@@ -43,11 +43,22 @@ fun compress(src: ImageDecoder.Source, out: File, id: UUID = UUID.randomUUID()):
 /** Where this phone keeps its own photo files until (and after) they reach R2. */
 fun photoFile(context: Context, id: UUID): File = File(File(context.filesDir, "photos"), "$id.webp")
 
+/** This phone's own copy of a photo: [uploaded] = it is in R2; [modified] = the file's time. */
+data class OwnPhoto(val path: String, val uploaded: Boolean, val modified: java.time.Instant)
+
+/** How long the phone keeps its own copy after the photo reached R2 (then it is downloaded again if opened). */
+val KEEP_OWN_COPY: java.time.Duration = java.time.Duration.ofDays(90)
+
+/** The own copies to free: only photos already in R2, older than [KEEP_OWN_COPY]. Never one still waiting. */
+fun photosToFree(files: List<OwnPhoto>, now: java.time.Instant): List<String> =
+    files.filter { it.uploaded && it.modified < now.minus(KEEP_OWN_COPY) }.map { it.path }
+
 /** Sends queued photos when there is a network; WorkManager retries it later while some are left. */
 class PhotoWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val graph = (applicationContext as LoopDoApp).graph
         graph.photoUploader.runOnce()
+        runCatching { graph.freeOldPhotoCopies() }
         return if (graph.pendingPhotoCount() > 0) Result.retry() else Result.success()
     }
 

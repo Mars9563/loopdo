@@ -16,7 +16,13 @@ class LineDrafts(private val store: PopupDrafts) {
     fun line(date: LocalDate): Pair<String, Instant?> {
         val text = store.load(key(date))
         val base = store.load(key(date) + ":base")
-        val line = if (base.isEmpty()) text else (if (text.startsWith(base)) text.removePrefix(base) else text).trim()
+        // A pre-M6 draft was the whole entry: its line is what was typed beyond the saved entry ([base]). Edited in
+        // the middle, the lines that aren't in the saved entry (the saved ones aren't added again).
+        val line = when {
+            base.isEmpty() -> text
+            text.startsWith(base) -> text.removePrefix(base).trim()
+            else -> (text.split('\n').map { it.trim() } - base.split('\n').map { it.trim() }.toSet()).filter { it.isNotEmpty() }.joinToString("\n")
+        }
         return line to store.load(key(date) + ":at").takeIf { it.isNotEmpty() }?.let { runCatching { Instant.parse(it) }.getOrNull() }
     }
 

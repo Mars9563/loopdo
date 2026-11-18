@@ -80,3 +80,15 @@ class PhotoUploaderTest {
         assertNull(cache.file("p2", null)) // not uploaded yet by its phone
     }
 }
+
+/** M6 minor: the phone's own copy of a photo is freed only once it is in R2 and old (it is downloaded again if opened). */
+class PhotoPruneTest {
+    private val now = java.time.Instant.parse("2026-11-18T05:00:00Z")
+    private fun f(path: String, uploaded: Boolean, daysOld: Long) = OwnPhoto(path, uploaded, now.minus(java.time.Duration.ofDays(daysOld)))
+
+    @kotlin.test.Test
+    fun onlyUploadedOldCopiesAreFreed() {
+        val files = listOf(f("/new", true, 10), f("/old", true, 120), f("/waiting", false, 400))
+        kotlin.test.assertEquals(listOf("/old"), photosToFree(files, now))
+    }
+}

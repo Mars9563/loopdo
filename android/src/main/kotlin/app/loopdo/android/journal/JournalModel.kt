@@ -40,18 +40,21 @@ data class JournalModel(
 fun buildJournal(
     entries: List<EntryRow>, photos: List<PhotoRow>, today: LocalDate, zone: ZoneId, dayStart: LocalTime, streak: Int,
     lines: List<LineRow> = emptyList(),
+    /** The zone a day was lived in (settings history); its times show in it (M6 minor). */
+    zoneOn: (LocalDate) -> ZoneId = { zone },
 ): JournalModel {
     val photosBy = photos.groupBy { it.entryId }
     // Save order: untimed first, then by time (two devices' lines interleave by when they were written).
     val linesBy = lines.sortedWith(compareBy<LineRow>({ it.stampedAt != null }, { it.stampedAt }, { it.sortOrder }, { it.id })).groupBy { it.entryId }
-    fun dayLines(e: EntryRow?): List<DayLine> = e?.let {
-        linesOfText(it.text) + linesBy[it.id].orEmpty().map { l -> DayLine(l.id, l.stampedAt?.atZone(zone)?.toLocalTime(), l.text) }
+    fun dayLines(e: EntryRow?, z: ZoneId): List<DayLine> = e?.let {
+        linesOfText(it.text) + linesBy[it.id].orEmpty().map { l -> DayLine(l.id, l.stampedAt?.atZone(z)?.toLocalTime(), l.text) }
     }.orEmpty()
     fun view(date: LocalDate, e: EntryRow?): DayView {
         val mine = e?.let { photosBy[it.id] }.orEmpty()
+        val z = zoneOn(date)
         return DayView(
             date = date, mood = e?.mood,
-            blocks = dayLog(dayLines(e), mine.map { it.id to it.addedAt?.atZone(zone)?.toLocalTime() }, dayStart),
+            blocks = dayLog(dayLines(e, z), mine.map { it.id to it.addedAt?.atZone(z)?.toLocalTime() }, dayStart),
             localPaths = mine.associate { it.id to it.localPath },
             label = date.short(), moodFace = e?.mood?.let { MOODS.getOrNull(it - 1) }.orEmpty(),
             dayTag = if (date == today) "today" else "", entryExists = e != null,

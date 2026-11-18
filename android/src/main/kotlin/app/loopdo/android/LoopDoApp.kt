@@ -85,6 +85,14 @@ class AppGraph(context: android.content.Context) {
     ) { id -> sync.db.execute("UPDATE photo_files SET uploaded = 1 WHERE id = ?", listOf(id.toString())) }
     val photoCache = app.loopdo.android.journal.PhotoCache(java.io.File(appContext.cacheDir, "photos"), photoApi)
     suspend fun pendingPhotoCount(): Long = sync.db.get(app.loopdo.android.sync.PENDING_PHOTOS_SQL) { it.getLong(0) ?: 0L }
+    /** Frees the phone's own copies of photos already in R2 for 90 days (they download again when opened). */
+    suspend fun freeOldPhotoCopies() {
+        val own = sync.db.getAll("SELECT path, uploaded FROM photo_files WHERE coalesce(path, '') <> ''") {
+            val f = java.io.File(it.getString(0)!!)
+            app.loopdo.android.journal.OwnPhoto(f.path, it.getLong(1) == 1L, java.time.Instant.ofEpochMilli(f.lastModified()))
+        }
+        app.loopdo.android.journal.photosToFree(own.filter { java.io.File(it.path).exists() }, trustedClock.now().instant).forEach { java.io.File(it).delete() }
+    }
     fun uploadPhotosSoon() = runCatching { app.loopdo.android.journal.PhotoWorker.enqueue(appContext) }
 
     /** Widget taps: the same actions as the app, then a redraw (Task 5 adds the refresh schedule). */
