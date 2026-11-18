@@ -40,7 +40,8 @@ class TodayLiveTest {
                 ?: g.habitActions.createHabit(HabitDraft(title, kind, target, null, 1, Recurrence.DAILY, emptySet(), null))
         val yes = habit("laptop yes", HabitKind.YES_NO, 1)
         val count = habit("laptop count", HabitKind.COUNT, 5)
-        assertNotNull(g.actions.setHabitCount(yes, 1))
+        // Repeatable: on a second run today the yes/no habit is already ticked, so untick it first.
+        if (g.actions.setHabitCount(yes, 1) == null) { g.actions.untickHabit(yes); assertNotNull(g.actions.setHabitCount(yes, 1)) }
         assertNotNull(g.actions.tickHabit(count))
         val task = g.actions.addTask("laptop task ${System.currentTimeMillis()}", null, null, null)
 
