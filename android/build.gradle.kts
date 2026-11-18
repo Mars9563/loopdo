@@ -68,6 +68,8 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.biometric)
+    // Already resolved at 1.5.7 through biometric; named here so lint sees it with client/ in the graph (D1).
+    implementation(libs.androidx.fragment)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
