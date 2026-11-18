@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=loopdo_
+Comment=to-dos, habits and a daily journal
+Exec=@BIN@ %U
+Icon=loopdo
+Terminal=false
+Categories=Utility;
+StartupWMClass=app-loopdo-desktop-MainKt
+Actions=quick;
+
+[Desktop Action quick]
+Name=quick add
+Exec=@BIN@ --quick

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=loopdo_
+Exec=@BIN@ --background
+Icon=loopdo
+Terminal=false
+X-GNOME-Autostart-enabled=true

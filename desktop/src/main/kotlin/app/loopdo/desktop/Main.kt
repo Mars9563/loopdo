@@ -24,15 +24,58 @@ import app.loopdo.client.auth.AuthState
 import app.loopdo.client.onboarding.hasDaySettings
 import androidx.compose.runtime.collectAsState
 import java.io.File
+import androidx.compose.ui.window.Tray
+import app.loopdo.desktop.shell.Command
+import app.loopdo.desktop.shell.SingleInstance
+import app.loopdo.desktop.shell.parseCommand
+import app.loopdo.desktop.shell.socketFor
 
 fun main(args: Array<String>) {
-    if ("--self-check" in args) return selfCheck(File(args.getOrNull(args.indexOf("--self-check") + 1) ?: "self-check.png"))
+    val cmd = parseCommand(args)
+    if (cmd is Command.SelfCheck) return selfCheck(File(cmd.out))
+    val demo = cmd == Command.Demo
+    val dir = if (demo) java.nio.file.Files.createTempDirectory("loopdo-demo").toFile() else dataDir()
+    val single = SingleInstance(socketFor(dir))
+    val shown = mutableStateOf(cmd != Command.Background)
+    if (!single.tryServe { c -> if (c != Command.Background) shown.value = true }) {
+        single.send(cmd) // the running loopdo_ shows itself (or quick add, from D3)
+        return
+    }
     application {
-        val graph = remember { DesktopGraph(dataDir()) }
-        Window(onCloseRequest = ::exitApplication, title = "loopdo_", state = rememberWindowState(width = 1200.dp, height = 740.dp)) {
+        val graph = remember { if (demo) null else DesktopGraph(dir) }
+        val quit = { single.close(); graph?.sync?.db?.let { db -> kotlinx.coroutines.runBlocking { runCatching { db.close() } } }; exitApplication() }
+        Tray(
+            icon = androidx.compose.ui.res.painterResource("tray.png"),
+            tooltip = "loopdo_",
+            onAction = { shown.value = true },
+            menu = {
+                Item("[open]", onClick = { shown.value = true })
+                Separator()
+                Item("[quit]", onClick = quit)
+            },
+        )
+        // Closing the window keeps loopdo_ in the tray (pings and quick add need it running); [quit] really quits.
+        Window(
+            onCloseRequest = { shown.value = false }, visible = shown.value, title = "loopdo_",
+            icon = androidx.compose.ui.res.painterResource("tray.png"),
+            state = rememberWindowState(width = 1200.dp, height = 740.dp),
+        ) {
             window.minimumSize = java.awt.Dimension(1000, 640)
-            LoopDoTheme { Root(graph) { app.loopdo.desktop.ui.MainApp(graph) } }
+            LoopDoTheme {
+                if (graph == null) DemoApp() else Root(graph) { app.loopdo.desktop.ui.MainApp(graph) }
+            }
         }
+    }
+}
+
+/** `--demo`: the phone's sample day, nothing signed in, no network (for looks and screenshots). */
+@Composable
+fun DemoApp() {
+    var place by remember { mutableStateOf(Place.TODAY) }
+    Shell(place, { place = it }, savedStatus("all saved · just now")) {
+        if (place == Place.TODAY) app.loopdo.desktop.ui.TodayPane(app.loopdo.client.today.demoToday(), app.loopdo.client.today.DemoUi, null,
+            "focus › gym 4× · › pay rent", onWrite = {}, onAdd = {})
+        else BasicText("${place.path} (demo)", style = LocalType.current.small)
     }
 }
 

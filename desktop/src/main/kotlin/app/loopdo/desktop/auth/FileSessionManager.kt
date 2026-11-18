@@ -23,7 +23,10 @@ class FileSessionManager(private val file: File) : SessionManager {
     }
 
     /** Throws when there is no readable session; supabase-kt's loadSessionOrNull() turns that into "signed out". */
-    override suspend fun loadSession(): UserSession = json.decodeFromString(UserSession.serializer(), file.readText())
+    override suspend fun loadSession(): UserSession {
+        if (!file.exists()) throw NoSuchElementException("not signed in on this laptop yet")
+        return json.decodeFromString(UserSession.serializer(), file.readText())
+    }
 
     override suspend fun deleteSession() { file.delete() }
 }
