@@ -17,6 +17,9 @@ import androidx.core.app.NotificationManagerCompat
 import app.loopdo.android.LoopDoApp
 import app.loopdo.android.MainActivity
 import app.loopdo.android.R
+import app.loopdo.android.widget.TapKind
+import app.loopdo.android.widget.TapResult
+import app.loopdo.android.widget.WidgetTap
 import app.loopdo.android.widget.toElapsed
 import app.loopdo.shared.day.settingsAt
 import app.loopdo.shared.remind.Ping
@@ -24,7 +27,9 @@ import app.loopdo.shared.remind.Reminder
 import app.loopdo.shared.remind.ReminderKind
 import app.loopdo.shared.remind.isQuietHours
 import app.loopdo.shared.remind.planReminders
+import app.loopdo.shared.remind.reminderKey
 import app.loopdo.shared.remind.replanAt
+import app.loopdo.shared.remind.snoozeAt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -82,6 +87,8 @@ class ReminderScheduler(
     private val today: suspend () -> LocalDate?,
     private val trustedNow: () -> Instant,
     private val elapsedNow: () -> Long,
+    /** A button's habit/task change, through the widget's commands (same rules, trusted clock, time proof). */
+    private val tap: suspend (WidgetTap) -> TapResult = { TapResult.FAILED },
 ) {
     private val lock = Mutex()
 
@@ -110,7 +117,9 @@ class ReminderScheduler(
         old.filter { it.key in store.shown() && it.key !in missed.map { m -> m.key } }.forEach { r ->
             if (decide(r, data.state(r), day, quiet = false) == null) poster.cancel(notificationId(r))
         }
-        store.setScheduled(plan)
+        // Today's reminders that were shown stay known, so their buttons work and a later replan can still clear them.
+        val shownToday = old.filter { it.key in store.shown() && it.date == day && it.key !in keys }
+        store.setScheduled(plan + shownToday)
         store.pruneShown(day.minusDays(1))
         missed.forEach { show(it, day, now) }
     }
@@ -119,6 +128,30 @@ class ReminderScheduler(
     suspend fun fire(key: String) = lock.withLock {
         val r = store.scheduled().firstOrNull { it.key == key } ?: return@withLock
         show(r, today(), trustedNow())
+    }
+
+    /** A notification button: [action] is "tick" | "plus" | "done" | "snooze" on reminder [key]. */
+    suspend fun act(action: String, key: String, step: Int) = lock.withLock {
+        val r = parseKey(key) ?: return@withLock
+        val id = notificationId(r)
+        if (action == "snooze") {
+            val at = snoozeAt(trustedNow(), r.date, data.versions())
+            poster.cancel(id)
+            if (at == null) return@withLock // it would ring after the day ends
+            val s = r.copy(key = reminderKey(r.kind, r.itemId, r.date, Ping.SNOOZE), fireAt = at, ping = Ping.SNOOZE)
+            store.setScheduled(store.scheduled().filter { it.key != s.key } + s)
+            store.unmarkShown(s.key)
+            alarms.set(s.key, elapsedFor(at))
+            return@withLock
+        }
+        val kind = when (action) { "tick" -> TapKind.TICK; "plus" -> TapKind.PLUS; "done" -> TapKind.TASK; else -> return@withLock }
+        val result = tap(WidgetTap(kind, r.itemId ?: return@withLock, r.date, done = false, step = step))
+        if (result == TapResult.STALE) {
+            poster.post(id, Shown(CH_HABITS.takeIf { r.kind == ReminderKind.HABIT } ?: CH_TASKS, DAY_ENDED, "", emptyList(), silentUpdate = true, timeoutMs = 5_000L), r)
+            return@withLock
+        }
+        val again = decide(r, data.state(r), today(), quiet = false)
+        if (again == null) poster.cancel(id) else poster.post(id, again.copy(silentUpdate = true), r)
     }
 
     private suspend fun show(r: Reminder, day: LocalDate?, now: Instant) {
@@ -131,6 +164,12 @@ class ReminderScheduler(
         if (poster.post(notificationId(r), shown, r)) store.markShown(r.key)
     }
 }
+
+/** A reminder from its key ("kind:id:date:ping"); its time is not in the key and not needed for a button. */
+fun parseKey(key: String): Reminder? = runCatching {
+    val (kind, id, date, ping) = key.split(":")
+    Reminder(key, ReminderKind.valueOf(kind.uppercase()), id.takeIf { it != "-" }, LocalDate.parse(date), Instant.EPOCH, Ping.valueOf(ping.uppercase()))
+}.getOrNull()
 
 /** The five channels (spec §5.2). Android fixes a channel's sound once created, so the night one is separate. */
 fun ensureChannels(context: Context) {
@@ -188,6 +227,7 @@ class AndroidPoster(private val context: Context) : Poster {
             .setContentIntent(open)
             .setAutoCancel(true)
             .setOnlyAlertOnce(shown.silentUpdate)
+            .apply { shown.timeoutMs?.let { setTimeoutAfter(it) } }
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
         shown.buttons.forEach { b -> n.addAction(0, b.label, buttonIntent(b, r)) }
         nm.notify(id, n.build())
@@ -226,6 +266,8 @@ class ReminderReceiver : BroadcastReceiver() {
                 when {
                     intent.action == ACTION_FIRE && key == REPLAN -> graph.reminders.replan()
                     intent.action == ACTION_FIRE && key != null -> graph.reminders.fire(key)
+                    intent.action == ACTION_BUTTON && key != null ->
+                        graph.reminders.act(intent.data?.host.orEmpty(), key, intent.data?.getQueryParameter("step")?.toIntOrNull() ?: 1)
                     else -> graph.reminders.replan()
                 }
             } catch (e: Exception) {

@@ -30,15 +30,17 @@ class WidgetCommands(
     suspend fun untickHabit(id: UUID, shownDate: LocalDate) = run { actions.untickHabit(id, shownDate) }
     suspend fun toggleTask(id: UUID, done: Boolean) = run { if (done) actions.reopenTask(id) else actions.completeTask(id) }
 
-    suspend fun handle(tap: WidgetTap) {
+    /** What one tap did. The widget ignores it; a reminder's buttons (M7) show "the day has ended." on STALE. */
+    suspend fun handle(tap: WidgetTap): TapResult {
         // The row may be older than the app's state (sign-out, a refused account switch, day end):
         // act only if the app is ready on the very day the row showed, else just redraw (final review I5).
-        if (runCatching { readyOn() }.getOrNull() != tap.date) {
+        val ready = runCatching { readyOn() }.getOrNull()
+        if (ready != tap.date) {
             runCatching { redraw() }
-            return
+            return if (ready == null) TapResult.FAILED else TapResult.STALE
         }
         val id = UUID.fromString(tap.id)
-        when (tap.kind) {
+        return when (tap.kind) {
             TapKind.TICK -> tickHabit(id, tap.date)
             TapKind.PLUS -> plus(id, tap.date, tap.step)
             TapKind.COMPLETE -> complete(id, tap.date)
@@ -47,18 +49,23 @@ class WidgetCommands(
         }
     }
 
-    private suspend fun run(block: suspend () -> Unit) {
+    private suspend fun run(block: suspend () -> Unit): TapResult {
         try {
             block()
+            return TapResult.DONE
         } catch (e: StaleDayException) {
             Log.i("loopdo_widget", "stale tap refused; today is ${e.today}")
+            return TapResult.STALE
         } catch (e: Exception) {
             Log.e("loopdo_widget", "widget action failed", e)
+            return TapResult.FAILED
         } finally {
             redraw()
         }
     }
 }
+
+enum class TapResult { DONE, STALE, FAILED }
 
 enum class TapKind(val path: String) { TICK("tick"), PLUS("plus"), UNTICK("untick"), TASK("task"), COMPLETE("complete") }
 

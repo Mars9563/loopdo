@@ -5,6 +5,9 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.loopdo.android.sync.LoopDoSchema
+import app.loopdo.android.widget.TapKind
+import app.loopdo.android.widget.TapResult
+import app.loopdo.android.widget.WidgetTap
 import app.loopdo.shared.remind.Ping
 import app.loopdo.shared.remind.Reminder
 import app.loopdo.shared.remind.ReminderKind
@@ -42,6 +45,7 @@ class RemindersTest {
         override fun set(key: String, elapsedMs: Long) { set[key] = elapsedMs }
         override fun cancel(key: String) { set.remove(key); cancelled += key }
     }
+    private val taps = mutableListOf<WidgetTap>()
     private val poster = object : Poster {
         var enabled = true
         val posted = mutableMapOf<Int, Shown>()
@@ -61,7 +65,21 @@ class RemindersTest {
         db.execute("INSERT INTO journal_entries (id, loopdo_date, text) VALUES (?, '2026-11-18', 'x')", listOf(UUID.randomUUID().toString()))
         db.execute("INSERT INTO journal_entries (id, loopdo_date, text) VALUES (?, '2026-11-19', 'x')", listOf(UUID.randomUUID().toString()))
         store = ReminderStore(ctx.getSharedPreferences("test-reminders-${UUID.randomUUID()}", Context.MODE_PRIVATE))
-        scheduler = ReminderScheduler(ReminderData(db), store, alarms, poster, today = { today }, trustedNow = { now }, elapsedNow = { elapsed })
+        scheduler = ReminderScheduler(ReminderData(db), store, alarms, poster, today = { today }, trustedNow = { now }, elapsedNow = { elapsed }) { t ->
+            taps += t
+            if (t.date != today) TapResult.STALE else {
+                when (t.kind) { // stands in for the widget's actions (tested in WidgetCommandsTest)
+                    TapKind.TICK, TapKind.PLUS -> {
+                        val n = db.getOptional("SELECT count FROM habit_logs WHERE id = ?", listOf("log-${t.id}")) { it.getLong(0)!! }
+                        if (n == null) db.execute("INSERT INTO habit_logs (id, habit_id, loopdo_date, count) VALUES (?, ?, ?, ?)", listOf("log-${t.id}", t.id, t.date.toString(), t.step))
+                        else db.execute("UPDATE habit_logs SET count = ? WHERE id = ?", listOf(n + t.step, "log-${t.id}"))
+                    }
+                    TapKind.TASK -> db.execute("UPDATE tasks SET completed_on = ? WHERE id = ?", listOf(t.date.toString(), t.id))
+                    else -> Unit
+                }
+                TapResult.DONE
+            }
+        }
     }
 
     @After
@@ -171,6 +189,84 @@ class RemindersTest {
         tick(gym) // e.g. ticked in the app, or synced from the other device
         scheduler.replan()
         assertTrue(poster.posted.isEmpty())
+    }
+
+    private suspend fun countHabit(title: String, target: Int, step: Int, time: String = "18:00"): String {
+        val id = UUID.randomUUID().toString()
+        db.execute("INSERT INTO habits (id, title, kind, target, reminder_time, step, sort_order) VALUES (?, ?, 'count', ?, ?, ?, 0)", listOf(id, title, target, time, step))
+        db.execute("INSERT INTO habit_schedules (id, habit_id, valid_from, recurrence) VALUES (?, ?, '2026-11-01', 'daily')", listOf(UUID.randomUUID().toString(), id))
+        return id
+    }
+    private suspend fun shownAt1820(key: String) { scheduler.replan(); now = Instant.parse("2026-11-18T12:50:00Z"); scheduler.fire(key) }
+
+    @Test
+    fun plusUpdatesTheCountInPlace() = runBlocking {
+        val water = countHabit("water", 8, 1)
+        db.execute("INSERT INTO habit_logs (id, habit_id, loopdo_date, count) VALUES (?, ?, '2026-11-18', 3)", listOf("log-$water", water))
+        shownAt1820(key(water))
+        scheduler.replan() // the reminder's time has passed: its button must still work
+        scheduler.act("plus", key(water), 1)
+        val shown = poster.posted.values.single()
+        assertEquals("water · 4/8", shown.title)
+        assertTrue(shown.silentUpdate)
+    }
+
+    @Test
+    fun plusToTargetRemovesIt() = runBlocking {
+        val water = countHabit("water", 8, 1)
+        db.execute("INSERT INTO habit_logs (id, habit_id, loopdo_date, count) VALUES (?, ?, '2026-11-18', 7)", listOf("log-$water", water))
+        shownAt1820(key(water))
+        scheduler.act("plus", key(water), 1)
+        assertTrue(poster.posted.isEmpty())
+    }
+
+    @Test
+    fun tickRemovesYesNo() = runBlocking {
+        val gym = habit("gym", "18:00")
+        shownAt1820(key(gym))
+        scheduler.act("tick", key(gym), 1)
+        assertEquals(TapKind.TICK, taps.single().kind)
+        assertTrue(poster.posted.isEmpty())
+    }
+
+    @Test
+    fun doneCompletesTheTask() = runBlocking {
+        val t = UUID.randomUUID().toString()
+        db.execute("INSERT INTO tasks (id, title, due_date, due_time, sort_order) VALUES (?, 'pay rent', '2026-11-18', '18:00', 0)", listOf(t))
+        val k = reminderKey(ReminderKind.TASK, t, d18, Ping.AT)
+        shownAt1820(k)
+        assertEquals("pay rent · 18:00", poster.posted.values.single().title)
+        scheduler.act("done", k, 1)
+        assertEquals(WidgetTap(TapKind.TASK, t, d18, done = false), taps.single())
+        assertTrue(poster.posted.isEmpty())
+    }
+
+    @Test
+    fun snoozeSetsOneAlarmThirtyMinutesOn() = runBlocking {
+        val t = UUID.randomUUID().toString()
+        db.execute("INSERT INTO tasks (id, title, due_date, due_time, sort_order) VALUES (?, 'pay rent', '2026-11-18', '18:00', 0)", listOf(t))
+        val k = reminderKey(ReminderKind.TASK, t, d18, Ping.AT)
+        shownAt1820(k)
+        scheduler.act("snooze", k, 1)
+        val snooze = reminderKey(ReminderKind.TASK, t, d18, Ping.SNOOZE)
+        assertEquals(elapsed + 30 * 60_000L, alarms.set[snooze])
+        assertTrue(poster.posted.isEmpty())
+        scheduler.replan() // a replan keeps the snooze
+        assertEquals(elapsed + 30 * 60_000L, alarms.set[snooze])
+        now = now.plusSeconds(1800)
+        scheduler.fire(snooze)
+        assertEquals("now", poster.posted.values.single().body)
+    }
+
+    @Test
+    fun staleTapSaysTheDayHasEnded() = runBlocking {
+        val gym = habit("gym", "18:00")
+        shownAt1820(key(gym))
+        today = d18.plusDays(1)
+        scheduler.act("tick", key(gym), 1)
+        val shown = poster.posted.values.single()
+        assertEquals(DAY_ENDED, shown.title)
+        assertEquals(5_000L, shown.timeoutMs)
     }
 
     @Test

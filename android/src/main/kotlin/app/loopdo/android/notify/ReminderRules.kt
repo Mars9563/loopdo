@@ -33,7 +33,11 @@ sealed interface ItemState {
 data class Button(val label: String, val action: String, val step: Int = 1)
 
 /** A notification to post. [silentUpdate] = an update after a button (no sound again). */
-data class Shown(val channel: String, val title: String, val body: String, val buttons: List<Button>, val silentUpdate: Boolean = false)
+data class Shown(
+    val channel: String, val title: String, val body: String, val buttons: List<Button>, val silentUpdate: Boolean = false,
+    /** Removes itself after this long ("the day has ended."). */
+    val timeoutMs: Long? = null,
+)
 
 const val DAY_ENDED = "the day has ended."
 

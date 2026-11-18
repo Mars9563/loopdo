@@ -92,6 +92,16 @@ class WidgetCommandsTest {
     }
 
     @Test
+    fun handleReportsStale() = runBlocking {
+        val h = habit("yes_no", 1)
+        val yesterday = today.minusDays(1)
+        assertEquals(TapResult.STALE, commands.handle(WidgetTap(TapKind.TICK, h.toString(), yesterday, done = false)))
+        assertEquals(null, count(h))
+        assertEquals(TapResult.DONE, commands.handle(WidgetTap(TapKind.TICK, h.toString(), today, done = false)))
+        assertEquals(1L, count(h))
+    }
+
+    @Test
     fun plusOneTwiceCountsTwo() = runBlocking {
         val h = habit("count", 8)
         commands.plus(h, today, 1)

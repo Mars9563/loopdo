@@ -183,7 +183,7 @@ class AppGraph(context: android.content.Context) {
             today = { (widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready)?.model?.date },
             trustedNow = { trustedClock.now().instant },
             elapsedNow = { android.os.SystemClock.elapsedRealtime() },
-        )
+        ) { widgetCommands.handle(it) }
     }
 
     /** What the widget shows right now: nothing tickable until the app is ready (M3 start rules). */
