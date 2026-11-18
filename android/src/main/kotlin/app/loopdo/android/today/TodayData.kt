@@ -52,6 +52,11 @@ private fun SqlCursor.int(i: Int) = getLong(i)?.toInt() ?: 0
 
 data class JournalEntry(val text: String, val mood: Int?)
 
+/** The days whose journal has something (the journal streak's rule); also the reminders' "journal written" (M7). */
+internal const val JOURNAL_DAYS_SQL =
+    "SELECT loopdo_date FROM journal_entries WHERE trim(text) <> '' OR id IN (SELECT entry_id FROM journal_photos)" +
+        " OR id IN (SELECT entry_id FROM journal_lines WHERE deleted_at IS NULL AND trim(text) <> '')"
+
 class TodayData(private val db: PowerSyncDatabase) {
     private val versionsSql = "SELECT effective_at, time_zone, day_end, floor_date FROM day_settings_versions"
     private fun version(c: SqlCursor) = DaySettingsVersion(
@@ -67,9 +72,7 @@ class TodayData(private val db: PowerSyncDatabase) {
     /** For the actions: the settings history right now (not a watched copy). */
     suspend fun versionsNow(): List<DaySettingsVersion> = db.getAll(versionsSql) { version(it) }
 
-    private val journalDaysSql =
-        "SELECT loopdo_date FROM journal_entries WHERE trim(text) <> '' OR id IN (SELECT entry_id FROM journal_photos)" +
-            " OR id IN (SELECT entry_id FROM journal_lines WHERE deleted_at IS NULL AND trim(text) <> '')"
+    private val journalDaysSql = JOURNAL_DAYS_SQL
 
     fun rows(): Flow<TodayRows> {
         val flows: List<Flow<List<Any>>> = listOf(
