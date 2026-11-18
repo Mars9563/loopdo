@@ -29,6 +29,10 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.composed
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.unit.dp
@@ -48,19 +52,26 @@ fun MainApp(g: DesktopGraph) {
     val journal = remember { g.journalViewModel() }
     val journalUi = remember { JournalBinding(journal, g.photoDir, g.popupDrafts, g.drafts) }
     val jsnack by journal.snack.collectAsState()
+    val habits = remember { g.habitsViewModel() }
+    val hdata by habits.data.collectAsState()
+    val hsnack by habits.message.collectAsState()
+    var habitPick by remember { mutableStateOf<String?>(null) }
+    var habitEditor by remember { mutableStateOf<String?>(null) } // null = closed, "" = new, else the habit's id
     val model by today.state.collectAsState()
     val jm by journal.state.collectAsState()
     val snack by today.snack.collectAsState()
     var place by remember { mutableStateOf(Place.TODAY) }
     var adding by remember { mutableStateOf(false) }
     val status = savedLine(g)
-    Box(Modifier.fillMaxSize().onPreviewKeyEvent { e -> handleKey(e, adding) { c ->
+    val rootFocus = remember { FocusRequester() }
+    LaunchedEffect(place, adding, habitEditor) { if (!Typing.active && !adding && habitEditor == null) runCatching { rootFocus.requestFocus() } }
+    Box(Modifier.fillMaxSize().rootKeys(rootFocus, adding || habitEditor != null) { c ->
         when (c) {
             'n' -> { place = Place.TODAY; adding = true }
             'w' -> place = Place.JOURNAL
             else -> placeForKey(c)?.let { place = it }
         }
-    } }) {
+    }) {
         Shell(
             place, { place = it }, status,
             railExtra = { if (place == Place.JOURNAL) jm?.let { OnThisDay(it) } },
@@ -79,22 +90,61 @@ fun MainApp(g: DesktopGraph) {
                             Writer(wd, j.today.date, j.now, if (wd == j.today.date) j.today.mood else null, journalUi, ::pickPhotoFile)
                         } })
                 } ?: BasicText("loading today…", style = LocalType.current.small)
+                Place.HABITS -> hdata?.let { d ->
+                    HabitsPane(d, habitPick, { habitPick = it }, { habitEditor = "" }, { habitEditor = it }, { habits.restore(java.util.UUID.fromString(it)) })
+                } ?: BasicText("loading habits…", style = LocalType.current.small)
                 Place.JOURNAL -> jm?.let { JournalPane(it, journalUi, ::pickPhotoFile) } ?: BasicText("loading the journal…", style = LocalType.current.small)
-                else -> BasicText("${place.path} arrives in a later step (M10 ${when (place) { Place.HABITS -> "D4"; Place.STATS -> "D5"; else -> "D8" }}).", style = LocalType.current.small)
+                else -> BasicText("${place.path} arrives in a later step (M10 ${when (place) { Place.STATS -> "D5"; else -> "D8" }}).", style = LocalType.current.small)
             }
+        }
+        val editing = habitEditor
+        if (place == Place.HABITS && editing != null) hdata?.let { d ->
+            val row = editing.takeIf { it.isNotEmpty() }?.let(d::habit)
+            val start = row?.let { app.loopdo.client.habits.editorStart(it, d.schedules, d.logs, d.today) }
+            HabitEditor(start, d.today, archived = row?.archivedOn != null,
+                onSave = { draft, onError -> habits.save(row?.id?.let(java.util.UUID::fromString), draft, null, { id -> habitPick = id.toString(); habitEditor = null }, onError) },
+                onArchive = { row?.let { habits.archive(java.util.UUID.fromString(it.id)) { habitEditor = null } } },
+                onDelete = { row?.let { habits.deleteForever(java.util.UUID.fromString(it.id)) { habitEditor = null; habitPick = null } } },
+                onClose = { habitEditor = null })
         }
         if (adding) model?.let { m ->
             AddLine(onDone = { adding = false }) { text, done ->
                 today.addTask(text, null, null, null, null, m.date, onSaved = done)
             }
         }
-        (snack?.let { it.text to it.id } ?: jsnack?.let { it.text to it.id })?.let { (text, id) ->
+        (snack?.let { it.text to it.id } ?: jsnack?.let { it.text to it.id } ?: hsnack?.let { it.text to it.id })?.let { (text, id) ->
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp).background(Color(0xF0090F18), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
                 BasicText(text, style = LocalType.current.small.copy(color = Fern.ink))
             }
-            LaunchedEffect(id) { delay(4_000); today.dismissSnack(id); journal.dismiss(id) }
+            LaunchedEffect(id) { delay(4_000); today.dismissSnack(id); journal.dismiss(id); habits.dismiss(id) }
         }
     }
+}
+
+/**
+ * The rail's letters (`t h j s ,`, `n`, `w`). Handled on the way BACK from the focused element (onKeyEvent, not
+ * onPreviewKeyEvent), so a text field that is typing keeps its letters.
+ */
+fun Modifier.placeKeys(blocked: Boolean, onChar: (Char) -> Unit): Modifier = this.then(
+    Modifier.onKeyEvent { e -> handleKey(e, blocked || Typing.active, onChar) },
+)
+
+/** The app's outer box: focusable, so the rail's letters arrive when no field has the keyboard. */
+fun Modifier.rootKeys(focus: FocusRequester, blocked: Boolean, onChar: (Char) -> Unit): Modifier =
+    this.focusRequester(focus).focusable().placeKeys(blocked, onChar)
+
+/** Whether a text field has the keyboard: the rail's letters stay off then (a typed "t" is a "t"). */
+object Typing {
+    private val count = java.util.concurrent.atomic.AtomicInteger()
+    val active: Boolean get() = count.get() > 0
+    fun focus(on: Boolean) { if (on) count.incrementAndGet() else count.updateAndGet { maxOf(0, it - 1) } }
+}
+
+/** Put on every text field: tells [Typing] while it has focus. */
+fun Modifier.typingField(): Modifier = composed {
+    var focused by remember { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { if (focused) Typing.focus(false) } }
+    onFocusChanged { if (it.isFocused != focused) { focused = it.isFocused; Typing.focus(it.isFocused) } }
 }
 
 private fun handleKey(e: KeyEvent, typing: Boolean, onChar: (Char) -> Unit): Boolean {

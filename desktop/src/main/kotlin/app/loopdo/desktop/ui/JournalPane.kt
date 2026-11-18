@@ -173,7 +173,7 @@ private fun LineRow(date: LocalDate, l: LogItem.Line, ui: JournalUi) {
             if (!editing) BasicText(l.line.text, style = t.body, modifier = Modifier.weight(1f).clickable { editing = true })
             else Column(Modifier.weight(1f)) {
                 val focus = remember { FocusRequester() }
-                BasicTextField(text, { text = it }, Modifier.fillMaxWidth().focusRequester(focus).border(1.dp, Fern.mint.copy(alpha = .35f), RoundedCornerShape(8.dp)).padding(6.dp)
+                BasicTextField(text, { text = it }, Modifier.fillMaxWidth().typingField().focusRequester(focus).border(1.dp, Fern.mint.copy(alpha = .35f), RoundedCornerShape(8.dp)).padding(6.dp)
                     .onPreviewKeyEvent {
                         if (it.type != KeyEventType.KeyDown) false
                         else when (it.key) {
@@ -272,7 +272,7 @@ fun Writer(date: LocalDate, today: LocalDate, now: LocalTime, mood: Int?, ui: Jo
         Spacer(Modifier.height(8.dp))
         Box {
             if (text.isEmpty()) BasicText(buildAnnotatedString { withStyle(SpanStyle(color = Fern.mint)) { append(if (earlier) "[--:--] " else "[${now.format(hm)}] ") }; append("what's happening?") }, style = t.body.copy(color = Fern.lichen))
-            BasicTextField(text, { text = it; ui.keepDraft(date, it) }, Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
+            BasicTextField(text, { text = it; ui.keepDraft(date, it) }, Modifier.fillMaxWidth().typingField().focusRequester(focus).onPreviewKeyEvent {
                 if (it.key == Key.Enter && it.type == KeyEventType.KeyDown && !it.isShiftPressed) { save(); true } else false
             }, textStyle = t.body, cursorBrush = SolidColor(Fern.mint))
         }

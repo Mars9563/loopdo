@@ -46,7 +46,7 @@ fun TermField(value: String, onChange: (String) -> Unit, modifier: Modifier = Mo
     val t = LocalType.current
     BasicTextField(
         value, onChange,
-        modifier.fillMaxWidth().border(1.dp, Fern.mint.copy(alpha = .30f), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
+        modifier.typingField().fillMaxWidth().border(1.dp, Fern.mint.copy(alpha = .30f), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
             .onPreviewKeyEvent { if (it.key == Key.Enter && it.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) { onEnter(); true } else false },
         textStyle = t.body, singleLine = true, cursorBrush = SolidColor(Fern.mint),
         visualTransformation = if (password) PasswordVisualTransformation('•') else androidx.compose.ui.text.input.VisualTransformation.None,
