@@ -64,6 +64,7 @@ fun CalendarView(model: JournalModel, month: YearMonth, onMonth: (YearMonth) -> 
                 week.forEach { c -> Box(Modifier.weight(1f).padding(3.dp).aspectRatio(1f)) { c?.let { Cell(it, onDay) } } }
             }
         }
+        if (cells.none { it.hasEntry }) Text("nothing written this month.", style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(top = 6.dp))
         Text("dim → bright = mood 1 → 5 · outline = no mood · tap a day to read it", style = LoopDoType.small.copy(color = LoopDoColors.dim, fontSize = 11.sp), modifier = Modifier.padding(vertical = 8.dp))
     }
 }

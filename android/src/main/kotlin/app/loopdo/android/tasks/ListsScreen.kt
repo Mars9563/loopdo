@@ -47,6 +47,7 @@ fun ListsScreen(vm: TasksViewModel, onBack: () -> Unit) {
             Bracket("<", idle = true, onClick = onBack)
             Text("~/lists", style = LoopDoType.title.copy(color = LoopDoColors.accent))
         }
+        if (lists.isEmpty()) Text("no lists yet. make one to group tasks.", style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(vertical = 8.dp))
         lists.forEach { l ->
             Row(
                 Modifier.fillMaxWidth().height(48.dp).then(

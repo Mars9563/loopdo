@@ -104,7 +104,8 @@ private fun StatsScreen(s: StatsUi, vm: StatsViewModel) {
         DashedRule(Modifier.padding(vertical = 8.dp))
         val w = s.week
         SectionLabel(weekTitle(w)) { Bracket("review >", primary = true) { vm.openReview() } }
-        KeyValue("done") { Text(doneLine(w), style = LoopDoType.small) }
+        if (w.total == 0) Text("nothing was due this week yet.", style = LoopDoType.small.copy(color = LoopDoColors.dim))
+        else KeyValue("done") { Text(doneLine(w), style = LoopDoType.small) }
         w.best?.let { b -> KeyValue("best") { Text(buildAnnotatedString { append("${b.title} "); withStyle(SpanStyle(color = LoopDoColors.bright)) { append("${b.done}/${b.due}") } }, style = LoopDoType.small) } }
         if (w.slipped.isNotEmpty()) KeyValue("slipped") { Text(w.slipped.joinToString(" · "), style = LoopDoType.small.copy(color = LoopDoColors.warn)) }
         DashedRule(Modifier.padding(vertical = 8.dp))
@@ -126,6 +127,7 @@ private fun StatsScreen(s: StatsUi, vm: StatsViewModel) {
             Bracket("30d", primary = s.last30, idle = !s.last30) { vm.setLast30(true) }
             Bracket("all", primary = !s.last30, idle = s.last30) { vm.setLast30(false) }
         }
+        if (s.completion.isEmpty()) Text("no habits yet.", style = LoopDoType.small.copy(color = LoopDoColors.dim))
         s.completion.forEach { c -> Bar(c.title, c.percent / 100.0, "${c.percent}%") }
         Spacer(Modifier.height(24.dp))
     }

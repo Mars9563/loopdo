@@ -54,6 +54,7 @@ internal fun FocusSheet(r: ReviewUi, onPick: (PickItem, Int?) -> Unit, onCancel:
                 Text("${r.next.size + 1} of 2", style = LoopDoType.small.copy(color = LoopDoColors.dim))
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                if (r.picker.none { it.itemId !in taken }) Text("nothing to pick yet. add a habit or a task first.", style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(vertical = 8.dp))
                 SectionLabel("habits") { Text("times next week".uppercase(), style = LoopDoType.label) }
                 r.picker.filter { it.kind == FocusKind.HABIT && it.itemId !in taken }.forEach { p ->
                     PickRow(p, chosen == p, { chosen = p; goal = p.goal ?: 1 }) {

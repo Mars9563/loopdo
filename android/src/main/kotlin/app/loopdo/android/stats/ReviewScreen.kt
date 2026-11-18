@@ -74,7 +74,8 @@ internal fun ReviewScreen(r: ReviewUi, vm: StatsViewModel) {
                     withStyle(SpanStyle(color = LoopDoColors.bright)) { append("${w.activeDays}/7") }
                 }, style = LoopDoType.small)
             }
-            WeekGrid(r)
+            if (r.review.habits.isEmpty()) Text("no habits were due this week.", style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(vertical = 4.dp))
+            else WeekGrid(r)
             KeyValue("tasks") {
                 Text(buildAnnotatedString {
                     withStyle(SpanStyle(color = LoopDoColors.bright)) { append("${w.tasksDone}") }

@@ -304,7 +304,7 @@ private fun TodaySections(m: TodayModel, vm: TodayUi, extras: TodayExtras?) {
 
     var inboxOpen by rememberSaveable { mutableStateOf(true) }
     Label("INBOX ${m.inbox.size}", right = if (inboxOpen) "[v]" else "[>]", rightColor = LoopDoColors.accent, onClick = { inboxOpen = !inboxOpen })
-    if (inboxOpen) m.inbox.forEach { t -> TaskLine(t, vm, extras) }
+    if (inboxOpen) { if (m.inbox.isEmpty()) Hint("inbox is empty. [+ add] puts tasks here."); m.inbox.forEach { t -> TaskLine(t, vm, extras) } }
 
     if (m.lists.isNotEmpty()) {
         DashedRule(Modifier.padding(vertical = 8.dp))

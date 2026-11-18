@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -163,8 +164,10 @@ private fun PhotoItem(
 @Composable
 fun PhotoThumb(id: String, localPath: String?, photo: suspend (String, String?) -> File?, sizeDp: Int, modifier: Modifier = Modifier, whole: Boolean = false) {
     val key = "$id@$sizeDp"
+    var failed by androidx.compose.runtime.remember(id, localPath) { androidx.compose.runtime.mutableStateOf(false) }
     val bitmap by produceState(THUMBS[key], id, localPath) {
         if (value == null) value = withContext(Dispatchers.IO) { photo(id, localPath)?.let { decodeSampled(it, sizeDp * 3) } }?.also { THUMBS[key] = it }
+        failed = value == null
     }
     val shape = RoundedCornerShape(8.dp)
     val shown = bitmap
@@ -177,7 +180,8 @@ fun PhotoThumb(id: String, localPath: String?, photo: suspend (String, String?) 
     }
     Box(modifier.size(sizeDp.dp).clip(shape).background(LoopDoColors.accent.copy(alpha = 0.10f)), contentAlignment = Alignment.Center) {
         bitmap?.let { Image(it, contentDescription = "photo", contentScale = ContentScale.Crop, modifier = Modifier.size(sizeDp.dp)) }
-            ?: Text("…", style = LoopDoType.small.copy(color = LoopDoColors.dim))
+            ?: if (failed && whole) Text("photo not on this phone yet. it loads when you're online.", style = LoopDoType.small.copy(color = LoopDoColors.dim), modifier = Modifier.padding(8.dp))
+            else Text(if (failed) "⇣" else "…", style = LoopDoType.small.copy(color = LoopDoColors.dim))
     }
 }
 

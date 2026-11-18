@@ -77,20 +77,24 @@ class SettingsViewModel(
         _busy.value = false
     }
 
-    fun setDayEnd(hour: Int) = act {
-        val z = state.value?.zone ?: return@act null
+    /** Day settings go to the server (they wait for today to end there): offline, say so plainly. */
+    private suspend fun online(block: suspend () -> String?): String? =
+        try { block() } catch (e: java.io.IOException) { throw IllegalStateException("needs a connection. try again when you're online.") }
+
+    fun setDayEnd(hour: Int) = act { online {
+        val z = state.value?.zone ?: return@online null
         daySettings.setDaySettings(z.id, "%02d:00".format(hour)); "the new day end starts when today ends."
-    }
-    fun setZone(zone: String) = act {
-        val end = state.value?.dayEnd ?: return@act null
+    } }
+    fun setZone(zone: String) = act { online {
+        val end = state.value?.dayEnd ?: return@online null
         daySettings.setDaySettings(zone, "%02d:%02d".format(end.hour, end.minute)); "the new time zone starts when today ends."
-    }
+    } }
     /** Cancel a waiting change: send the settings in force now again (it replaces the waiting one). */
-    fun keepCurrent() = act {
+    fun keepCurrent() = act { online {
         val v = latestVersions.value
         val cur = inForceNow(v, now())
         daySettings.setDaySettings(cur.zone.id, "%02d:%02d".format(cur.dayEnd.hour, cur.dayEnd.minute)); null
-    }
+    } }
     fun setName(name: String) = act {
         val n = name.trim().take(60)
         require(n.isNotEmpty()) { "a name can't be empty." }
