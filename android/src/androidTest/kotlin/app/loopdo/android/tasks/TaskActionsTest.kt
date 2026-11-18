@@ -128,6 +128,17 @@ class TaskActionsTest {
         assertEquals(listOf("2026-11-13", "2026-11-14"), instances(u).map { it.first })
     }
 
+    // Owner, 2026-11-18: ending a series ("never" in the series editor) keeps today's open copy.
+    @Test
+    fun endingASeriesInTheEditorKeepsTodaysOpenCopy() = runBlocking {
+        val t = actions.saveTask(null, draft("water plants", due = nov(12), repeat = RepeatRule.Daily))
+        actions.editSeries(t, draft("water the plants", due = today, repeat = null))
+        assertEquals(listOf("2026-11-12", "2026-11-13", "2026-11-14"), instances(t).map { it.first })
+        assertEquals("water the plants", col("SELECT title FROM tasks WHERE id = ?", instanceId(t, today).toString())) // the edit applies to it
+        actions.ensureInstances(nov(20))
+        assertEquals(3, instances(t).size)
+    }
+
     @Test
     fun stopRepeatingKeepsWhatExists() = runBlocking {
         val t = actions.saveTask(null, draft("water plants", due = nov(12), repeat = RepeatRule.Daily))

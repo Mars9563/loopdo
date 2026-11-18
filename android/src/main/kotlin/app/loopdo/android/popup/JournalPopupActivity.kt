@@ -63,6 +63,14 @@ class JournalPopupActivity : ComponentActivity() {
                         error = error, onPhoto = null, notice = notice,
                         onCancel = { finish() },
                         onSave = { vm.saveLine(date, text, earlierDay = earlier) { finish() } },
+                        // The typed text stays as the shared line draft: the app's writer opens with it.
+                        onOpenApp = {
+                            startActivity(
+                                Intent(this@JournalPopupActivity, MainActivity::class.java)
+                                    .putExtra(MainActivity.EXTRA_TAB, "journal").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                            finish()
+                        },
                     )
                 }
             }

@@ -45,7 +45,8 @@ import app.loopdo.android.ui.theme.LoopDoType
 
 /**
  * Writing a line (locked journal-log-v2, phone 3): the stamp the line will get (`[22:41] · now`), the input, one
- * mood per day, `[📷 photo]` (app only; null in the widget pop-up), `[cancel]` `[save ↵]`. Tapping outside or
+ * mood per day, `[📷 photo]` (app only; null in the widget pop-up), `[open app ↗]` (the widget pop-up only, owner
+ * 2026-11-18), `[cancel]` `[save ↵]`. Tapping outside or
  * Back calls [onCancel]; the caller keeps the typed text (drafts are never thrown away).
  */
 @Composable
@@ -62,6 +63,7 @@ fun WriterSheet(
     onSave: () -> Unit,
     notice: String? = null,
     saving: Boolean = false,
+    onOpenApp: (() -> Unit)? = null,
 ) {
     val focus = remember { FocusRequester() }
     BackHandler(onBack = onCancel)
@@ -114,6 +116,7 @@ fun WriterSheet(
             error?.let { Text(it, style = LoopDoType.small.copy(color = LoopDoColors.warn), modifier = Modifier.padding(top = 6.dp)) }
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onPhoto != null) Bracket("📷 photo", idle = true, onClick = onPhoto)
+                if (onOpenApp != null) Bracket("open app ↗", idle = true, onClick = onOpenApp)
                 Spacer(Modifier.weight(1f))
                 Bracket("cancel", idle = true, onClick = onCancel)
                 Bracket("save ↵", primary = true, enabled = text.isNotBlank() && !saving, onClick = onSave)

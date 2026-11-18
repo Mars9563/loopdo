@@ -135,12 +135,21 @@ class TaskActions(
         val today = today()
         return db.oneTransaction { tx ->
             val old = tx.template(templateId) ?: throw IllegalStateException("that repeating task is gone.")
+            // Ending the series (no repeat) keeps today's open copy, with the edit (owner, 2026-11-18); only later ones go.
+            val ending = d.repeat == null
             val replaced = tx.getAll(
-                "SELECT id FROM tasks WHERE template_id = ? AND completed_at IS NULL AND occurrence_date >= ?", listOf(templateId.toString(), today.toString()),
+                "SELECT id FROM tasks WHERE template_id = ? AND completed_at IS NULL AND occurrence_date ${if (ending) ">" else ">="} ?",
+                listOf(templateId.toString(), today.toString()),
             ) { it.getString(0)!! }
             replaced.forEach { tx.execute("DELETE FROM subtasks WHERE task_id = ?", listOf(it)); tx.execute("DELETE FROM tasks WHERE id = ?", listOf(it)) }
             tx.execute("UPDATE tasks SET generated_through = ? WHERE id = ?", listOf(STOPPED.toString(), templateId.toString()))
-            if (d.repeat == null) return@oneTransaction templateId
+            if (ending) {
+                tx.execute(
+                    "UPDATE tasks SET title = ?, notes = ?, due_time = ?, list_id = ? WHERE template_id = ? AND occurrence_date = ? AND completed_at IS NULL",
+                    listOf(d.title, d.notes, d.time?.toString(), d.listId?.toString(), templateId.toString(), today.toString()),
+                )
+                return@oneTransaction templateId
+            }
             val doneToday = tx.getOptional(
                 "SELECT 1 FROM tasks WHERE template_id = ? AND occurrence_date = ? AND completed_at IS NOT NULL", listOf(templateId.toString(), today.toString()),
             ) { true } != null

@@ -112,7 +112,7 @@ class JournalActionsTest {
 
     @Test
     fun pastDayRefusesNewLines() = runBlocking {
-        assertEquals("new lines go on today.", runCatching { journal.addLines(today.minusDays(1), "x") }.exceptionOrNull()?.message)
+        assertEquals("new lines go on today.", runCatching { journal.addLines(today.minusDays(2), "x") }.exceptionOrNull()?.message)
         // An unsaved draft from yesterday is saved onto yesterday with the time it was last edited.
         val lastEdit = Instant.parse("2026-11-13T17:00:00Z") // 22:30 IST fri 13 nov
         journal.addLines(today.minusDays(1), "draft from last night", at = lastEdit)
@@ -220,5 +220,14 @@ class JournalActionsTest {
         assertEquals("2026-11-14T18:50:00Z", db.get("SELECT stamped_at FROM journal_lines WHERE text = 'still up'") { it.getString(0)!! })
         // The ids come from the day and the line's place: a second device makes the same rows.
         assertEquals(uuidV5(UUID.fromString(entryId), "line:0").toString(), lineId("written before times"))
+    }
+
+    // Owner, 2026-11-18: the pop-up opened at 03:58 and saved at 04:02 saves onto the day it was opened for, at its end.
+    @Test
+    fun aPopupOpenedBeforeTheDayEndSavesToItsDay() = runBlocking {
+        journal.addLines(today.minusDays(1), "written just before the day end")
+        val yesterday = uuidV5(user, "journal:2026-11-13").toString()
+        assertEquals("[03:59] written just before the day end", text(yesterday))
+        assertEquals("new lines go on today.", runCatching { journal.addLines(today.minusDays(2), "x") }.exceptionOrNull()?.message)
     }
 }

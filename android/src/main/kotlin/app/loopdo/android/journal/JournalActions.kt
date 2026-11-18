@@ -40,10 +40,12 @@ class JournalActions(
         val today = dateAt(now)
         // Only today; an earlier day only for its unsaved draft (given with [at]), never stuck: a draft time outside
         // its day (edited the next morning, or none known before M6) is stamped one minute before that day's end.
-        require(date == today || (at != null && date < today)) { "new lines go on today." }
+        // The day just ended also takes a line with no time given: a pop-up opened before the day end and saved
+        // after it saves onto the day it was opened for, at that day's end (owner, 2026-11-18).
+        require(date == today || (date < today && (at != null || date == today.minusDays(1)))) { "new lines go on today." }
         val stampAt = when {
             date == today -> at ?: now
-            dateAt(at!!) == date -> at
+            at != null && dateAt(at) == date -> at
             else -> app.loopdo.shared.day.dayEndInstant(date, settingsAt(now)).minusSeconds(60)
         }
         val lines = splitInput(input)
