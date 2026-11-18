@@ -19,7 +19,7 @@ const val PHOTO_MAX_BYTES = 5L * 1024 * 1024
  * by the JPEG's EXIF orientation (Skia applies it on decode), WebP at quality 85 (70, 55 if it would pass 5 MB). Skia writes no EXIF, so no
  * location or camera data leaves the laptop.
  */
-fun compressPhoto(src: File, out: File, id: UUID = UUID.randomUUID()): PreparedPhoto {
+fun compressPhoto(src: File, out: File, id: UUID = UUID.randomUUID(), maxBytes: Long = PHOTO_MAX_BYTES): PreparedPhoto {
     val bytes = src.readBytes()
     val img = runCatching { Image.makeFromEncoded(bytes) }.getOrNull() ?: throw IllegalArgumentException("that file isn't a photo.")
     // Skia's decoder already turns the picture upright by its EXIF orientation (checked by the tests).
@@ -32,8 +32,8 @@ fun compressPhoto(src: File, out: File, id: UUID = UUID.randomUUID()): PreparedP
     out.parentFile?.mkdirs()
     for (q in listOf(85, 70, 55)) {
         out.writeBytes(snap.encodeToData(EncodedImageFormat.WEBP, q)!!.bytes)
-        if (out.length() <= PHOTO_MAX_BYTES) break
+        if (out.length() <= maxBytes) break
     }
-    if (out.length() > PHOTO_MAX_BYTES) { out.delete(); throw IllegalArgumentException("that photo is too big, even after shrinking.") }
+    if (out.length() > maxBytes) { out.delete(); throw IllegalArgumentException("that photo is too big, even after shrinking.") }
     return PreparedPhoto(id, out.path, w, h, out.length().toInt())
 }

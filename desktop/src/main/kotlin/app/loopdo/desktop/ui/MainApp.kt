@@ -46,7 +46,7 @@ fun placeForKey(c: Char): Place? = Place.entries.firstOrNull { it.key == c }
 fun MainApp(g: DesktopGraph) {
     val today = remember { g.todayViewModel() }
     val journal = remember { g.journalViewModel() }
-    val journalUi = remember { JournalBinding(journal, g.photoDir) }
+    val journalUi = remember { JournalBinding(journal, g.photoDir, g.popupDrafts, g.drafts) }
     val jsnack by journal.snack.collectAsState()
     val model by today.state.collectAsState()
     val jm by journal.state.collectAsState()
@@ -73,7 +73,11 @@ fun MainApp(g: DesktopGraph) {
                 Place.TODAY -> model?.let { m ->
                     TodayPane(m, today, jm?.today, focusLine(m.habitsOpen + m.habitsDone, m.dueToday + m.late + m.inbox),
                         onWrite = { place = Place.JOURNAL }, onAdd = { adding = true },
-                        writer = jm?.let { j -> { Writer(j.today.date, j.now, j.today.mood, journalUi, ::pickPhotoFile) } })
+                        writer = jm?.let { j -> {
+                            val v by journalUi.draftVersion.collectAsState()
+                            val wd = remember(v, j.today.date) { writerDate(j.today.date, journalUi) }
+                            Writer(wd, j.today.date, j.now, if (wd == j.today.date) j.today.mood else null, journalUi, ::pickPhotoFile)
+                        } })
                 } ?: BasicText("loading today…", style = LocalType.current.small)
                 Place.JOURNAL -> jm?.let { JournalPane(it, journalUi, ::pickPhotoFile) } ?: BasicText("loading the journal…", style = LocalType.current.small)
                 else -> BasicText("${place.path} arrives in a later step (M10 ${when (place) { Place.HABITS -> "D4"; Place.STATS -> "D5"; else -> "D8" }}).", style = LocalType.current.small)
@@ -153,3 +157,7 @@ private fun OnThisDay(j: app.loopdo.client.journal.JournalModel) {
     BasicText(d.date.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.ENGLISH)).lowercase(), style = t.small)
     BasicText(first, style = t.small.copy(color = Fern.ink), modifier = Modifier.padding(top = 4.dp))
 }
+
+/** Quick add opens only when the main app would show its screens (D3 review): signed in, not blocked on another
+ *  account's unsent changes, and with day settings (else "today" can't be worked out). Otherwise the main window shows. */
+fun quickAllowed(signedIn: Boolean, blocked: String?, hasSettings: Boolean): Boolean = signedIn && blocked == null && hasSettings

@@ -25,6 +25,8 @@ class JournalPaneRenderTest {
     )
 
     object FakeUi : JournalUi {
+        override val draftVersion = kotlinx.coroutines.flow.MutableStateFlow(0L)
+        override fun draftDates(): Set<LocalDate> = emptySet()
         override fun draftFor(date: LocalDate) = ""
         override fun keepDraft(date: LocalDate, text: String) {}
         override fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) {}

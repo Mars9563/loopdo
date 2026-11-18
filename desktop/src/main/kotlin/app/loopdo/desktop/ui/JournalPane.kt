@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -74,7 +75,11 @@ private val monthFmt = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
 
 /** What the journal screen asks of the journal (JournalViewModel; a fake in render tests). */
 interface JournalUi {
+    /** Moves whenever any draft changes (the writer and quick add share the store). */
+    val draftVersion: kotlinx.coroutines.flow.StateFlow<Long>
     fun draftFor(date: LocalDate): String
+    /** Days with unsent text. */
+    fun draftDates(): Set<LocalDate>
     fun keepDraft(date: LocalDate, text: String)
     fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit)
     fun editLine(date: LocalDate, lineId: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit)
@@ -84,6 +89,9 @@ interface JournalUi {
     fun deletePhoto(id: String)
     suspend fun photo(id: String, localPath: String?): File?
 }
+
+/** The writer's day: today, or the day an unsent line was started before the day ended (the phone pop-up's rule). */
+fun writerDate(today: LocalDate, ui: JournalUi): LocalDate = app.loopdo.client.popup.journalDateToOpen(today, ui.draftDates())
 
 /** The locked desktop-v1 B: the time-log feed | the mood calendar and the writer. */
 @Composable
@@ -122,7 +130,9 @@ fun JournalPane(m: JournalModel, ui: JournalUi, pickPhoto: () -> File?) {
                 MoodCalendar(month, m.moods, m.today.date, written = m.feed.map { it.date }.toSet()) { picked = it }
                 BasicText("dim to bright: mood 1 to 5 · click a day to read it", style = t.label, modifier = Modifier.padding(top = 10.dp))
                 Spacer(Modifier.height(18.dp))
-                Writer(m.today.date, m.now, m.today.mood, ui, pickPhoto, writerFocus)
+                val v by ui.draftVersion.collectAsState()
+                val wd = remember(v, m.today.date) { writerDate(m.today.date, ui) }
+                Writer(wd, m.today.date, m.now, if (wd == m.today.date) m.today.mood else null, ui, pickPhoto, writerFocus)
             }
         }
     }
@@ -222,9 +232,12 @@ fun MoodCalendar(month: YearMonth, moods: Map<LocalDate, Int>, today: LocalDate,
 /** The writer card (today): `[HH:mm] what's happening?`, enter saves (shift+enter: new line), photos by picker or drop. */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
-fun Writer(date: LocalDate, now: LocalTime, mood: Int?, ui: JournalUi, pickPhoto: () -> File?, focus: FocusRequester = remember { FocusRequester() }) {
+fun Writer(date: LocalDate, today: LocalDate, now: LocalTime, mood: Int?, ui: JournalUi, pickPhoto: () -> File?, focus: FocusRequester = remember { FocusRequester() }) {
     val t = LocalType.current
     var text by remember(date) { mutableStateOf(ui.draftFor(date)) }
+    // The store is shared with quick add: follow its changes (our own writes read back equal, so they change nothing).
+    LaunchedEffect(date) { ui.draftVersion.collect { val stored = ui.draftFor(date); if (stored != text) text = stored } }
+    val earlier = date != today
     var err by remember { mutableStateOf<String?>(null) }
     var dropping by remember { mutableStateOf(false) }
     val save = { if (text.isNotBlank()) ui.addLines(date, text, { text = ""; err = null }, { err = it }) }
@@ -248,9 +261,9 @@ fun Writer(date: LocalDate, now: LocalTime, mood: Int?, ui: JournalUi, pickPhoto
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(Modifier.fillMaxWidth()) {
-            BasicText("write · ${date.format(dayFmt).lowercase(Locale.ENGLISH)}", style = t.label)
+            BasicText("write · ${date.format(dayFmt).lowercase(Locale.ENGLISH)}" + if (earlier) " · unsaved from before the day ended" else "", style = t.label.copy(color = if (earlier) Fern.pollen else Fern.lichen))
             Spacer(Modifier.weight(1f))
-            MOODS.forEachIndexed { i, face ->
+            if (!earlier) MOODS.forEachIndexed { i, face ->
                 BasicText(face, style = t.small.copy(color = if (mood == i + 1) Fern.mint else Fern.lichen), modifier = Modifier.padding(start = 6.dp)
                     .then(if (mood == i + 1) Modifier.border(1.dp, Fern.mint, RoundedCornerShape(6.dp)) else Modifier)
                     .clickable { ui.setMood(date, if (mood == i + 1) null else i + 1) }.padding(horizontal = 3.dp))
@@ -258,7 +271,7 @@ fun Writer(date: LocalDate, now: LocalTime, mood: Int?, ui: JournalUi, pickPhoto
         }
         Spacer(Modifier.height(8.dp))
         Box {
-            if (text.isEmpty()) BasicText(buildAnnotatedString { withStyle(SpanStyle(color = Fern.mint)) { append("[${now.format(hm)}] ") }; append("what's happening?") }, style = t.body.copy(color = Fern.lichen))
+            if (text.isEmpty()) BasicText(buildAnnotatedString { withStyle(SpanStyle(color = Fern.mint)) { append(if (earlier) "[--:--] " else "[${now.format(hm)}] ") }; append("what's happening?") }, style = t.body.copy(color = Fern.lichen))
             BasicTextField(text, { text = it; ui.keepDraft(date, it) }, Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent {
                 if (it.key == Key.Enter && it.type == KeyEventType.KeyDown && !it.isShiftPressed) { save(); true } else false
             }, textStyle = t.body, cursorBrush = SolidColor(Fern.mint))

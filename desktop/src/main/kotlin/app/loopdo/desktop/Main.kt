@@ -42,7 +42,7 @@ fun main(args: Array<String>) {
     val single = SingleInstance(socketFor(dir), lockFor(dir))
     val shown = mutableStateOf(cmd != Command.Background && cmd != Command.Quick)
     val quick = mutableStateOf(cmd == Command.Quick)
-    if (!single.tryServe { c -> when (c) { Command.Quick -> quick.value = true; Command.Background -> Unit; else -> shown.value = true } }) {
+    if (!single.tryServe { c -> app.loopdo.desktop.shell.route(c, shown, quick) }) {
         single.send(cmd) // the running loopdo_ shows itself (or quick add, from D3)
         return
     }
@@ -51,7 +51,10 @@ fun main(args: Array<String>) {
         // Quick add: its own small window over whatever is open; the main window stays as it is (hidden or not).
         if (quick.value && graph != null) {
             val signedIn = graph.auth.session.collectAsState().value is AuthState.SignedIn
-            if (!signedIn) { shown.value = true; quick.value = false }
+            val blocked = graph.sync.blocked.collectAsState().value
+            val hasSettings = remember { graph.sync.db.hasDaySettings() }.collectAsState(null).value
+            if (hasSettings == null && signedIn && blocked == null) Unit // still reading the database
+            else if (!app.loopdo.desktop.ui.quickAllowed(signedIn, blocked, hasSettings == true)) { shown.value = true; quick.value = false }
             else {
                 val qs = androidx.compose.ui.window.rememberWindowState(
                     width = 600.dp, height = 150.dp,

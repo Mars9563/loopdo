@@ -7,8 +7,15 @@ import java.time.LocalDate
 import java.util.UUID
 
 /** The phone's JournalViewModel behind the laptop's [JournalUi]; photos are compressed into [photoDir]. */
-class JournalBinding(private val vm: JournalViewModel, private val photoDir: File) : JournalUi {
+class JournalBinding(
+    private val vm: JournalViewModel,
+    private val photoDir: File,
+    private val store: app.loopdo.desktop.store.FilePopupDrafts,
+    private val lines: app.loopdo.client.journal.LineDrafts,
+) : JournalUi {
+    override val draftVersion = store.version
     override fun draftFor(date: LocalDate) = vm.draftFor(date)
+    override fun draftDates(): Set<LocalDate> = lines.dates().filter { lines.line(it).first.isNotEmpty() }.toSet()
     override fun keepDraft(date: LocalDate, text: String) = vm.keepDraft(date, text)
     override fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) = vm.addLines(date, input, onSaved, onError)
     override fun editLine(date: LocalDate, lineId: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit) { vm.editLine(date, lineId, new, onSaved, onError) }

@@ -23,3 +23,12 @@ fun parseCommand(args: Array<String>): Command = when {
     "--demo" in args -> Command.Demo
     else -> Command.Open
 }
+
+/** What a command does to the windows: quick add opens alone (the main window stays as it is); open shows the app. */
+fun route(c: Command, shown: androidx.compose.runtime.MutableState<Boolean>, quick: androidx.compose.runtime.MutableState<Boolean>) {
+    when (c) {
+        Command.Quick -> quick.value = true
+        Command.Background -> Unit
+        else -> shown.value = true
+    }
+}
