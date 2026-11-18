@@ -29,6 +29,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.map
 import java.io.File
 
 /** The laptop's dependency graph: the phone's AppGraph with Linux clocks and file-backed stores (D2). */
@@ -97,6 +98,24 @@ class DesktopGraph(val dataDir: File) {
         todayData.rows(), app.loopdo.client.journal.JournalData(sync.db), journalActions, { trustedClock.now().instant },
         photoFile = { id, path -> photoCache.file(id, path) }, uploadSoon = { photoLoop.kick() }, drafts = drafts,
     )
+
+    val focusActions = app.loopdo.client.stats.FocusActions(
+        sync.db, userId = { userId()?.toString() }, today = { dateResolver(todayData.versionsNow())(trustedClock.now().instant) }, evidence = evidence,
+    )
+    /** Laptop reminder state (D6 reads it): opening the review on a Sunday marks that Sunday as reviewed (phone parity). */
+    val reminderKeys = app.loopdo.desktop.store.FileKeyValue(File(dataDir, "reminders.json"))
+
+    fun statsViewModel() = app.loopdo.client.stats.StatsViewModel(app.loopdo.client.stats.StatsData(sync.db).rows(), focusActions, now = { trustedClock.now().instant }) { today ->
+        app.loopdo.client.stats.sundayToSilence(today)?.let { reminderKeys.putLong("reviewed:$it", 1L) }
+    }
+
+    /** This week's promises, checked ("last week you said" on ~/stats), from the phone's buildReview for this week. */
+    fun thisWeekPromises(): kotlinx.coroutines.flow.Flow<Pair<List<String>, Int>> =
+        app.loopdo.client.stats.StatsData(sync.db).rows().map { r ->
+            if (r.versions.isEmpty()) emptyList<String>() to 0
+            else { val today = dateResolver(r.versions)(trustedClock.now().instant)
+                app.loopdo.client.stats.buildReview(r, today, app.loopdo.shared.stats.weekStart(today)).let { it.lastWeekSaid to it.kept } }
+        }
 
     fun tasksViewModel() = app.loopdo.client.tasks.TasksViewModel(app.loopdo.client.tasks.TaskData(sync.db), taskActions)
 

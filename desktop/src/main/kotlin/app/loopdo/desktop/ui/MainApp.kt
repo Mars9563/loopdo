@@ -58,6 +58,22 @@ fun MainApp(g: DesktopGraph) {
     val hsnack by habits.message.collectAsState()
     var habitPick by remember { mutableStateOf<String?>(null) }
     var habitEditor by remember { mutableStateOf<String?>(null) } // null = closed, "" = new, else the habit's id
+    val stats = remember { g.statsViewModel() }
+    val sui by stats.stats.collectAsState()
+    val rui by stats.review.collectAsState()
+    val smsg by stats.message.collectAsState()
+    val statsAct = remember { object : StatsActions {
+        override fun setMode(m: app.loopdo.shared.stats.PixelMode) = stats.setMode(m)
+        override fun shiftYear(by: Int) = stats.shiftYear(by)
+        override fun setLast30(on: Boolean) = stats.setLast30(on)
+        override fun openReview() = stats.openReview()
+    } }
+    val reviewAct = remember { object : ReviewActions {
+        override fun page(by: Int) = stats.page(by)
+        override fun close() = stats.closeReview()
+        override fun addFocus(item: app.loopdo.client.stats.PickItem, goal: Int?) { stats.addFocus(item, goal) }
+        override fun removeFocus(id: String) { stats.removeFocus(id) }
+    } }
     val tasks = remember { g.tasksViewModel() }
     val tsnack by tasks.message.collectAsState()
     val lists by tasks.lists.collectAsState()
@@ -112,8 +128,12 @@ fun MainApp(g: DesktopGraph) {
                 Place.HABITS -> hdata?.let { d ->
                     HabitsPane(d, habitPick, { habitPick = it }, { habitEditor = "" }, { habitEditor = it }, { habits.restore(java.util.UUID.fromString(it)) })
                 } ?: BasicText("loading habits…", style = LocalType.current.small)
+                Place.STATS -> rui?.let { ReviewPane(it, reviewAct) } ?: sui?.let { st ->
+                    val lw by remember { g.thisWeekPromises() }.collectAsState(emptyList<String>() to 0)
+                    StatsPane(st, lw.first, lw.second, statsAct)
+                } ?: BasicText("loading stats…", style = LocalType.current.small)
                 Place.JOURNAL -> jm?.let { JournalPane(it, journalUi, ::pickPhotoFile) } ?: BasicText("loading the journal…", style = LocalType.current.small)
-                else -> BasicText("${place.path} arrives in a later step (M10 ${when (place) { Place.STATS -> "D5"; else -> "D8" }}).", style = LocalType.current.small)
+                else -> BasicText("${place.path} arrives in a later step (M10 D8).", style = LocalType.current.small)
             }
         }
         val editing = habitEditor
@@ -142,11 +162,11 @@ fun MainApp(g: DesktopGraph) {
                 today.addTask(text, null, null, null, null, m.date, onSaved = done)
             }
         }
-        (snack?.let { it.text to it.id } ?: jsnack?.let { it.text to it.id } ?: hsnack?.let { it.text to it.id } ?: tsnack?.let { it.text to it.id })?.let { (text, id) ->
+        (snack?.let { it.text to it.id } ?: jsnack?.let { it.text to it.id } ?: hsnack?.let { it.text to it.id } ?: tsnack?.let { it.text to it.id } ?: smsg?.let { it to it.hashCode().toLong() })?.let { (text, id) ->
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp).background(Color(0xF0090F18), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
                 BasicText(text, style = LocalType.current.small.copy(color = Fern.ink))
             }
-            LaunchedEffect(id) { delay(4_000); today.dismissSnack(id); journal.dismiss(id); habits.dismiss(id); tasks.dismiss(id) }
+            LaunchedEffect(id) { delay(4_000); today.dismissSnack(id); journal.dismiss(id); habits.dismiss(id); tasks.dismiss(id); if (smsg != null) stats.dismissMessage() }
         }
     }
 }
