@@ -58,6 +58,8 @@ class ReminderData(private val db: PowerSyncDatabase) {
 
     private suspend fun journalDays(): Set<LocalDate> = db.getAll(JOURNAL_DAYS_SQL) { LocalDate.parse(it.getString(0)!!.take(10)) }.toSet()
 
+    suspend fun versions() = TodayData(db).versionsNow()
+
     /** The planner's input at [now]: habits, today's and tomorrow's done habits, timed tasks, timed series, journal days. */
     suspend fun input(now: Instant): ReminderInput {
         val versions = TodayData(db).versionsNow()

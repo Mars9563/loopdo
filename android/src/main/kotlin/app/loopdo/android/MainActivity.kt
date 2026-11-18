@@ -55,6 +55,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         const val EXTRA_HABIT = "habit"
         /** Open one task in the task editor (its id; the widget's task names). */
         const val EXTRA_TASK = "task"
+        /** With EXTRA_TAB "journal": open today's writer at once (the journal reminder's [write], M7). */
+        const val EXTRA_WRITE = "write"
         private const val LOCK_AUTHENTICATORS =
             androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
     }

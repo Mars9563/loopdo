@@ -3,6 +3,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Redraw the widget after a reboot (its day may have changed). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- M7 reminders: notifications (asked once) and exact alarms (granted at install; loopdo_ is sideloaded, not on Play). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:name=".LoopDoApp"
@@ -79,5 +82,9 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- M7: reminder alarms and notification buttons (not exported; only our PendingIntents). -->
+        <receiver
+            android:name=".notify.ReminderReceiver"
+            android:exported="false" />
     </application>
 </manifest>

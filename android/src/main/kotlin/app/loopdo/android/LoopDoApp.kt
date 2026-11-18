@@ -173,6 +173,19 @@ class AppGraph(context: android.content.Context) {
         ) { redrawWidget() }
     }
 
+    /** M7: the phone's own reminders (alarms + notifications), ready on the same day the widget is. */
+    val reminders by lazy {
+        app.loopdo.android.notify.ReminderScheduler(
+            app.loopdo.android.notify.ReminderData(sync.db),
+            app.loopdo.android.notify.ReminderStore(appContext.getSharedPreferences("reminders", android.content.Context.MODE_PRIVATE)),
+            app.loopdo.android.notify.AndroidAlarmSetter(appContext),
+            app.loopdo.android.notify.AndroidPoster(appContext),
+            today = { (widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready)?.model?.date },
+            trustedNow = { trustedClock.now().instant },
+            elapsedNow = { android.os.SystemClock.elapsedRealtime() },
+        )
+    }
+
     /** What the widget shows right now: nothing tickable until the app is ready (M3 start rules). */
     suspend fun widgetSnapshot(): app.loopdo.android.widget.WidgetState {
         if (sync.blocked.value != null) return app.loopdo.android.widget.WidgetState.SignedOut // another account's data: show none of it
