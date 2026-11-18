@@ -244,6 +244,9 @@ class Applier(
             id.toString(),
         ) { listOf(it.getObject(1, LocalDate::class.java).toString(), it.getString(2), it.getString(3), it.getString(4)) }
         if (existing != null && LocalDate.parse(existing[0]) <= today) {
+            // M6.5: a replace made before this version took effect, uploaded after: the version stays history and
+            // the replacement (the PUT that follows) becomes the next one, instead of refusing the whole change.
+            if (op == "DELETE") return Prepared(data, skip = true)
             val sameContent = op == "PUT" &&
                 data.text("habit_id") == existing[1] && data.text("recurrence") == existing[2] &&
                 data["weekdays"]?.let { bindValue(it, Col.SMALLINT_ARRAY) } == existing[3]
@@ -261,8 +264,8 @@ class Applier(
         // its date, e.g. a pause set offline at the airport and synced days later.
         val provenDay = if (data["evidence"] is JsonObject) runCatching { verifiedDay(i, data) }.getOrNull() else null
         // A habit's first version proven to be made on its first day (created offline, synced later) keeps it too.
-        if (provenDay != null && (from > provenDay || (!hasOther && from == provenDay))) return Prepared(data)
-        if (from >= earliest) return Prepared(data)
+        if (provenDay != null && (from > provenDay || (!hasOther && from == provenDay))) return Prepared(data).also { takeSlot(habitId, from, id, today) }
+        if (from >= earliest) return Prepared(data).also { takeSlot(habitId, from, id, today) }
         // M5 restore: the archived stretch becomes a pause from the archive day. Those days were already
         // unjudged (archived), so keeping the past date changes nothing that was judged.
         if (data.text("recurrence") == "paused") {
@@ -273,12 +276,26 @@ class Applier(
         }
         // Clamped: never onto a day another version already starts (a pause's resume version moves on a day).
         var at = earliest
-        while (queryOne(
-                "select 1 from public.habit_schedules where habit_id = ?::uuid and valid_from = ?::date and id <> ?::uuid",
-                habitId, at.toString(), id.toString(),
-            ) { true } != null
-        ) at = at.plusDays(1)
+        while (!takeSlot(habitId, at, id, today)) at = at.plusDays(1)
         return Prepared(data.with("valid_from", at.toString()))
+    }
+
+    /** Schedule versions written by this batch (a pause and its resume are never replaced by each other). */
+    private val scheduleIdsThisBatch = mutableSetOf<String>()
+
+    /**
+     * M6.5, latest change wins: a pending (future) version of another upload already on [day] is replaced by this
+     * one. Returns false if the day holds a version that must stay (in force, or from this same batch).
+     */
+    private fun takeSlot(habitId: String, day: LocalDate, id: UUID, today: LocalDate): Boolean {
+        scheduleIdsThisBatch += id.toString()
+        val other = queryOne(
+            "select id::text from public.habit_schedules where habit_id = ?::uuid and valid_from = ?::date and id <> ?::uuid",
+            habitId, day.toString(), id.toString(),
+        ) { it.getString(1) } ?: return true
+        if (day <= today || other in scheduleIdsThisBatch) return false
+        exec("delete from public.habit_schedules where id = ?::uuid", listOf(other))
+        return true
     }
 
     /** The day the evidence proves the change was made, or null if it isn't verified. */

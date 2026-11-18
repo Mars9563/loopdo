@@ -184,8 +184,9 @@ class UploadM5Test {
     fun pastPauseOffTheArchiveDayIsStillClamped() = app(monMorning) {
         val h = fixtureHabit()
         TestDb.admin("update public.habits set archived_on = '2026-11-10' where id = '$h'")
-        upload(a, op("PUT", "habit_schedules", UUID.randomUUID(), schedule(h, "2026-11-12", "paused")))
-        upload(a, op("PUT", "habit_schedules", UUID.randomUUID(), schedule(h, "2026-11-09", "daily", target = 1)))
+        // One batch, as the phone sends a restore (M6.5: separate uploads for the same day = the later one wins).
+        upload(a, op("PUT", "habit_schedules", UUID.randomUUID(), schedule(h, "2026-11-12", "paused")),
+            op("PUT", "habit_schedules", UUID.randomUUID(), schedule(h, "2026-11-09", "daily", target = 1)))
         assertEquals("2026-11-01:daily,2026-11-17:paused,2026-11-18:daily", versions(h))
     }
 

@@ -229,4 +229,32 @@ class UploadM65Test {
         ok(a, op("PUT", "habit_logs", log, logPut(h, 3), key = "phone:1"))
         assertEquals("4", count(log))
     }
+
+    // --- the latest schedule replace wins (M6.5; M5 minors 6 and 7) -------------
+
+    private fun versions(h: UUID) = TestDb.scalar(
+        "select string_agg(valid_from || ':' || recurrence, ',' order by valid_from) from public.habit_schedules where habit_id = '$h'")
+
+    private fun version(h: UUID, from: String, recurrence: String) = buildJsonObject {
+        put("habit_id", h.toString()); put("valid_from", from); put("recurrence", recurrence)
+    }
+
+    @Test
+    fun aSecondReplaceOfAPendingVersionWins() = app {
+        val h = habit("yes_no", 1)
+        ok(a, op("PUT", "habit_schedules", UUID.randomUUID(), version(h, "2026-11-17", "paused"))) // the phone
+        // The laptop, not having seen it, also sets tomorrow's version: the later one wins the slot.
+        ok(a, op("PUT", "habit_schedules", UUID.randomUUID(), version(h, "2026-11-17", "daily")))
+        assertEquals("2026-11-01:daily,2026-11-17:daily", versions(h))
+    }
+
+    @Test
+    fun replacingAVersionThatTookEffectMakesTheNextOne() = app {
+        val h = habit("yes_no", 1)
+        val pending = UUID.randomUUID()
+        TestDb.admin("insert into public.habit_schedules (id, user_id, habit_id, valid_from, recurrence) values ('$pending', '$a', '$h', '2026-11-16', 'paused')")
+        // Made on Sunday to replace Monday's version, uploaded on Monday: that version is history now, the new one starts tomorrow.
+        ok(a, op("DELETE", "habit_schedules", pending), op("PUT", "habit_schedules", UUID.randomUUID(), version(h, "2026-11-16", "daily")))
+        assertEquals("2026-11-01:daily,2026-11-16:paused,2026-11-17:daily", versions(h))
+    }
 }
