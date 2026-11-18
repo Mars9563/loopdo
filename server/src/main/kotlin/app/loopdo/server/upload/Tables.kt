@@ -21,7 +21,8 @@ val TABLES: Map<String, TableSpec> = listOf(
     TableSpec("habits", ALL, mapOf(
         "title" to Col.TEXT, "kind" to Col.TEXT, "target" to Col.INT, "reminder_time" to Col.TIME,
         "archived_on" to Col.DATE, "sort_order" to Col.INT,
-        "step" to Col.INT, "unit" to Col.TEXT, "deleted_at" to Col.TIMESTAMPTZ)),
+        "step" to Col.INT, "unit" to Col.TEXT, "deleted_at" to Col.TIMESTAMPTZ,
+        "evidence" to Col.JSONB)), // proof of when an archive was made; checked, not stored (M6.5)
     TableSpec("habit_schedules", setOf("PUT", "DELETE"), mapOf(
         "habit_id" to Col.UUID, "valid_from" to Col.DATE, "recurrence" to Col.TEXT, "weekdays" to Col.SMALLINT_ARRAY,
         "target" to Col.INT, "evidence" to Col.JSONB)),

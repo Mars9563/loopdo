@@ -17,7 +17,8 @@ object LoopDoSchema {
     val schema = Schema(
         Table("profiles", t("display_name", "onboarded_at", "settings") + i("is_admin") + stamps),
         Table("day_settings_versions", t("user_id", "effective_at", "time_zone", "day_end", "floor_date") + stamps),
-        Table("habits", t("user_id", "title", "kind", "reminder_time", "archived_on", "unit", "deleted_at") + i("target", "sort_order", "step") + stamps),
+        // evidence: proof of when an archive was made, sent up only (the server checks it, never stores it).
+        Table("habits", t("user_id", "title", "kind", "reminder_time", "archived_on", "unit", "deleted_at", "evidence") + i("target", "sort_order", "step") + stamps),
         Table("habit_schedules", t("user_id", "habit_id", "valid_from", "recurrence", "weekdays", "evidence") + i("target") + stamps),
         // M6.5: the old count goes up with each change (the server adds differences) and _metadata carries the retry key.
         Table(

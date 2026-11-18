@@ -48,7 +48,12 @@ class TaskActions(
     private val userId: () -> UUID?,
     private val dateAt: suspend (Instant) -> LocalDate,
     private val clock: TrustedClock,
+    /** Proof of when a move was made (M6.5, M5 item 4): an on-time move made offline isn't marked late. */
+    private val evidence: app.loopdo.android.time.EvidenceFactory? = null,
 ) : TaskCommands {
+    /** The re-dated task's evidence column: proof of the day the move was made (the server checks it, never stores it). */
+    private fun moveProof(today: LocalDate): String? = evidence?.forTick(today)?.toString()
+
     private suspend fun today(): LocalDate = dateAt(clock.now().instant)
     private fun user(): String? = userId()?.toString()
 
@@ -80,6 +85,7 @@ class TaskActions(
                 "UPDATE tasks SET title = ?, notes = ?, due_date = ?, due_time = ?, list_id = ? WHERE id = ?",
                 listOf(d.title, d.notes, d.due?.toString(), d.time?.toString(), d.listId?.toString(), id.toString()),
             )
+            if (!row.done && d.due != row.due) moveProof(today)?.let { tx.execute("UPDATE tasks SET evidence = ? WHERE id = ?", listOf(it, id.toString())) }
             if (d.repeat != null && !isInstance) {
                 val due = requireNotNull(d.due) { "pick a date for the first one." }
                 val t = tx.insertTask(d.copy(due = due.plusDays(1)), d.repeat)
@@ -96,7 +102,10 @@ class TaskActions(
         require(time == null || due != null) { "pick a date before a time." }
         db.oneTransaction { tx ->
             tx.openTask(id)
-            tx.execute("UPDATE tasks SET due_date = ?, due_time = ? WHERE id = ?", listOf(due?.toString(), time?.toString(), id.toString()))
+            tx.execute(
+                "UPDATE tasks SET due_date = ?, due_time = ?, evidence = coalesce(?, evidence) WHERE id = ?",
+                listOf(due?.toString(), time?.toString(), moveProof(today), id.toString()),
+            )
         }
     }
 

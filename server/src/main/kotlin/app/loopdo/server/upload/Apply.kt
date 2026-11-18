@@ -203,10 +203,15 @@ class Applier(
         val extra = mutableMapOf<String, String?>()
         if ("due_date" in data && existing != null) {
             val (oldDue, completedAt, lateSince) = existing
-            if (completedAt == null && lateSince == null && oldDue != null && oldDue < today(i) && data.date("due_date") != oldDue) {
+            // M6.5 (M5 item 4): a move made offline on time and proven (verified evidence) is not late.
+            val provenOnTime = "completed_at" !in data && data["evidence"] is JsonObject && oldDue != null &&
+                runCatching { verifiedDay(i, data) }.getOrNull()?.let { it <= oldDue } == true
+            if (completedAt == null && lateSince == null && oldDue != null && oldDue < today(i) && data.date("due_date") != oldDue && !provenOnTime) {
                 extra["late_since"] = oldDue.toString()
             }
         }
+        // A move's evidence only proves when it was made; the stored evidence is the completion's.
+        if ("completed_at" !in data) d = JsonObject(d - "evidence")
         extra += completionRules(i, id, data)
         return Prepared(d, extra)
     }
@@ -311,8 +316,10 @@ class Applier(
      * new schedule version instead (M5). Archiving can't be backdated; an earlier date is moved
      * up to tomorrow.
      */
-    private fun habitRules(i: Int, op: String, id: UUID, data: JsonObject): Prepared {
-        if (op == "DELETE") return Prepared(data)
+    private fun habitRules(i: Int, op: String, id: UUID, sent: JsonObject): Prepared {
+        if (op == "DELETE") return Prepared(sent)
+        // evidence proves when an archive was made (M6.5, M5 item 5); it is checked, never stored.
+        val data = JsonObject(sent - "evidence")
         if ("kind" in data || "target" in data) {
             val existing = queryOne("select kind, target from public.habits where id = ?::uuid", id.toString()) {
                 it.getString(1) to it.getInt(2)
@@ -327,6 +334,9 @@ class Applier(
         val archived = data.date("archived_on") ?: return Prepared(data)
         // Archiving takes effect from tomorrow at the earliest, so it can't dodge today (M5).
         val tomorrow = today(i).plusDays(1)
+        // Made offline and proven: it starts the day after the day it was made, as it would have online.
+        val proven = if (sent["evidence"] is JsonObject) runCatching { verifiedDay(i, sent) }.getOrNull() else null
+        if (proven != null && archived == proven.plusDays(1)) return Prepared(data)
         return if (archived < tomorrow) Prepared(data.with("archived_on", tomorrow.toString())) else Prepared(data)
     }
 

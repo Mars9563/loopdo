@@ -82,6 +82,7 @@ object OpMapper {
     /** Columns stored locally as JSON text that the API needs as real JSON. */
     private val jsonColumns = mapOf(
         "habit_logs" to setOf("evidence"),
+        "habits" to setOf("evidence"),
         "tasks" to setOf("evidence", "repeat_rule"),
         "profiles" to setOf("settings"),
         "habit_schedules" to setOf("weekdays", "evidence"),

@@ -174,7 +174,8 @@ class HabitActions(
         write { tx ->
             if (tx.habit(id).archivedOn != null) return@write
             tx.versions(id).filter { it.from > m.today }.forEach { tx.deleteVersion(it) }
-            tx.execute("UPDATE habits SET archived_on = ? WHERE id = ?", listOf(m.tomorrow.toString(), id.toString()))
+            // The evidence proves the day it was made: an archive made offline still starts the next day (M6.5).
+            tx.execute("UPDATE habits SET archived_on = ?, evidence = ? WHERE id = ?", listOf(m.tomorrow.toString(), m.evidence, id.toString()))
         }
     }
 

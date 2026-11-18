@@ -97,6 +97,7 @@ class AppGraph(context: android.content.Context) {
         userId = { (auth.session.value as? app.loopdo.android.auth.AuthState.SignedIn)?.userId },
         dateAt = { t -> app.loopdo.shared.day.dateResolver(todayData.versionsNow())(t) },
         clock = trustedClock,
+        evidence = evidence,
     )
 
     /**

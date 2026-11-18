@@ -220,4 +220,14 @@ class TaskActionsTest {
         assertEquals(listOf("check the amount"), db.getAll("SELECT title FROM subtasks WHERE task_id = ?", listOf(i.toString())) { it.getString(0)!! })
         assertEquals(listOf("2026-12-01"), instances(t).map { it.first })
     }
+
+    // M6.5 (M5 item 4): a move carries proof of the day it was made, so an on-time move made offline isn't late.
+    @Test
+    fun aMoveCarriesProofOfItsDay() = runBlocking {
+        val withProof = TaskActions(db, { user }, { loopDoDate(it, ist) }, TrustedClock(clocks, anchors), app.loopdo.android.time.EvidenceFactory(clocks, anchors))
+        val t = withProof.saveTask(null, draft("call home", due = today))
+        withProof.moveTask(t, nov(20), null)
+        val move = ops().last { it.table == "tasks" }
+        assertTrue("the move PATCH has the evidence", move.opData!!["evidence"].toString().contains("2026-11-14"))
+    }
 }

@@ -188,6 +188,16 @@ class HabitActionsTest {
         assertThrows<IllegalStateException> { runBlocking { actions.cancelPause(running) } }
     }
 
+    // M6.5 (M5 item 5): an archive carries proof of the day it was made (offline, it still starts the next day).
+    @Test
+    fun anArchiveCarriesProofOfItsDay() = runBlocking {
+        val h = fixture(kind = "yes_no", target = 1)
+        actions.archiveHabit(h)
+        val archive = ops().last { it.table == "habits" }
+        assertEquals("2026-11-15", archive.opData!!["archived_on"])
+        assertTrue("the archive has the evidence", archive.opData!!["evidence"].toString().contains("2026-11-14"))
+    }
+
     @Test
     fun archiveFromTomorrowAndRestoreKeepsPastNeutral() = runBlocking {
         val h = fixture(kind = "yes_no", target = 1)

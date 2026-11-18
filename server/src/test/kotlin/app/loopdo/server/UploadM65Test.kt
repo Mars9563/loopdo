@@ -257,4 +257,53 @@ class UploadM65Test {
         ok(a, op("DELETE", "habit_schedules", pending), op("PUT", "habit_schedules", UUID.randomUUID(), version(h, "2026-11-16", "daily")))
         assertEquals("2026-11-01:daily,2026-11-16:paused,2026-11-17:daily", versions(h))
     }
+
+    // --- M5 items 4 and 5: offline moves and archives keep the day they were made (verified evidence) ---------
+
+    /** Evidence of a change made at 10:30 IST on [day] (verified by a signed anchor that morning). */
+    private fun madeOn(day: String) = buildJsonObject {
+        put("claimedDate", day); put("wallClock", "${day}T05:00:00Z")
+        putJsonObject("anchor") {
+            put("serverTime", "${day}T03:00:00Z"); put("elapsedRealtimeMs", 1_000_000); put("bootCount", 5)
+            put("sig", signAnchor(secret, a.toString(), Instant.parse("${day}T03:00:00Z")))
+        }
+        put("elapsedAtTickMs", 8_200_000); put("bootCountAtTick", 5)
+    }
+
+    private fun openTask(due: String): UUID {
+        val t = UUID.randomUUID()
+        TestDb.admin("insert into public.tasks (id, user_id, title, due_date) values ('$t', '$a', 'call home', '$due')")
+        return t
+    }
+
+    @Test
+    fun anOnTimeMoveMadeOfflineIsNotLate() = app {
+        val t = openTask("2026-11-15")
+        // Moved on its due day (sun 15), offline; uploaded monday.
+        ok(a, op("PATCH", "tasks", t, buildJsonObject { put("due_date", "2026-11-20"); put("evidence", madeOn("2026-11-15")) }))
+        assertEquals("", TestDb.scalar("select coalesce(late_since::text, '') from public.tasks where id = '$t'"))
+        assertEquals("", TestDb.scalar("select coalesce(evidence::text, '') from public.tasks where id = '$t'")) // used, not stored
+    }
+
+    @Test
+    fun aMoveWithoutProofIsStillLate() = app {
+        val t = openTask("2026-11-15")
+        ok(a, op("PATCH", "tasks", t, buildJsonObject { put("due_date", "2026-11-20") }))
+        assertEquals("2026-11-15", TestDb.scalar("select late_since from public.tasks where id = '$t'"))
+    }
+
+    @Test
+    fun anArchiveMadeOfflineKeepsItsDay() = app {
+        val h = habit("yes_no", 1)
+        // Archived on sun 15 (from mon 16), offline; uploaded monday: it starts monday, not tuesday.
+        ok(a, op("PATCH", "habits", h, buildJsonObject { put("archived_on", "2026-11-16"); put("evidence", madeOn("2026-11-15")) }))
+        assertEquals("2026-11-16", TestDb.scalar("select archived_on from public.habits where id = '$h'"))
+    }
+
+    @Test
+    fun anArchiveWithoutProofIsStillMovedToTomorrow() = app {
+        val h = habit("yes_no", 1)
+        ok(a, op("PATCH", "habits", h, buildJsonObject { put("archived_on", "2026-11-16") }))
+        assertEquals("2026-11-17", TestDb.scalar("select archived_on from public.habits where id = '$h'"))
+    }
 }
