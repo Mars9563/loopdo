@@ -7,6 +7,16 @@ select t.expect_error($q$insert into public.journal_photos (user_id, entry_id, r
   values ('00000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-00000000000a', 'k5', 5)$q$,
   'P0001', 'fifth photo');
 
+-- A journal line belongs to one day forever (M6.5).
+insert into public.journal_entries (id, user_id, loopdo_date, text)
+values ('20000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-00000000000a', '2026-11-15', '');
+insert into public.journal_lines (id, user_id, entry_id, stamped_at, text)
+values ('50000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000a',
+        '20000000-0000-0000-0000-00000000000a', '2026-11-14T10:00:00Z', 'a line');
+select t.expect_error($q$update public.journal_lines set entry_id = '20000000-0000-0000-0000-0000000000a2' where id = '50000000-0000-0000-0000-00000000000a'$q$,
+  'P0001', 'move a journal line to another day');
+update public.journal_lines set text = 'fixed' where id = '50000000-0000-0000-0000-00000000000a'; -- text may change
+
 -- A habit log's day can never be moved.
 insert into public.habit_logs (id, user_id, habit_id, loopdo_date, count, verified, evidence)
 values ('30000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000a',

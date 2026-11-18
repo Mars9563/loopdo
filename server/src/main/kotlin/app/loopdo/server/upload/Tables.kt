@@ -40,6 +40,10 @@ val TABLES: Map<String, TableSpec> = listOf(
     TableSpec("journal_photos", setOf("PUT", "DELETE"), mapOf(
         "entry_id" to Col.UUID, "r2_key" to Col.TEXT, "width" to Col.INT, "height" to Col.INT,
         "bytes" to Col.INT, "sort_order" to Col.INT, "added_at" to Col.TIMESTAMPTZ)),
+    // M6.5: a journal line is its own row (deleted = deleted_at set, never removed).
+    TableSpec("journal_lines", setOf("PUT", "PATCH"), mapOf(
+        "entry_id" to Col.UUID, "stamped_at" to Col.TIMESTAMPTZ, "text" to Col.TEXT, "edited_at" to Col.TIMESTAMPTZ,
+        "deleted_at" to Col.TIMESTAMPTZ, "sort_order" to Col.INT)),
 ).associateBy { it.name }
 
 /** Server-decided columns, written alongside the client's. */

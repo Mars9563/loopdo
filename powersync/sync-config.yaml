@@ -35,3 +35,6 @@ streams:
   journal_photos:
     auto_subscribe: true
     query: SELECT * FROM journal_photos WHERE user_id = auth.user_id()
+  journal_lines:
+    auto_subscribe: true
+    query: SELECT * FROM journal_lines WHERE user_id = auth.user_id()

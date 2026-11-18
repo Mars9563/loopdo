@@ -24,9 +24,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
-/** One PowerSync CrudEntry, as the phone uploads it. */
+/** One PowerSync CrudEntry, as the phone uploads it; [old] = the row's previous values where the table tracks them (M6.5). */
 @Serializable
-data class CrudOp(val op: String, val table: String, val id: String, val data: JsonObject? = null)
+data class CrudOp(val op: String, val table: String, val id: String, val data: JsonObject? = null, val old: JsonObject? = null)
 
 /** The batch is refused as a whole; the phone rolls it back and tells the user why. */
 class Rejected(val code: String, val opIndex: Int) : RuntimeException(code)
@@ -86,6 +86,7 @@ class Applier(
                 "habit_schedules" -> scheduleRules(i, op.op, id, data)
                 "journal_photos" -> { photoRules(i, op.op, data); Prepared(data) }
                 "subtasks" -> subtaskRules(op.op, id, data)
+                "journal_lines" -> lineRules(i, op.op, id, data, op.old)
                 else -> Prepared(data)
             }
             if (p.skip) return
@@ -282,6 +283,30 @@ class Applier(
         return Prepared(data, skip = exists)
     }
 
+    /**
+     * M6.5, two devices: the newest edit of a line wins (by the editing device's clock); a line made again by
+     * another device (the same id) keeps what is there; a delete applies only if nobody edited the line since
+     * the deleting device saw it ([old] edited_at); an edit always brings a deleted line back (owner: keep the
+     * edited line).
+     */
+    private fun lineRules(i: Int, op: String, id: UUID, data: JsonObject, old: JsonObject?): Prepared {
+        val storedEdit = queryOne("select edited_at from public.journal_lines where id = ?::uuid", id.toString()) {
+            it.getObject(1, java.time.OffsetDateTime::class.java).toInstant()
+        }
+        if (op == "PUT") return Prepared(data, skip = storedEdit != null)
+        if (storedEdit == null) return Prepared(data, skip = true) // PATCH of a line that isn't there
+        if ("text" in data) {
+            val edited = data.instant("edited_at") ?: throw Rejected("BAD_OP", i)
+            if (edited < storedEdit) return Prepared(data, skip = true)
+            return Prepared(JsonObject(data + ("deleted_at" to JsonNull)))
+        }
+        if (data["deleted_at"].let { it != null && it !is JsonNull }) {
+            val seen = old?.instant("edited_at")
+            if (seen != null && storedEdit > seen) return Prepared(data, skip = true)
+        }
+        return Prepared(data)
+    }
+
     private fun photoRules(i: Int, op: String, data: JsonObject) {
         if (op == "PUT" && data.text("r2_key")?.startsWith("u/$user/") != true) throw Rejected("FORBIDDEN", i)
     }
@@ -362,6 +387,7 @@ private fun bindValue(v: JsonElement, col: Col): String? = when {
 private fun JsonObject.with(key: String, value: String) = JsonObject(this + (key to JsonPrimitive(value)))
 
 private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
+private fun JsonObject.instant(key: String): Instant? = text(key)?.let { v -> runCatching { java.time.OffsetDateTime.parse(v).toInstant() }.getOrNull() ?: runCatching { Instant.parse(v) }.getOrNull() }
 private fun JsonObject.date(key: String): LocalDate? = text(key)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 
 /**

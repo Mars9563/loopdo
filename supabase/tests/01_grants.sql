@@ -6,7 +6,7 @@ declare
   r text;
 begin
   foreach tbl in array array['profiles','day_settings_versions','app_config','habits','habit_schedules',
-                             'habit_logs','lists','tasks','subtasks','journal_entries','journal_photos'] loop
+                             'habit_logs','lists','tasks','subtasks','journal_entries','journal_photos','journal_lines'] loop
     foreach r in array array['anon','authenticated'] loop
       if has_table_privilege(r, 'public.' || tbl, 'select,insert,update,delete') then
         raise exception 'FAIL grants: % has privileges on %', r, tbl;
@@ -26,8 +26,8 @@ begin
   if pg_has_role('loopdo_api', 'loopdo_user', 'usage') then
     raise exception 'FAIL grants: loopdo_api must not inherit loopdo_user rights (NOINHERIT)';
   end if;
-  if (select count(*) from pg_publication_tables where pubname = 'powersync') <> 10 then
-    raise exception 'FAIL grants: powersync publication should list 10 tables';
+  if (select count(*) from pg_publication_tables where pubname = 'powersync') <> 11 then
+    raise exception 'FAIL grants: powersync publication should list 11 tables';
   end if;
   if not (select rolreplication and rolbypassrls from pg_roles where rolname = 'powersync_role') then
     raise exception 'FAIL grants: powersync_role needs REPLICATION and BYPASSRLS';
