@@ -420,7 +420,9 @@ class Applier(
         }
         if (data["deleted_at"].let { it != null && it !is JsonNull }) {
             val seen = old?.instant("edited_at")
-            if (seen != null && storedEdit > seen) return Prepared(data, skip = true)
+            // Postgres keeps microseconds and rounds a device's nanoseconds (the laptop's JVM clock): the stored copy
+            // of the very edit the device saw can be up to 1 µs later. Only a later edit beyond that keeps the line.
+            if (seen != null && storedEdit > seen.plusNanos(999)) return Prepared(data, skip = true)
         }
         return Prepared(data)
     }

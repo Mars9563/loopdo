@@ -105,6 +105,17 @@ class UploadM65Test {
     }
 
     @Test
+    fun deleteFromANanosecondClockApplies() = app {
+        // M10 D3: the laptop's JVM clock writes nanoseconds; Postgres keeps microseconds and ROUNDS (…789 → …316),
+        // so the stored edit looked later than the one the laptop saw and its delete was skipped.
+        val e = day(); val l = UUID.randomUUID()
+        ok(a, op("PUT", "journal_lines", l, line(e, "bye", "2026-11-16T04:30:00.086315789Z")))
+        ok(a, op("PATCH", "journal_lines", l, buildJsonObject { put("deleted_at", "2026-11-16T04:40:00Z") },
+            old = buildJsonObject { put("edited_at", "2026-11-16T04:30:00.086315789Z") }))
+        assertEquals("true", deleted(l))
+    }
+
+    @Test
     fun staleDeleteIsSkipped() = app {
         val e = day(); val l = UUID.randomUUID()
         ok(a, op("PUT", "journal_lines", l, line(e, "first", "2026-11-16T04:30:00Z")))
