@@ -34,6 +34,9 @@ dependencies {
 tasks.test {
     // The real data folder is never touched by tests.
     environment("LOOPDO_DATA_DIR", layout.buildDirectory.dir("test-data").get().asFile.path)
+    // Live tests (real server, the throwaway test user) run only with -Ploopdo.live=1.
+    systemProperty("loopdo.live", providers.gradleProperty("loopdo.live").orNull ?: "")
+    outputs.upToDateWhen { providers.gradleProperty("loopdo.live").orNull == null }
 }
 
 compose.desktop {

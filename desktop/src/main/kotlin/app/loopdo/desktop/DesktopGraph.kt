@@ -1,0 +1,67 @@
+package app.loopdo.desktop
+
+import app.loopdo.client.auth.AuthRepository
+import app.loopdo.client.auth.AuthState
+import app.loopdo.client.auth.SupabaseAuthBackend
+import app.loopdo.client.config.AppConfig
+import app.loopdo.client.journal.JournalActions
+import app.loopdo.client.log.logE
+import app.loopdo.client.tasks.TaskActions
+import app.loopdo.client.time.AnchorRefresher
+import app.loopdo.client.time.EvidenceFactory
+import app.loopdo.client.time.KtorTimeApi
+import app.loopdo.client.time.TrustedClock
+import app.loopdo.client.today.Actions
+import app.loopdo.client.today.TodayData
+import app.loopdo.client.today.TodayViewModel
+import app.loopdo.desktop.auth.FileSessionManager
+import app.loopdo.desktop.store.FileAnchorStore
+import app.loopdo.desktop.sync.DesktopSync
+import app.loopdo.desktop.time.LinuxDeviceClocks
+import app.loopdo.shared.day.dateResolver
+import app.loopdo.shared.day.settingsAt
+import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.createSupabaseClient
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import java.io.File
+
+/** The laptop's dependency graph: the phone's AppGraph with Linux clocks and file-backed stores (D2). */
+class DesktopGraph(val dataDir: File) {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> logE("loopdo", "background job failed", e) })
+    val supabase = createSupabaseClient(AppConfig.supabaseUrl, AppConfig.publishableKey) {
+        install(Auth) { sessionManager = FileSessionManager(File(dataDir, "session.json")) }
+    }
+    val auth = AuthRepository(SupabaseAuthBackend(supabase, scope), scope)
+    val clocks = LinuxDeviceClocks()
+    val anchorStore = FileAnchorStore(File(dataDir, "anchor.json"))
+    val trustedClock = TrustedClock(clocks, anchorStore)
+    val evidence = EvidenceFactory(clocks, anchorStore)
+    private val http = HttpClient(OkHttp) { install(HttpTimeout) { requestTimeoutMillis = 15_000 } }
+    private val token: suspend () -> String? = { auth.freshToken() }
+    val sync = DesktopSync(dataDir, auth, scope, AnchorRefresher(KtorTimeApi(http, token), anchorStore, clocks), { trustedClock.now().instant }, http = http)
+    val todayData = TodayData(sync.db)
+    private val userId = { (auth.session.value as? AuthState.SignedIn)?.userId }
+    val journalActions = JournalActions(
+        sync.db, trustedClock,
+        dateAt = { t -> dateResolver(todayData.versionsNow())(t) },
+        settingsAt = { t -> settingsAt(todayData.versionsNow(), t) },
+        userId = userId,
+    )
+    val taskActions = TaskActions(sync.db, userId = userId, dateAt = { t -> dateResolver(todayData.versionsNow())(t) }, clock = trustedClock, evidence = evidence)
+    val actions = Actions(
+        sync.db, trustedClock, evidence,
+        dateAt = { t -> dateResolver(todayData.versionsNow())(t) },
+        userId = userId,
+        series = { draft -> taskActions.saveTask(null, draft) },
+        journal = journalActions,
+        debug = false,
+    )
+
+    fun todayViewModel() = TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
+}
