@@ -14,6 +14,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
+import app.loopdo.shared.time.signAnchor
 import java.time.Instant
 import java.util.UUID
 import kotlin.test.Test
@@ -31,10 +33,11 @@ class UploadM65Test {
         block()
     }
 
-    private fun op(op: String, table: String, id: UUID, data: JsonObject? = null, old: JsonObject? = null) = buildJsonObject {
+    private fun op(op: String, table: String, id: UUID, data: JsonObject? = null, old: JsonObject? = null, key: String? = "k-${UUID.randomUUID()}") = buildJsonObject {
         put("op", op); put("table", table); put("id", id.toString())
         if (data != null) put("data", data)
         if (old != null) put("old", old)
+        if (key != null) put("key", key)
     }
 
     private suspend fun ApplicationTestBuilder.upload(user: UUID, vararg ops: JsonObject): HttpResponse =
@@ -139,5 +142,91 @@ class UploadM65Test {
         val e = day(); val l = UUID.randomUUID()
         val r = upload(b, op("PUT", "journal_lines", l, line(e, "not mine", "2026-11-16T04:30:00Z")))
         assertEquals(HttpStatusCode.UnprocessableEntity, r.status, r.bodyAsText())
+    }
+
+    // --- counts add up (M6.5) ---------------------------------------------------
+
+    /** A tick on Mon 16 nov 09:00 IST, verified by a signed anchor. */
+    private fun tick() = buildJsonObject {
+        put("claimedDate", "2026-11-16"); put("wallClock", "2026-11-16T03:29:00Z")
+        putJsonObject("anchor") {
+            put("serverTime", "2026-11-16T03:00:00Z"); put("elapsedRealtimeMs", 1_000_000); put("bootCount", 5)
+            put("sig", signAnchor(secret, a.toString(), Instant.parse("2026-11-16T03:00:00Z")))
+        }
+        put("elapsedAtTickMs", 2_740_000); put("bootCountAtTick", 5)
+    }
+
+    private fun habit(kind: String, target: Int): UUID {
+        val h = UUID.randomUUID()
+        TestDb.admin("""
+            insert into public.habits (id, user_id, title, kind, target) values ('$h', '$a', 'h', '$kind', $target);
+            insert into public.habit_schedules (user_id, habit_id, valid_from, recurrence) values ('$a', '$h', '2026-11-01', 'daily');
+        """.trimIndent())
+        return h
+    }
+
+    private fun logPut(h: UUID, count: Int) = buildJsonObject {
+        put("habit_id", h.toString()); put("loopdo_date", "2026-11-16"); put("count", count)
+        put("completed_at", "2026-11-16T03:29:00Z"); put("evidence", tick())
+    }
+
+    private fun countPatch(count: Int) = buildJsonObject {
+        put("count", count); put("completed_at", if (count > 0) "2026-11-16T03:29:00Z" else null); put("evidence", tick())
+    }
+
+    private fun count(log: UUID) = TestDb.scalar("select count from public.habit_logs where id = '$log'")
+
+    @Test
+    fun countPatchAppliesTheDifference() = app {
+        val h = habit("count", 8); val log = UUID.randomUUID()
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 3)))
+        ok(a, op("PATCH", "habit_logs", log, countPatch(4), old = buildJsonObject { put("count", 3) })) // the phone
+        ok(a, op("PATCH", "habit_logs", log, countPatch(4), old = buildJsonObject { put("count", 3) })) // the laptop
+        assertEquals("5", count(log))
+    }
+
+    @Test
+    fun countPutOnAnExistingLogAdds() = app {
+        val h = habit("count", 8); val log = UUID.randomUUID()
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 2))) // both devices created today's log (same id)
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 1)))
+        assertEquals("3", count(log))
+    }
+
+    @Test
+    fun yesNoTickedOnTwoDevicesStaysOne() = app {
+        val h = habit("yes_no", 1); val log = UUID.randomUUID()
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 1)))
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 1)))
+        assertEquals("1", count(log))
+    }
+
+    @Test
+    fun countNeverGoesBelowZeroAndClearsCompletion() = app {
+        val h = habit("count", 8); val log = UUID.randomUUID()
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 1)))
+        ok(a, op("PATCH", "habit_logs", log, countPatch(0), old = buildJsonObject { put("count", 1) }))
+        ok(a, op("PATCH", "habit_logs", log, countPatch(0), old = buildJsonObject { put("count", 1) }))
+        assertEquals("0", count(log))
+        assertEquals("true", TestDb.scalar("select (completed_at is null)::text from public.habit_logs where id = '$log'"))
+    }
+
+    @Test
+    fun countWithoutPreviousValuesIsAbsolute() = app {
+        val h = habit("count", 8); val log = UUID.randomUUID()
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 3)))
+        ok(a, op("PATCH", "habit_logs", log, countPatch(6), key = null)) // an older app version: no old values, no key
+        assertEquals("6", count(log))
+    }
+
+    @Test
+    fun aRetriedCountChangeIsAppliedOnce() = app {
+        val h = habit("count", 8); val log = UUID.randomUUID()
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 3), key = "phone:1"))
+        val tap = op("PATCH", "habit_logs", log, countPatch(4), old = buildJsonObject { put("count", 3) }, key = "phone:2")
+        ok(a, tap)
+        ok(a, tap) // the reply was lost; the phone sends the same change again
+        ok(a, op("PUT", "habit_logs", log, logPut(h, 3), key = "phone:1"))
+        assertEquals("4", count(log))
     }
 }

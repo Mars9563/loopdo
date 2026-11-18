@@ -46,6 +46,21 @@ create policy own_rows on public.journal_lines for all to loopdo_user
 grant select, insert, update, delete on public.journal_lines to loopdo_user;
 grant select on public.journal_lines to powersync_role, loopdo_backup;
 
+-- Count changes are applied as differences (two devices' taps add up). A retried upload must not add them
+-- twice: the key of every applied count change is kept here for a while (never synced to devices).
+create table if not exists public.applied_ops (
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  op_key     text not null check (char_length(op_key) <= 100),
+  applied_at timestamptz not null default now(),
+  primary key (user_id, op_key)
+);
+alter table public.applied_ops enable row level security;
+drop policy if exists own_rows on public.applied_ops;
+create policy own_rows on public.applied_ops for all to loopdo_user
+  using (user_id = (select public.current_user_id()))
+  with check (user_id = (select public.current_user_id()));
+grant select, insert, delete on public.applied_ops to loopdo_user;
+
 do $$
 begin
   if not exists (

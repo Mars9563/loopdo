@@ -6,7 +6,7 @@ declare
   r text;
 begin
   foreach tbl in array array['profiles','day_settings_versions','app_config','habits','habit_schedules',
-                             'habit_logs','lists','tasks','subtasks','journal_entries','journal_photos','journal_lines'] loop
+                             'habit_logs','lists','tasks','subtasks','journal_entries','journal_photos','journal_lines','applied_ops'] loop
     foreach r in array array['anon','authenticated'] loop
       if has_table_privilege(r, 'public.' || tbl, 'select,insert,update,delete') then
         raise exception 'FAIL grants: % has privileges on %', r, tbl;

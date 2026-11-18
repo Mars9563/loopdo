@@ -26,7 +26,11 @@ import java.util.UUID
 
 /** One PowerSync CrudEntry, as the phone uploads it; [old] = the row's previous values where the table tracks them (M6.5). */
 @Serializable
-data class CrudOp(val op: String, val table: String, val id: String, val data: JsonObject? = null, val old: JsonObject? = null)
+data class CrudOp(
+    val op: String, val table: String, val id: String, val data: JsonObject? = null, val old: JsonObject? = null,
+    /** Unique per change and the same on every retry ("<install>:<client op id>"); count differences need it. */
+    val key: String? = null,
+)
 
 /** The batch is refused as a whole; the phone rolls it back and tells the user why. */
 class Rejected(val code: String, val opIndex: Int) : RuntimeException(code)
@@ -81,7 +85,7 @@ class Applier(
         try {
             val p = when (spec.name) {
                 "habits" -> habitRules(i, op.op, id, data)
-                "habit_logs" -> Prepared(data, habitLogRules(i, op.op, id, data))
+                "habit_logs" -> Prepared(countFromTwoDevices(i, id, op, data), habitLogRules(i, op.op, id, data))
                 "tasks" -> taskRules(i, op.op, id, data)
                 "habit_schedules" -> scheduleRules(i, op.op, id, data)
                 "journal_photos" -> { photoRules(i, op.op, data); Prepared(data) }
@@ -107,6 +111,39 @@ class Applier(
     }
 
     // --- rules -------------------------------------------------------------
+
+    /**
+     * M6.5, two devices: a count change is applied as a difference to what the server has, so taps from the
+     * phone and the laptop add up (+1 and +1 = +2) instead of one overwriting the other. A PUT of a log that
+     * already exists (both devices made today's log) adds its count; without previous values (an older app)
+     * the count stays absolute. Never below 0; a yes/no habit never above 1.
+     */
+    private fun countFromTwoDevices(i: Int, id: UUID, crud: CrudOp, data: JsonObject): JsonObject {
+        val op = crud.op; val old = crud.old
+        val sent = data.text("count")?.toIntOrNull() ?: return data
+        val key = crud.key ?: return data // no retry protection: absolute, as before M6.5
+        if (key.length > 100) throw Rejected("BAD_OP", i)
+        // A retry of a change already applied (the reply was lost): what is stored already includes it.
+        val fresh = c.prepareStatement(
+            "insert into public.applied_ops (user_id, op_key) values (?::uuid, ?) on conflict do nothing",
+        ).use { st -> st.setString(1, user.toString()); st.setString(2, key); st.executeUpdate() } == 1
+        if (!fresh) return JsonObject(data - "count" - "completed_at")
+        // Retries come within minutes; a month of keys is plenty.
+        exec("delete from public.applied_ops where user_id = ?::uuid and applied_at < now() - interval '30 days'", listOf(user.toString()))
+        val (stored, kind) = queryOne(
+            "select l.count, h.kind from public.habit_logs l join public.habits h on h.id = l.habit_id where l.id = ?::uuid",
+            id.toString(),
+        ) { it.getInt(1) to it.getString(2) } ?: return data
+        val base = when (op) {
+            "PUT" -> 0
+            else -> old?.text("count")?.toIntOrNull() ?: return data
+        }
+        val result = (stored + sent - base).coerceAtLeast(0).let { if (kind == "yes_no") it.coerceAtMost(1) else it }
+        var d = data.with("count", result.toString())
+        if (result == 0) d = JsonObject(d + ("completed_at" to JsonNull))
+        else if (d["completed_at"] is JsonNull) d = JsonObject(d - "completed_at") // the other device's taps still stand
+        return d
+    }
 
     /** Every count change is a tick: it must be proven to happen on the log's own day. */
     private fun habitLogRules(i: Int, op: String, id: UUID, data: JsonObject): Map<String, String?> {
