@@ -133,7 +133,7 @@ fun JournalTab(vm: JournalViewModel) {
                             ) {
                                 val years = model.today.date.year - d.date.year
                                 Text("ON THIS DAY · $years ${if (years == 1) "YEAR" else "YEARS"} AGO", style = LoopDoType.label)
-                                DayLog(d.copy(blocks = d.blocks.take(2)), vm::photo)
+                                DayLog(d.preview(), vm::photo)
                             }
                         }
                         if (model.feed.isEmpty()) item { Hint("nothing written yet. [✎ today] writes the first line.") }
@@ -258,7 +258,7 @@ fun JournalTab(vm: JournalViewModel) {
     openPhoto?.let { id ->
         val path = model?.let { mm -> (mm.feed + mm.today).firstNotNullOfOrNull { it.localPaths[id] } }
         Dialog(onDismissRequest = { openPhoto = null }) {
-            Box(Modifier.clickable { openPhoto = null }) { PhotoThumb(id, path, vm::photo, 340) }
+            Box(Modifier.clickable { openPhoto = null }) { PhotoThumb(id, path, vm::photo, 340, whole = true) }
         }
     }
     moodFor?.let { key ->

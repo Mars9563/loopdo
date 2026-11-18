@@ -230,4 +230,15 @@ class JournalActionsTest {
         assertEquals("[03:59] written just before the day end", text(yesterday))
         assertEquals("new lines go on today.", runCatching { journal.addLines(today.minusDays(2), "x") }.exceptionOrNull()?.message)
     }
+
+    // M6 minor: a deleted photo's place isn't reused, so two photos of a day never share an order.
+    @Test
+    fun photoOrderIsNeverRepeated() = runBlocking {
+        val a = journal.addPhoto(today, photo())
+        journal.addPhoto(today, photo())
+        journal.deletePhoto(a)
+        journal.addPhoto(today, photo())
+        val orders = db.getAll("SELECT sort_order FROM journal_photos ORDER BY sort_order") { it.getLong(0)!! }
+        assertEquals(orders.distinct(), orders)
+    }
 }

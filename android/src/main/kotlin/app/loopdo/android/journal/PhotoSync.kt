@@ -79,7 +79,7 @@ class PhotoCache(private val dir: File, private val api: PhotoApi) {
         if (cached.exists() && cached.length() > 0) return cached
         val url = try { api.getUrl(photoId) } catch (e: IOException) { null } ?: return null
         dir.mkdirs()
-        val part = File(dir, "$photoId.part")
+        val part = File(dir, "$photoId.${java.util.UUID.randomUUID()}.part") // two loads of one photo never share a file
         return try {
             api.download(url, part)
             if (part.length() == 0L) null else cached.also { part.renameTo(it) }
@@ -100,7 +100,7 @@ class KtorPhotoApi(private val http: HttpClient, private val token: suspend () -
                 contentType(ContentType.Application.Json)
                 setBody("""{"photoId":"$photoId","entryId":"$entryId","contentType":"image/webp","bytes":$bytes}""")
             }
-        } catch (e: Exception) { throw IOException(e.message, e) }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { throw IOException(e.message, e) }
         return when (r.status.value) {
             200 -> Json.parseToJsonElement(r.bodyAsText()).jsonObject.let {
                 PresignResult.Ok(it["key"]!!.jsonPrimitive.content, it["putUrl"]!!.jsonPrimitive.content)
@@ -117,14 +117,14 @@ class KtorPhotoApi(private val http: HttpClient, private val token: suspend () -
                 contentType(ContentType("image", "webp")) // the signature covers the type and the length
                 setBody(file.readBytes())
             }
-        } catch (e: Exception) { throw IOException(e.message, e) }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { throw IOException(e.message, e) }
         if (r.status.value !in 200..299) throw IOException("R2 answered ${r.status.value}")
     }
 
     override suspend fun getUrl(photoId: String): String? {
         val r = try {
             http.get("${AppConfig.apiUrl}/api/photos/$photoId/url") { bearerAuth(bearer()) }
-        } catch (e: Exception) { throw IOException(e.message, e) }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { throw IOException(e.message, e) }
         return when (r.status.value) {
             200 -> Json.parseToJsonElement(r.bodyAsText()).jsonObject["getUrl"]!!.jsonPrimitive.content
             404, 503 -> null
@@ -133,7 +133,7 @@ class KtorPhotoApi(private val http: HttpClient, private val token: suspend () -
     }
 
     override suspend fun download(url: String, out: File) {
-        val r = try { http.get(url) } catch (e: Exception) { throw IOException(e.message, e) }
+        val r = try { http.get(url) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { throw IOException(e.message, e) }
         if (r.status.value != 200) throw IOException("R2 answered ${r.status.value}")
         out.writeBytes(r.bodyAsBytes())
     }

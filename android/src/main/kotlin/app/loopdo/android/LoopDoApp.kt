@@ -84,7 +84,7 @@ class AppGraph(context: android.content.Context) {
         onError = { android.util.Log.i("loopdo_photos", "upload later: ${it.message}") },
     ) { id -> sync.db.execute("UPDATE photo_files SET uploaded = 1 WHERE id = ?", listOf(id.toString())) }
     val photoCache = app.loopdo.android.journal.PhotoCache(java.io.File(appContext.cacheDir, "photos"), photoApi)
-    suspend fun pendingPhotoCount(): Long = sync.db.get("SELECT count(*) FROM photo_files WHERE uploaded = 0") { it.getLong(0) ?: 0L }
+    suspend fun pendingPhotoCount(): Long = sync.db.get(app.loopdo.android.sync.PENDING_PHOTOS_SQL) { it.getLong(0) ?: 0L }
     fun uploadPhotosSoon() = runCatching { app.loopdo.android.journal.PhotoWorker.enqueue(appContext) }
 
     /** Widget taps: the same actions as the app, then a redraw (Task 5 adds the refresh schedule). */

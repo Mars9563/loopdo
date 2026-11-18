@@ -107,4 +107,7 @@ class SyncModule(
 internal suspend fun hasUnsyncedWork(db: com.powersync.PowerSyncDatabase): Boolean =
     db.getNextCrudTransaction() != null ||
         db.get("SELECT count(*) FROM drafts") { it.getLong(0)!! } > 0 ||
-        db.get("SELECT count(*) FROM photo_files WHERE uploaded = 0") { it.getLong(0)!! } > 0
+        db.get(PENDING_PHOTOS_SQL) { it.getLong(0)!! } > 0
+
+/** Photos still waiting for R2: queued files whose photo row exists (an orphan entry would retry forever). */
+const val PENDING_PHOTOS_SQL = "SELECT count(*) FROM photo_files f JOIN journal_photos p ON p.id = f.id WHERE f.uploaded = 0"

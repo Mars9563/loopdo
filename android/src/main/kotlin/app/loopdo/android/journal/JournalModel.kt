@@ -33,6 +33,8 @@ data class JournalModel(
     val today: DayView, val feed: List<DayView>, val onThisDay: List<DayView>, val streak: Int,
     /** The wall time now in the LoopDo zone: the stamp a line saved now gets (the writer's `[22:41] · now`). */
     val now: LocalTime = LocalTime.MIDNIGHT,
+    /** Every day's mood up to today, including a day with only a mood (the calendar shows it). */
+    val moods: Map<LocalDate, Int> = emptyMap(),
 )
 
 fun buildJournal(
@@ -66,7 +68,18 @@ fun buildJournal(
         onThisDay = days.filter { it.date.year < today.year && it.date.monthValue == today.monthValue && it.date.dayOfMonth == today.dayOfMonth }
             .map { view(it.date, it) },
         streak = streak,
+        moods = entries.filter { it.date <= today && it.mood != null }.associate { it.date to it.mood!! },
     )
+}
+
+/** ON THIS DAY's preview (locked v2): the day's first [n] items (lines or photos), with the separators kept. */
+fun DayView.preview(n: Int = 2): DayView {
+    var left = n
+    val kept = blocks.mapNotNull { b ->
+        if (left <= 0) return@mapNotNull null
+        b.items.take(left).also { left -= it.size }.let(::LogBlock)
+    }
+    return copy(blocks = kept)
 }
 
 /** A day takes another photo (≤ 4, the server's limit); checked before the camera or gallery opens. */

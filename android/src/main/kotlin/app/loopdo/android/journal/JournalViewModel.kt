@@ -106,7 +106,14 @@ class JournalViewModel(
         }
     }
 
-    fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) = run(onError, { drafts?.clear(date); onSaved() }) { actions.addLines(date, input) }
+    /** A line save in flight: a double tap on [save ↵] saves once (M6 minor). */
+    private var savingLine = false
+
+    fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) {
+        if (savingLine) return
+        savingLine = true
+        run({ savingLine = false; onError(it) }, { savingLine = false; drafts?.clear(date); onSaved() }) { actions.addLines(date, input) }
+    }
     fun editLine(date: LocalDate, lineId: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit) = run(onError, onSaved) { actions.editLine(date, lineId, new) }
     fun deleteLine(date: LocalDate, lineId: String) = run { actions.deleteLine(date, lineId) }
     fun setMood(date: LocalDate, mood: Int?) = run { actions.setMood(date, mood) }

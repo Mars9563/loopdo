@@ -38,7 +38,8 @@ import java.util.Locale
 @Composable
 fun CalendarView(model: JournalModel, month: YearMonth, onMonth: (YearMonth) -> Unit, onDay: (LocalDate) -> Unit) {
     val today = model.today.date
-    val days = model.feed.associate { it.date to it.mood }
+    // A day with only a mood shows its mood too (M6 minor); tapping it says nothing was written.
+    val days: Map<LocalDate, Int?> = model.moods + model.feed.associate { it.date to it.mood }
     val first = model.feed.minOfOrNull { it.date }
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -155,14 +156,25 @@ private fun PhotoItem(
     }
 }
 
-/** A photo at [sizeDp] (decoded small, off the main thread); a dim box while it loads or isn't uploaded yet. */
+/**
+ * A photo at [sizeDp] (decoded small, off the main thread); a dim box while it loads or isn't uploaded yet.
+ * [whole] = the full photo at [sizeDp] wide in its own shape (the viewer; M6 minor: it was cropped square).
+ */
 @Composable
-fun PhotoThumb(id: String, localPath: String?, photo: suspend (String, String?) -> File?, sizeDp: Int, modifier: Modifier = Modifier) {
+fun PhotoThumb(id: String, localPath: String?, photo: suspend (String, String?) -> File?, sizeDp: Int, modifier: Modifier = Modifier, whole: Boolean = false) {
     val key = "$id@$sizeDp"
     val bitmap by produceState(THUMBS[key], id, localPath) {
         if (value == null) value = withContext(Dispatchers.IO) { photo(id, localPath)?.let { decodeSampled(it, sizeDp * 3) } }?.also { THUMBS[key] = it }
     }
     val shape = RoundedCornerShape(8.dp)
+    val shown = bitmap
+    if (whole && shown != null) {
+        Image(
+            shown, contentDescription = "photo", contentScale = ContentScale.Fit,
+            modifier = modifier.width(sizeDp.dp).aspectRatio(shown.width.toFloat() / shown.height.coerceAtLeast(1)).clip(shape),
+        )
+        return
+    }
     Box(modifier.size(sizeDp.dp).clip(shape).background(LoopDoColors.accent.copy(alpha = 0.10f)), contentAlignment = Alignment.Center) {
         bitmap?.let { Image(it, contentDescription = "photo", contentScale = ContentScale.Crop, modifier = Modifier.size(sizeDp.dp)) }
             ?: Text("…", style = LoopDoType.small.copy(color = LoopDoColors.dim))

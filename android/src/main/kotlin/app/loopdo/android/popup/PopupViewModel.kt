@@ -69,7 +69,12 @@ class PopupViewModel(
         .filter { it.startsWith("journal:") && !it.endsWith(":base") && !it.endsWith(":at") && drafts.load(it).isNotEmpty() }
         .mapNotNull { runCatching { LocalDate.parse(it.removePrefix("journal:")) }.getOrNull() }.toSet()
 
+    /** A save in flight: a second tap meanwhile is ignored (M6 minor: a double tap saved a line twice). */
+    private var saving = false
+
     private fun save(key: String, onSaved: () -> Unit, block: suspend () -> Unit) {
+        if (saving) return
+        saving = true
         viewModelScope.launch {
             try {
                 block()
@@ -84,7 +89,7 @@ class PopupViewModel(
             _error.value = null
             runCatching { redraw() }
             onSaved()
-        }
+        }.invokeOnCompletion { saving = false }
     }
 
     companion object {

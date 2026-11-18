@@ -149,7 +149,7 @@ class JournalActions(
                 "INSERT INTO journal_photos (id, user_id, entry_id, r2_key, width, height, bytes, sort_order, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 listOf(
                     photo.id.toString(), user.toString(), id, "u/$user/$id/${photo.id}.webp",
-                    photo.width, photo.height, photo.bytes, count, now.toString().takeIf { date == today },
+                    photo.width, photo.height, photo.bytes, tx.nextPhotoOrder(id), now.toString().takeIf { date == today },
                 ),
             )
             tx.execute("INSERT INTO photo_files (id, path, uploaded) VALUES (?, ?, 0)", listOf(photo.id.toString(), photo.path))
@@ -184,6 +184,10 @@ class JournalActions(
 
     private fun PowerSyncTransaction.liveLineCount(entryId: String): Long =
         get("SELECT count(*) FROM journal_lines WHERE entry_id = ? AND deleted_at IS NULL", listOf(entryId)) { it.getLong(0)!! }
+
+    /** After the day's last photo (a deleted one's place isn't reused, so two photos never share an order). */
+    private fun PowerSyncTransaction.nextPhotoOrder(entryId: String): Long =
+        get("SELECT coalesce(max(sort_order), -1) + 1 FROM journal_photos WHERE entry_id = ?", listOf(entryId)) { it.getLong(0)!! }
 
     private fun PowerSyncTransaction.photoCount(entryId: String): Long =
         get("SELECT count(*) FROM journal_photos WHERE entry_id = ?", listOf(entryId)) { it.getLong(0)!! }

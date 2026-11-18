@@ -22,7 +22,12 @@ class UnsyncedWorkTest {
             assertFalse(hasUnsyncedWork(db))
             db.execute("INSERT INTO photo_files (id, path, uploaded) VALUES (?, '/x.webp', 1)", listOf(UUID.randomUUID().toString()))
             assertFalse("an uploaded photo is safe", hasUnsyncedWork(db))
-            db.execute("INSERT INTO photo_files (id, path, uploaded) VALUES (?, '/y.webp', 0)", listOf(UUID.randomUUID().toString()))
+            // M6 minor: a queue entry whose photo row is gone (deleted elsewhere) is no work: it would retry forever.
+            db.execute("INSERT INTO photo_files (id, path, uploaded) VALUES (?, '/orphan.webp', 0)", listOf(UUID.randomUUID().toString()))
+            assertFalse("an orphan queue entry is not unsynced work", hasUnsyncedWork(db))
+            val p = UUID.randomUUID().toString()
+            db.execute("INSERT INTO journal_photos (id, entry_id, r2_key, sort_order) VALUES (?, 'e', 'k', 0)", listOf(p))
+            db.execute("INSERT INTO photo_files (id, path, uploaded) VALUES (?, '/y.webp', 0)", listOf(p))
             assertTrue(hasUnsyncedWork(db))
         } finally { db.close(); app.loopdo.android.deleteTestDatabases() }
     }

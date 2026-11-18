@@ -56,7 +56,7 @@ class PhotoWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
             val request = OneTimeWorkRequestBuilder<PhotoWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork("loopdo-photos", ExistingWorkPolicy.REPLACE, request)
+            WorkManager.getInstance(context).enqueueUniqueWork("loopdo-photos", ExistingWorkPolicy.KEEP, request) // a running upload isn't cancelled; it re-checks the queue
         }
     }
 }

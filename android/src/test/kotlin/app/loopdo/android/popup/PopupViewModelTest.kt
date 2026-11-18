@@ -37,7 +37,9 @@ private class FakeActions : TodayActions {
     override suspend fun addTask(title: String, due: LocalDate?, time: LocalTime?, listId: UUID?): UUID { maybeFail(); return UUID.randomUUID() }
     override suspend fun appendJournalLine(text: String) = maybeFail()
     val lineSaves = mutableListOf<Triple<LocalDate, String, java.time.Instant?>>()
-    override suspend fun addJournalLines(date: LocalDate, text: String, at: java.time.Instant?) { maybeFail(); lineSaves += Triple(date, text, at) }
+    /** Set to hold a save in flight (a second tap arrives meanwhile). */
+    var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    override suspend fun addJournalLines(date: LocalDate, text: String, at: java.time.Instant?) { gate?.await(); maybeFail(); lineSaves += Triple(date, text, at) }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -127,5 +129,19 @@ class PopupViewModelTest {
         vm.keepJournalDraft(friday, "old entry\nfrom before the stamps", "old entry") // no time known
         vm.saveLine(friday, "from before the stamps", earlierDay = true) {}
         assertEquals(java.time.Instant.EPOCH, actions.lineSaves.last().third) // "unknown": stamped at the day's end
+    }
+
+    // M6 minor: a double tap on [save ↵] saves the line once.
+    @Test
+    fun aDoubleTapSavesTheLineOnce() = runTest {
+        val vm = vm()
+        val day = LocalDate.of(2026, 11, 14)
+        actions.gate = kotlinx.coroutines.CompletableDeferred()
+        var saved = 0
+        vm.saveLine(day, "pizza was good", earlierDay = false) { saved++ }
+        vm.saveLine(day, "pizza was good", earlierDay = false) { saved++ } // the second tap, while the first is saving
+        actions.gate!!.complete(Unit)
+        assertEquals(1, actions.lineSaves.size)
+        assertEquals(1, saved)
     }
 }

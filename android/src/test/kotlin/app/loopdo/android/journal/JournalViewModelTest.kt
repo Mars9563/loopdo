@@ -73,4 +73,23 @@ class JournalViewModelTest {
         lru["c"] = 3 // evicts b, the least recently used
         assertEquals(listOf(1, null, 3), listOf(lru["a"], lru["b"], lru["c"]))
     }
+
+    // M6 minor: a day with only a mood (no line or photo) isn't a journal day, but its mood shows in the calendar.
+    @Test
+    fun aMoodOnlyDayKeepsItsMoodForTheCalendar() {
+        val m = buildJournal(entries + EntryRow("mood", d(2026, 11, 11), "", 2), photos, today, ist, LocalTime.of(4, 0), streak = 0)
+        assertTrue(m.feed.none { it.date == d(2026, 11, 11) })
+        assertEquals(2, m.moods[d(2026, 11, 11)])
+        assertEquals(4, m.moods[today])
+    }
+
+    // M6 minor: ON THIS DAY previews the day's first 2 items (lines or photos), not its first 2 blocks.
+    @Test
+    fun onThisDayPreviewsTwoLines() {
+        val day = buildJournal(
+            listOf(EntryRow("old", d(2025, 11, 14), "[08:00] a\n[08:05] b\n[08:10] c\n[12:00] d", null)), emptyList(), today, ist, LocalTime.of(4, 0), 0,
+        ).onThisDay.single()
+        val items = day.preview().blocks.flatMap { it.items }.filterIsInstance<LogItem.Line>().map { it.line.text }
+        assertEquals(listOf("a", "b"), items)
+    }
 }
