@@ -78,7 +78,7 @@ private fun focusTitle(title: String, focus: Boolean) = buildAnnotatedString {
 
 /** The locked desktop-v1 A: header, streak + focus line, habits | tasks | today's journal. */
 @Composable
-fun TodayPane(m: TodayModel, ui: TodayUi, journal: DayView?, focusLine: String, onWrite: () -> Unit, onAdd: (String) -> Unit) {
+fun TodayPane(m: TodayModel, ui: TodayUi, journal: DayView?, focusLine: String, onWrite: () -> Unit, onAdd: (String) -> Unit, writer: (@Composable () -> Unit)? = null) {
     val t = LocalType.current
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.height(40.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -109,7 +109,7 @@ fun TodayPane(m: TodayModel, ui: TodayUi, journal: DayView?, focusLine: String, 
                 TasksColumn(m, ui, onAdd)
             }
             Column(Modifier.weight(1.05f).fillMaxHeight().padding(top = 14.dp, start = 26.dp).verticalScroll(rememberScrollState())) {
-                JournalColumn(journal, onWrite)
+                JournalColumn(journal, onWrite, writer)
             }
         }
     }
@@ -175,7 +175,7 @@ private fun TaskLine(task: TaskItem, ui: TodayUi, meta: @Composable () -> Unit) 
     ItemRow(if (task.done) "[x]" else "[ ]", focusTitle(task.title, task.focus), task.done, onBox = { ui.toggleTask(task) }) { if (!task.done) meta() }
 
 @Composable
-private fun ColumnScope.JournalColumn(day: DayView?, onWrite: () -> Unit) {
+private fun ColumnScope.JournalColumn(day: DayView?, onWrite: () -> Unit, writer: (@Composable () -> Unit)?) {
     val t = LocalType.current
     Label("journal", day?.moodFace.orEmpty())
     val lines = day?.blocks?.flatMap { it.items }?.filterIsInstance<LogItem.Line>().orEmpty()
@@ -187,14 +187,15 @@ private fun ColumnScope.JournalColumn(day: DayView?, onWrite: () -> Unit) {
             BasicText(l.line.text, style = t.body)
         }
     }
-    Column(
-        Modifier.padding(top = 14.dp).fillMaxWidth().border(1.dp, Fern.mint.copy(alpha = .30f), RoundedCornerShape(12.dp))
+    Spacer(Modifier.height(14.dp))
+    if (writer != null) writer() else Column(
+        Modifier.fillMaxWidth().border(1.dp, Fern.mint.copy(alpha = .30f), RoundedCornerShape(12.dp))
             .clickable(onClick = onWrite).padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         BasicText("what's happening?", style = t.body.copy(color = Fern.lichen))
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            BasicText("[📷 photo]", style = t.small.copy(color = Fern.moss))
-            BasicText("the writer comes next", style = t.small.copy(color = Fern.moss))
+            BasicText("[📷 photo]", style = t.small)
+            BasicText("[save ↵]", style = t.small.copy(color = Fern.mint))
         }
     }
 }

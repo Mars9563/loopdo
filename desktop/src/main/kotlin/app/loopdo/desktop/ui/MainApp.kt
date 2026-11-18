@@ -46,6 +46,8 @@ fun placeForKey(c: Char): Place? = Place.entries.firstOrNull { it.key == c }
 fun MainApp(g: DesktopGraph) {
     val today = remember { g.todayViewModel() }
     val journal = remember { g.journalViewModel() }
+    val journalUi = remember { JournalBinding(journal, g.photoDir) }
+    val jsnack by journal.snack.collectAsState()
     val model by today.state.collectAsState()
     val jm by journal.state.collectAsState()
     val snack by today.snack.collectAsState()
@@ -61,16 +63,20 @@ fun MainApp(g: DesktopGraph) {
     } }) {
         Shell(
             place, { place = it }, status,
+            railExtra = { if (place == Place.JOURNAL) jm?.let { OnThisDay(it) } },
             railBottom = {
-                model?.let { m -> BasicText("⏳ ${m.endsIn.countdown()} left today", style = LocalType.current.small) }
+                if (place == Place.JOURNAL) jm?.let { BasicText("journal streak ${it.streak}d", style = LocalType.current.small) }
+                else model?.let { m -> BasicText("⏳ ${m.endsIn.countdown()} left today", style = LocalType.current.small) }
             },
         ) {
             when (place) {
                 Place.TODAY -> model?.let { m ->
                     TodayPane(m, today, jm?.today, focusLine(m.habitsOpen + m.habitsDone, m.dueToday + m.late + m.inbox),
-                        onWrite = { place = Place.JOURNAL }, onAdd = { adding = true })
+                        onWrite = { place = Place.JOURNAL }, onAdd = { adding = true },
+                        writer = jm?.let { j -> { Writer(j.today.date, j.now, j.today.mood, journalUi, ::pickPhotoFile) } })
                 } ?: BasicText("loading today…", style = LocalType.current.small)
-                else -> BasicText("${place.path} arrives in a later step (M10 ${when (place) { Place.JOURNAL -> "D3"; Place.HABITS -> "D4"; Place.STATS -> "D5"; else -> "D8" }}).", style = LocalType.current.small)
+                Place.JOURNAL -> jm?.let { JournalPane(it, journalUi, ::pickPhotoFile) } ?: BasicText("loading the journal…", style = LocalType.current.small)
+                else -> BasicText("${place.path} arrives in a later step (M10 ${when (place) { Place.HABITS -> "D4"; Place.STATS -> "D5"; else -> "D8" }}).", style = LocalType.current.small)
             }
         }
         if (adding) model?.let { m ->
@@ -78,11 +84,11 @@ fun MainApp(g: DesktopGraph) {
                 today.addTask(text, null, null, null, null, m.date, onSaved = done)
             }
         }
-        snack?.let { s ->
+        (snack?.let { it.text to it.id } ?: jsnack?.let { it.text to it.id })?.let { (text, id) ->
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 22.dp).background(Color(0xF0090F18), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
-                BasicText(s.text, style = LocalType.current.small.copy(color = Fern.ink))
+                BasicText(text, style = LocalType.current.small.copy(color = Fern.ink))
             }
-            LaunchedEffect(s.id) { delay(4_000); today.dismissSnack(s.id) }
+            LaunchedEffect(id) { delay(4_000); today.dismissSnack(id); journal.dismiss(id) }
         }
     }
 }
@@ -133,4 +139,17 @@ fun savedLine(g: DesktopGraph): androidx.compose.ui.text.AnnotatedString {
         ago < 1 -> savedStatus("all saved · just now")
         else -> savedStatus("all saved · $ago min ago")
     }
+}
+
+/** The rail's "on this day": the same date in an earlier year, its first line. */
+@Composable
+private fun OnThisDay(j: app.loopdo.client.journal.JournalModel) {
+    val t = LocalType.current
+    val d = j.onThisDay.firstOrNull() ?: return
+    val first = d.blocks.flatMap { it.items }.filterIsInstance<app.loopdo.client.journal.LogItem.Line>().firstOrNull()?.line?.text ?: return
+    Spacer(Modifier.height(24.dp))
+    BasicText("on this day", style = t.label)
+    Spacer(Modifier.height(8.dp))
+    BasicText(d.date.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.ENGLISH)).lowercase(), style = t.small)
+    BasicText(first, style = t.small.copy(color = Fern.ink), modifier = Modifier.padding(top = 4.dp))
 }
