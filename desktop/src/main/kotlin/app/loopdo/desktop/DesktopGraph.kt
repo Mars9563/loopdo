@@ -70,11 +70,24 @@ class DesktopGraph(val dataDir: File) {
     )
     private val photoApi = app.loopdo.client.journal.KtorPhotoApi(http, token)
     val photoCache = app.loopdo.client.journal.PhotoCache(File(dataDir, "photos"), photoApi)
+    val photoUploader = app.loopdo.client.journal.PhotoUploader(
+        photoApi,
+        pending = {
+            sync.db.getAll("SELECT f.id, f.path, p.entry_id, p.bytes FROM photo_files f JOIN journal_photos p ON p.id = f.id WHERE f.uploaded = 0") {
+                app.loopdo.client.journal.PendingPhoto(java.util.UUID.fromString(it.getString(0)!!), it.getString(1)!!, it.getString(2)!!, it.getLong(3) ?: 0L)
+            }
+        },
+        onError = { app.loopdo.client.log.logI("loopdo_photos", "upload later: ${it.message}") },
+    ) { id -> sync.db.execute("UPDATE photo_files SET uploaded = 1 WHERE id = ?", listOf(id.toString())) }
+    /** The phone's PhotoWorker: uploads after each add, every 5 min, and retries while photos wait (offline). */
+    val photoLoop = app.loopdo.desktop.journal.PhotoLoop(scope, run = { photoUploader.runOnce() }, pending = { sync.db.get(app.loopdo.client.sync.PENDING_PHOTOS_SQL) { it.getLong(0) ?: 0L } })
+    /** Where the laptop keeps photos it compressed itself (and downloads, by id). */
+    val photoDir = File(dataDir, "photos")
     val drafts = app.loopdo.client.journal.LineDrafts(app.loopdo.desktop.store.FilePopupDrafts(File(dataDir, "drafts.json")))
 
     fun journalViewModel() = app.loopdo.client.journal.JournalViewModel(
         todayData.rows(), app.loopdo.client.journal.JournalData(sync.db), journalActions, { trustedClock.now().instant },
-        photoFile = { id, path -> photoCache.file(id, path) }, uploadSoon = {}, drafts = drafts,
+        photoFile = { id, path -> photoCache.file(id, path) }, uploadSoon = { photoLoop.kick() }, drafts = drafts,
     )
 
     fun todayViewModel() = TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
