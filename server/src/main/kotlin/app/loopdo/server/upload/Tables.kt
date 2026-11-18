@@ -41,6 +41,10 @@ val TABLES: Map<String, TableSpec> = listOf(
     TableSpec("journal_photos", setOf("PUT", "DELETE"), mapOf(
         "entry_id" to Col.UUID, "r2_key" to Col.TEXT, "width" to Col.INT, "height" to Col.INT,
         "bytes" to Col.INT, "sort_order" to Col.INT, "added_at" to Col.TIMESTAMPTZ)),
+    // M8: the weekly focus (removed = deleted_at set inside its window; evidence proves when, checked not stored).
+    TableSpec("weekly_focus", setOf("PUT", "PATCH"), mapOf(
+        "week_start" to Col.DATE, "kind" to Col.TEXT, "item_id" to Col.UUID, "title" to Col.TEXT, "goal" to Col.INT,
+        "deadline" to Col.DATE, "sort_order" to Col.INT, "deleted_at" to Col.TIMESTAMPTZ, "evidence" to Col.JSONB)),
     // M6.5: a journal line is its own row (deleted = deleted_at set, never removed).
     TableSpec("journal_lines", setOf("PUT", "PATCH"), mapOf(
         "entry_id" to Col.UUID, "stamped_at" to Col.TIMESTAMPTZ, "text" to Col.TEXT, "edited_at" to Col.TIMESTAMPTZ,

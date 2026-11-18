@@ -38,3 +38,6 @@ streams:
   journal_lines:
     auto_subscribe: true
     query: SELECT * FROM journal_lines WHERE user_id = auth.user_id()
+  weekly_focus:
+    auto_subscribe: true
+    query: SELECT * FROM weekly_focus WHERE user_id = auth.user_id()

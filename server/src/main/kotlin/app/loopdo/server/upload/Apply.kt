@@ -3,6 +3,8 @@ package app.loopdo.server.upload
 import app.loopdo.server.loadDaySettingsVersions
 import app.loopdo.shared.day.DaySettingsVersion
 import app.loopdo.shared.day.dateResolver
+import app.loopdo.shared.stats.MAX_FOCUS
+import app.loopdo.shared.stats.focusWindowOpen
 import app.loopdo.shared.time.ClaimResult
 import app.loopdo.shared.time.TickEvidence
 import app.loopdo.shared.time.TimeAnchor
@@ -91,6 +93,7 @@ class Applier(
                 "journal_photos" -> { photoRules(i, op.op, data); Prepared(data) }
                 "subtasks" -> subtaskRules(op.op, id, data)
                 "journal_lines" -> lineRules(i, op.op, id, data, op.old)
+                "weekly_focus" -> focusRules(i, op.op, id, data)
                 else -> Prepared(data)
             }
             if (p.skip) return
@@ -355,6 +358,54 @@ class Applier(
      * the deleting device saw it ([old] edited_at); an edit always brings a deleted line back (owner: keep the
      * edited line).
      */
+    /**
+     * M8: a weekly focus can change only on its week's Sunday-before or Monday (the LoopDo date of the server, or
+     * the day the upload's time evidence proves, verified or not, as ticks), at most [MAX_FOCUS] live per week.
+     * What a promise is about (week, kind, item, deadline) never changes; its evidence is checked, not stored.
+     */
+    private fun focusRules(i: Int, op: String, id: UUID, data: JsonObject): Prepared {
+        val immutable = listOf("week_start", "kind", "item_id", "deadline")
+        val stored = queryOne("select week_start::text, kind, item_id::text, deadline::text, (deleted_at is null) from public.weekly_focus where id = ?::uuid", id.toString()) {
+            listOf(it.getString(1), it.getString(2), it.getString(3), it.getString(4), it.getBoolean(5).toString())
+        }
+        if (op == "PATCH" && stored == null) throw Rejected("FORBIDDEN", i)
+        if (stored != null && immutable.withIndex().any { (k, col) -> col in data && data.text(col) != stored[k] }) throw Rejected("FORBIDDEN", i)
+        val week = (data.text("week_start") ?: stored!![0])?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: throw Rejected("INVALID_FOCUS", i)
+        if (week.dayOfWeek != java.time.DayOfWeek.MONDAY) throw Rejected("INVALID_FOCUS", i)
+        val day = if (data["evidence"] is JsonObject) {
+            val e = evidenceOf(i, data)
+            when (val r = validateClaim(e, dateAt(i), now)) {
+                is ClaimResult.Accepted -> e.claimedDate
+                is ClaimResult.Rejected -> throw Rejected(r.reason.name, i)
+            }
+        } else today(i)
+        if (!focusWindowOpen(week, day)) throw Rejected("FOCUS_CLOSED", i)
+        if (op == "PUT") {
+            val kind = data.text("kind")
+            val item = data.text("item_id") ?: throw Rejected("INVALID_FOCUS", i)
+            val owned = when (kind) {
+                "habit" -> queryOne("select 1 from public.habits where id = ?::uuid", item) { true }
+                "task" -> queryOne("select 1 from public.tasks where id = ?::uuid and repeat_rule is null", item) { true }
+                else -> throw Rejected("INVALID_FOCUS", i)
+            }
+            if (owned == null) throw Rejected("FORBIDDEN", i)
+            val deadline = data.text("deadline")?.let(LocalDate::parse)
+            val shapeOk = if (kind == "habit") (data["goal"] as? JsonPrimitive)?.content?.toIntOrNull() in 1..7 && deadline == null
+                else data["goal"].let { it == null || it is JsonNull } && deadline != null && deadline in week..week.plusDays(6)
+            if (!shapeOk) throw Rejected("INVALID_FOCUS", i)
+        }
+        // Becoming (or staying) live counts against the week's limit; two devices' adds take turns here.
+        val alive = if ("deleted_at" in data) data["deleted_at"].let { it == null || it is JsonNull } else stored?.get(4) != "false"
+        if (alive) {
+            lockRow(UUID.nameUUIDFromBytes("focus:$user:$week".toByteArray()))
+            val others = queryOne(
+                "select count(*) from public.weekly_focus where week_start = ?::date and deleted_at is null and id <> ?::uuid", week.toString(), id.toString(),
+            ) { it.getInt(1) } ?: 0
+            if (others >= MAX_FOCUS) throw Rejected("FOCUS_FULL", i)
+        }
+        return Prepared(JsonObject(data - "evidence"))
+    }
+
     private fun lineRules(i: Int, op: String, id: UUID, data: JsonObject, old: JsonObject?): Prepared {
         lockRow(id) // two devices' edits of one line are compared one after the other
         val storedEdit = queryOne("select edited_at from public.journal_lines where id = ?::uuid", id.toString()) {
