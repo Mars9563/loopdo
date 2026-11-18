@@ -91,6 +91,12 @@ class DesktopSync(
         }
     }
 
+    /** Stops syncing (as if offline); local writes queue up and are kept on disk. */
+    suspend fun goOffline() = db.disconnect()
+
+    /** Syncs again (after [goOffline]); the queue uploads one transaction at a time. */
+    suspend fun goOnline() = db.connect(connector)
+
     /** Fresh signed server time (anchors come only from /api/time). Offline is fine: the old anchor stays. */
     fun refreshAnchor() {
         val r = anchors ?: return
