@@ -54,7 +54,7 @@ fun SettingsScreen(vm: SettingsViewModel, host: SettingsHost, onClose: () -> Uni
     BackHandler { if (sheet != null) sheet = null else onClose() }
     val ui = s ?: return
     if (sheet == "delete") return DeleteScreen(vm, host, onBack = { sheet = null })
-    if (sheet == "zone") return app.loopdo.android.onboarding.ZonePicker(onPick = { vm.setZone(it); sheet = null }, onBack = { sheet = null })
+    if (sheet == "zone") return app.loopdo.android.onboarding.ZonePicker(onPick = { vm.setZone(it); sheet = null }, onBack = { sheet = null }, title = "~/settings/zone")
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {

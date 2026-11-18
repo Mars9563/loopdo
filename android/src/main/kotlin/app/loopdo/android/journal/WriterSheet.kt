@@ -22,6 +22,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -108,8 +110,13 @@ fun WriterSheet(
                     .padding(horizontal = 12.dp, vertical = 12.dp),
             ) {
                 if (text.isEmpty()) Text("what's happening?", style = LoopDoType.body.copy(color = LoopDoColors.done))
+                // The cursor starts after a kept draft, not before it (M9 manual test).
+                var field by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(text, androidx.compose.ui.text.TextRange(text.length))) }
+                androidx.compose.runtime.LaunchedEffect(text) {
+                    if (text != field.text) field = androidx.compose.ui.text.input.TextFieldValue(text, androidx.compose.ui.text.TextRange(text.length))
+                }
                 BasicTextField(
-                    value = text, onValueChange = onText, textStyle = LoopDoType.body, cursorBrush = SolidColor(LoopDoColors.accent),
+                    value = field, onValueChange = { field = it; onText(it.text) }, textStyle = LoopDoType.body, cursorBrush = SolidColor(LoopDoColors.accent),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
             }

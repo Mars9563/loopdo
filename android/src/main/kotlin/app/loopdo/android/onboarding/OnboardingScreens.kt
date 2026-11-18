@@ -108,13 +108,13 @@ fun OnboardingScreen(onboarding: Onboarding, settingsAlreadySaved: Boolean = fal
 }
 
 @Composable
-internal fun ZonePicker(onPick: (String) -> Unit, onBack: () -> Unit) {
+internal fun ZonePicker(onPick: (String) -> Unit, onBack: () -> Unit, title: String = "~/setup/zone") {
     var q by rememberSaveable { mutableStateOf("") }
     val results = remember(q) { if (q.isBlank()) Zones.all() else Zones.search(q) }
     Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().padding(horizontal = 22.dp)) {
         Row(Modifier.height(48.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Bracket("<", idle = true, onClick = onBack)
-            Text("~/setup/zone", style = LoopDoType.title.copy(color = LoopDoColors.accent))
+            Text(title, style = LoopDoType.title.copy(color = LoopDoColors.accent))
         }
         TerminalField("search", q, { q = it }, imeAction = ImeAction.Search)
         LazyColumn(Modifier.padding(top = 8.dp)) {
