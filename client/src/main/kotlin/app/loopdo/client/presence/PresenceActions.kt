@@ -10,8 +10,9 @@ import java.util.UUID
  * later ones only move active_until (a PATCH). Uploaded through the normal queue like any other change.
  */
 class PresenceActions(private val db: PowerSyncDatabase, private val userId: () -> UUID?, private val deviceId: UUID) {
-    suspend fun setActiveUntil(at: Instant) {
-        val user = userId() ?: return // signed out: nothing to say
+    /** False when nothing was written (signed out). */
+    suspend fun setActiveUntil(at: Instant): Boolean {
+        val user = userId() ?: return false // signed out: nothing to say
         val id = presenceId(user, deviceId).toString()
         db.writeTransaction { tx ->
             val exists = tx.getOptional("SELECT 1 FROM device_presence WHERE id = ?", listOf(id)) { 1 } != null
@@ -21,5 +22,6 @@ class PresenceActions(private val db: PowerSyncDatabase, private val userId: () 
                 listOf(id, user.toString(), deviceId.toString(), at.toString()),
             )
         }
+        return true
     }
 }

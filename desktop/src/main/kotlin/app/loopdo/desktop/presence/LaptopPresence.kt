@@ -37,7 +37,10 @@ fun nextActiveUntil(inUse: Boolean, now: Instant, written: Instant?): Instant? =
  */
 class LaptopPresence(
     private val scope: CoroutineScope,
-    private val write: suspend (Instant) -> Unit,
+    /** Writes this laptop's row; false when it couldn't (offline, signed out): not counted, tried again next time. */
+    private val write: suspend (Instant) -> Boolean,
+    /** Waits (bounded) for queued uploads to reach the server: the "now" on sleep and quit must leave the laptop. */
+    private val flush: suspend () -> Unit = {},
     private val now: () -> Instant,
     /** The screen is locked (KDE's screensaver). */
     private val locked: suspend () -> Boolean,
@@ -55,18 +58,51 @@ class LaptopPresence(
     private suspend fun check() = lock.withLock {
         val inUse = !stopped && !asleep && active() && !runCatching { locked() }.getOrDefault(true)
         nextActiveUntil(inUse, now(), written)?.let { at ->
-            runCatching { write(at); written = at }.onFailure { logW("loopdo_presence", "couldn't write presence", it) }
+            runCatching { if (write(at)) written = at }.onFailure { logW("loopdo_presence", "couldn't write presence", it) }
         }
     }
 
     /** Something changed (pings switched, signed in/out): look again now. */
     fun poke() { scope.launch { check() } }
     fun lockChanged(@Suppress("UNUSED_PARAMETER") locked: Boolean) = poke()
-    fun sleeping() { asleep = true; poke() }
+    /** The laptop is about to sleep: "now", and its upload, before this returns (the sleep is held until then). */
+    suspend fun goingToSleep() { asleep = true; check(); runCatching { flush() } }
     fun woke() { asleep = false; poke() }
 
-    /** Quitting: the phone rings again from now (waited for, before the database closes). */
-    suspend fun stop() { stopped = true; check() }
+    /** Quitting: the phone rings again from now, uploaded before the database closes. */
+    suspend fun stop() { stopped = true; check(); runCatching { flush() } }
+}
+
+/**
+ * Whether the laptop takes the pings: pings on, signed in, not blocked, and not in Do Not Disturb — with DND its
+ * pings are silent, so the phone must ring ("one ping too many, never one too few"; final review I2).
+ */
+fun countsAsInUse(pingsOn: Boolean, signedIn: Boolean, blocked: Boolean, doNotDisturb: Boolean): Boolean =
+    pingsOn && signedIn && !blocked && !doNotDisturb
+
+/**
+ * logind's "delay" lock on sleep (systemd-inhibit, held by a child process): logind waits (≤ 5 s) for its release, so
+ * the "now" can upload before the laptop sleeps. [start] runs the command and returns how to stop it.
+ */
+class SleepInhibitor(private val start: (List<String>) -> () -> Unit = ::startProcess) {
+    private var stop: (() -> Unit)? = null
+
+    @Synchronized fun take() {
+        if (stop != null) return
+        stop = runCatching { start(listOf("systemd-inhibit", "--what=sleep", "--mode=delay", "--who=loopdo_", "--why=hand pings back to the phone",
+            // Ends with loopdo_ however it ends (even killed), so no orphan keeps delaying every sleep.
+            "tail", "--pid=${ProcessHandle.current().pid()}", "-f", "/dev/null")) }
+            .onFailure { logW("loopdo_presence", "no sleep delay (the phone may stay quiet up to 5 min after a lid close)", it) }.getOrNull()
+    }
+
+    @Synchronized fun release() { stop?.let { runCatching(it) }; stop = null }
+
+    private companion object {
+        fun startProcess(cmd: List<String>): () -> Unit {
+            val p = ProcessBuilder(cmd).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
+            return { p.destroy() }
+        }
+    }
 }
 
 /** KDE's screensaver: whether the screen is locked, and a signal when that changes. */

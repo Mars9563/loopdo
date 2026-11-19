@@ -189,6 +189,9 @@ class DbusNotifier(
 
     @Synchronized override fun cancelAll() { entries.map { it.ours }.forEach(::cancel) }
 
+    /** Do Not Disturb is on: laptop pings are silent, so the laptop must not keep the phone quiet (D7 review I2). */
+    fun inhibited(): Boolean = runCatching { api.inhibited() }.getOrDefault(false)
+
     /** KDE closed one (dismissed, expired, or closed by us): forget it, so its id is never reused for us. */
     @Synchronized fun closed(kdeId: Long) { if (entries.removeAll { it.kde == kdeId }) save() }
 

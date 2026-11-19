@@ -22,11 +22,13 @@ class LaptopPresenceTest {
     private val t0 = Instant.parse("2026-11-19T07:00:00Z")
     private val min = 60_000L
 
-    private class Rig(scope: TestScope, var locked: Boolean = false, var active: Boolean = true, val slow: CompletableDeferred<Unit>? = null) {
+    private class Rig(scope: TestScope, var locked: Boolean = false, var active: Boolean = true, val slow: CompletableDeferred<Unit>? = null, var reaches: Boolean = true) {
         val writes = mutableListOf<Instant>()
+        val log = mutableListOf<String>()
         val p = LaptopPresence(
             scope.backgroundScope,
-            write = { at -> slow?.await(); writes += at },
+            write = { at -> slow?.await(); if (reaches) { writes += at; log += "write" }; reaches },
+            flush = { log += "flush" },
             now = { Instant.parse("2026-11-19T07:00:00Z").plusMillis(scope.currentTime) },
             locked = { locked },
             active = { active },
@@ -80,7 +82,7 @@ class LaptopPresenceTest {
     fun `sleep and quit write now`() = runTest {
         val r = Rig(this)
         advanceTimeBy(30_001); runCurrent()
-        r.p.sleeping(); runCurrent()
+        r.p.goingToSleep()
         assertEquals(t0.plusMillis(30_001), r.writes.last())
         r.p.woke(); advanceTimeBy(1); runCurrent()
         val back = r.writes.size
@@ -97,5 +99,55 @@ class LaptopPresenceTest {
         assertEquals(t0, nextActiveUntil(false, t0, t0.plusSeconds(200)), "stopped: now")
         assertNull(nextActiveUntil(false, t0, t0.minusSeconds(10)), "already over")
         assertNull(nextActiveUntil(false, t0, null), "never said anything")
+    }
+
+    @Test
+    fun `going to sleep writes now and waits for the upload before the laptop may sleep`() = runTest {
+        val r = Rig(this)
+        advanceTimeBy(30_001); runCurrent()
+        r.log.clear()
+        r.p.goingToSleep()
+        assertEquals(listOf("write", "flush"), r.log, "now, then the upload, before it returns (final review I1)")
+    }
+
+    @Test
+    fun `quitting writes now and waits for the upload`() = runTest {
+        val r = Rig(this)
+        advanceTimeBy(30_001); runCurrent()
+        r.log.clear()
+        r.p.stop()
+        assertEquals(listOf("write", "flush"), r.log)
+    }
+
+    @Test
+    fun `a write that didn't reach the database is tried again`() = runTest {
+        val r = Rig(this, reaches = false) // offline or signed out (final review I1, I3)
+        advanceTimeBy(30_001); runCurrent()
+        assertTrue(r.writes.isEmpty())
+        r.reaches = true
+        advanceTimeBy(30_000); runCurrent()
+        assertEquals(1, r.writes.size, "not counted as written, so the next tick writes")
+    }
+
+    @Test
+    fun `do not disturb on the laptop hands the pings to the phone`() {
+        assertTrue(app.loopdo.desktop.presence.countsAsInUse(pingsOn = true, signedIn = true, blocked = false, doNotDisturb = false))
+        kotlin.test.assertFalse(app.loopdo.desktop.presence.countsAsInUse(pingsOn = true, signedIn = true, blocked = false, doNotDisturb = true), "final review I2")
+        kotlin.test.assertFalse(app.loopdo.desktop.presence.countsAsInUse(pingsOn = false, signedIn = true, blocked = false, doNotDisturb = false))
+        kotlin.test.assertFalse(app.loopdo.desktop.presence.countsAsInUse(pingsOn = true, signedIn = false, blocked = false, doNotDisturb = false))
+        kotlin.test.assertFalse(app.loopdo.desktop.presence.countsAsInUse(pingsOn = true, signedIn = true, blocked = true, doNotDisturb = false))
+    }
+
+    @Test
+    fun `the sleep lock is held while awake and let go once now is out`() {
+        val started = mutableListOf<List<String>>()
+        var alive = 0
+        val inh = app.loopdo.desktop.presence.SleepInhibitor(start = { cmd -> started += cmd; alive++; { alive-- } })
+        inh.take()
+        assertEquals(listOf("systemd-inhibit", "--what=sleep", "--mode=delay", "--who=loopdo_"), started.single().take(4))
+        assertEquals(1, alive)
+        inh.take(); assertEquals(1, alive, "one at a time")
+        inh.release(); assertEquals(0, alive)
+        inh.release(); assertEquals(0, alive)
     }
 }

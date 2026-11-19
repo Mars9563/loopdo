@@ -90,18 +90,35 @@ class DesktopPings(
             ?: java.util.UUID.randomUUID().also { kv.putString("device_id", it.toString()) }
         val actions = app.loopdo.client.presence.PresenceActions(g.sync.db, { (g.auth.session.value as? AuthState.SignedIn)?.userId }, device)
         val screen = runCatching { conn.getRemoteObject("org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", app.loopdo.desktop.presence.ScreenSaver::class.java) }.getOrNull()
+        val connected = { g.sync.db.currentStatus.connected }
         app.loopdo.desktop.presence.LaptopPresence(
             g.scope,
-            write = { at -> actions.setActiveUntil(at) },
+            // Only while connected: offline it can't reach the phone anyway, and queued presence would pile up as
+            // "changes waiting" and block an account switch (final review I3). Not written = tried again next tick.
+            write = { at -> connected() && actions.setActiveUntil(at) },
+            // The "now" on sleep and quit has to leave the laptop: wait (≤ 3 s) for the upload queue (final review I1).
+            flush = {
+                kotlinx.coroutines.withTimeoutOrNull(3_000) {
+                    while (connected() && g.sync.db.get("SELECT count(*) FROM ps_crud") { it.getLong(0)!! } > 0) kotlinx.coroutines.delay(100)
+                }
+            },
             now = { g.trustedClock.now().instant },
             // No screensaver to ask: treat as locked, so the phone keeps ringing (never silent by mistake).
             locked = { screen?.GetActive() ?: true },
-            active = { enabled && g.auth.session.value is AuthState.SignedIn && g.sync.blocked.value == null },
+            active = {
+                app.loopdo.desktop.presence.countsAsInUse(
+                    pingsOn = enabled, signedIn = g.auth.session.value is AuthState.SignedIn,
+                    blocked = g.sync.blocked.value != null, doNotDisturb = notifier.inhibited(),
+                )
+            },
         )
     }
 
-    /** Quitting: the phone rings again from now (before the database closes). */
-    suspend fun stopPresence() { presence?.stop() }
+    /** Holds the laptop's sleep for a moment, so "now" can upload first (released on PrepareForSleep, taken on wake). */
+    private val sleepLock = presence?.let { app.loopdo.desktop.presence.SleepInhibitor().also { it.take() } }
+
+    /** Quitting: the phone rings again from now, uploaded before the database closes; the sleep lock goes too. */
+    suspend fun stopPresence() { presence?.stop(); sleepLock?.release() }
 
     /** Repeating tasks' new copies first (like the phone's redraw), then the reminders again. Never throws. */
     suspend fun refresh() {
@@ -145,7 +162,8 @@ class DesktopPings(
         runCatching {
             val system = DBusConnectionBuilder.forSystemBus().withShared(false).build()
             system.addSigHandler(Login1Manager.PrepareForSleep::class.java) { s ->
-                if (s.start) presence?.sleeping() else { presence?.woke(); on(DbusEvent.Resumed) }
+                if (s.start) g.scope.launch { presence?.goingToSleep(); sleepLock?.release() }
+                else { sleepLock?.take(); presence?.woke(); on(DbusEvent.Resumed) }
             }
         }.onFailure { logW("loopdo_pings", "can't follow suspend (the 15 s timer check still catches up)", it) }
     }

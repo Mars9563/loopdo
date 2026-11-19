@@ -80,7 +80,7 @@ fun main(args: Array<String>) {
         val kdeTray = remember { app.loopdo.desktop.shell.KdeTray.start(app.loopdo.desktop.shell.KdeTray.loadIcon(), "loopdo_", onActivate = { shown.value = true }) }
         val quit = {
             // D7: the phone rings again from now; then the database closes, and only then is the lock released (D2 review).
-            pings?.let { p -> kotlinx.coroutines.runBlocking { runCatching { kotlinx.coroutines.withTimeout(3_000) { p.stopPresence() } } } }
+            pings?.let { p -> kotlinx.coroutines.runBlocking { runCatching { kotlinx.coroutines.withTimeout(5_000) { p.stopPresence() } } } }
             graph?.sync?.db?.let { db -> kotlinx.coroutines.runBlocking { runCatching { db.close() } } }
             kdeTray?.close()
             single.close(); exitApplication()
