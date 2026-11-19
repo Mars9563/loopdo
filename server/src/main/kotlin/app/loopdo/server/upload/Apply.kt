@@ -94,6 +94,7 @@ class Applier(
                 "subtasks" -> subtaskRules(op.op, id, data)
                 "journal_lines" -> lineRules(i, op.op, id, data, op.old)
                 "weekly_focus" -> focusRules(i, op.op, id, data)
+                "device_presence" -> presenceRules(i, op.op, id, data)
                 else -> Prepared(data)
             }
             if (p.skip) return
@@ -363,6 +364,22 @@ class Applier(
      * the day the upload's time evidence proves, verified or not, as ticks), at most [MAX_FOCUS] live per week.
      * What a promise is about (week, kind, item, deadline) never changes; its evidence is checked, not stored.
      */
+    /**
+     * D7: a laptop's presence. A PUT names its device and the id must be that device's (so a device only ever writes
+     * its own row); a PATCH only moves active_until. Never more than 10 min after the server's now: a laptop whose
+     * clock runs fast can't keep the phone silent for long (the phone rings again once it passes).
+     */
+    private fun presenceRules(i: Int, op: String, id: UUID, data: JsonObject): Prepared {
+        if (op == "PUT") {
+            val device = data.text("device_id")?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: throw Rejected("BAD_OP", i)
+            if (id != app.loopdo.shared.remind.presenceId(user, device)) throw Rejected("BAD_OP", i)
+        } else if ("device_id" in data) throw Rejected("BAD_OP", i)
+        val sent = data.text("active_until")?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() }
+            ?: if (op == "PUT") throw Rejected("BAD_OP", i) else return Prepared(data)
+        val clamped = minOf(sent, now.plus(java.time.Duration.ofMinutes(10)))
+        return Prepared(JsonObject(data + ("active_until" to JsonPrimitive(clamped.toString()))))
+    }
+
     private fun focusRules(i: Int, op: String, id: UUID, data: JsonObject): Prepared {
         val immutable = listOf("week_start", "kind", "item_id", "deadline")
         val stored = queryOne("select week_start::text, kind, item_id::text, deadline::text, (deleted_at is null) from public.weekly_focus where id = ?::uuid", id.toString()) {

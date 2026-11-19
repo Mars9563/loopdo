@@ -45,6 +45,8 @@ val TABLES: Map<String, TableSpec> = listOf(
     TableSpec("weekly_focus", setOf("PUT", "PATCH"), mapOf(
         "week_start" to Col.DATE, "kind" to Col.TEXT, "item_id" to Col.UUID, "title" to Col.TEXT, "goal" to Col.INT,
         "deadline" to Col.DATE, "sort_order" to Col.INT, "deleted_at" to Col.TIMESTAMPTZ, "evidence" to Col.JSONB)),
+    // M10 D7: a laptop's "in use" signal (id = uuidV5(user, "presence:<device_id>"), active_until clamped by the server).
+    TableSpec("device_presence", setOf("PUT", "PATCH"), mapOf("device_id" to Col.UUID, "active_until" to Col.TIMESTAMPTZ)),
     // M6.5: a journal line is its own row (deleted = deleted_at set, never removed).
     TableSpec("journal_lines", setOf("PUT", "PATCH"), mapOf(
         "entry_id" to Col.UUID, "stamped_at" to Col.TIMESTAMPTZ, "text" to Col.TEXT, "edited_at" to Col.TIMESTAMPTZ,

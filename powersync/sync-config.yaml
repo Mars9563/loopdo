@@ -41,3 +41,6 @@ streams:
   weekly_focus:
     auto_subscribe: true
     query: SELECT * FROM weekly_focus WHERE user_id = auth.user_id()
+  device_presence:
+    auto_subscribe: true
+    query: SELECT * FROM device_presence WHERE user_id = auth.user_id()
