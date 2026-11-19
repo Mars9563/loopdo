@@ -68,10 +68,10 @@ class ReminderScheduler(
     private val elapsedNow: () -> Long,
     /** True only when nobody is signed in (or another account is blocked); false while the session is still loading. */
     private val signedOut: suspend () -> Boolean = { true },
-    /** A button's habit/task change, through the widget's commands (same rules, trusted clock, time proof). */
-    private val tap: suspend (WidgetTap) -> TapResult = { TapResult.FAILED },
     /** D7, the phone: a laptop is in use right now, so pings go to the quiet channel. The laptop never asks (false). */
     private val laptopInUse: suspend () -> Boolean = { false },
+    /** A button's habit/task change, through the widget's commands (same rules, trusted clock, time proof). */
+    private val tap: suspend (WidgetTap) -> TapResult = { TapResult.FAILED },
 ) {
     private val lock = Mutex()
 
