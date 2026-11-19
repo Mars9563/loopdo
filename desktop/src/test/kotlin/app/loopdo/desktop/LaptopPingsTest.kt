@@ -28,7 +28,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** A notification server that records what it was asked; [owner] is its bus name (a new one = Plasma restarted). */
-class FakeNotifyApi(var owner: String? = ":1.42") : NotifyApi {
+class FakeNotifyApi(var owner: String? = ":1.42", var dnd: Boolean = false) : NotifyApi {
     data class Call(val replaces: Long, val summary: String, val body: String, val actions: List<String>, val hints: Map<String, Variant<*>>, val timeoutMs: Int)
     val posted = mutableListOf<Call>()
     val closed = mutableListOf<Long>()
@@ -39,6 +39,7 @@ class FakeNotifyApi(var owner: String? = ":1.42") : NotifyApi {
     }
     override fun close(id: Long) { closed += id }
     override fun server() = owner
+    override fun inhibited() = dnd
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -92,13 +93,11 @@ class LaptopPingsTest {
         assertEquals(listOf("default", "", "${jr.key}|write|1", "[write]", "inline-reply", "reply"), c.actions)
         assertEquals("a line for today…", c.hints["x-kde-reply-placeholder-text"]?.value)
         assertEquals("loopdo", c.hints["desktop-entry"]?.value)
-        assertNull(c.hints["suppress-sound"], "a new ping rings")
-        assertEquals("message-new-instant", c.hints["sound-name"]?.value, "with the theme's sound when loopdo_ has none")
+        assertEquals(true, c.hints["suppress-sound"]?.value, "KDE adds no sound of its own (loopdo_ plays it)")
         assertEquals(-1, c.timeoutMs, "KDE's own popup time (owner)")
         n.post(7, journalShown.copy(silentUpdate = true), jr)
         assertEquals(41L, api.posted[1].replaces, "replaces KDE's notification 41")
         assertEquals(true, api.posted[1].hints["suppress-sound"]?.value)
-        assertNull(api.posted[1].hints["sound-name"], "an update is quiet")
         assertEquals(jr.key, n.keyFor(41))
         n.cancel(7)
         assertEquals(listOf(41L), api.closed)
@@ -106,12 +105,20 @@ class LaptopPingsTest {
     }
 
     @Test
-    fun `loopdo_'s own sound file is named when it exists`() {
+    fun `a new ping plays loopdo_'s sound, an update, a night warning or do-not-disturb don't`() {
         val api = FakeNotifyApi()
         val f = File(Files.createTempDirectory("loopdo-snd").toFile(), "ping.ogg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
-        DbusNotifier(api, kv(), sound = { f }).post(1, Shown(CH_TASKS, "pay rent · now", "", emptyList()), r)
-        assertEquals(f.absolutePath, api.posted.single().hints["sound-file"]?.value)
-        assertNull(api.posted.single().hints["sound-name"])
+        val played = mutableListOf<File>()
+        val n = DbusNotifier(api, kv(), sound = { f }, play = { played += it })
+        val task = Shown(CH_TASKS, "pay rent · now", "", emptyList())
+        n.post(1, task, r)
+        assertEquals(listOf(f), played, "a new ping rings")
+        n.post(1, task.copy(silentUpdate = true), r)
+        n.post(2, Shown(CH_DAY_END_NIGHT, "the day ends in 1 hour", "", emptyList()), r.copy(key = "day_end:-:$day:at", kind = ReminderKind.DAY_END))
+        api.dnd = true
+        n.post(3, task, r.copy(key = "task:t9:$day:at", kind = ReminderKind.TASK))
+        assertEquals(1, played.size, "update, night and do-not-disturb are quiet")
+        assertEquals(true, api.posted.last().hints["suppress-sound"]?.value)
     }
 
     @Test

@@ -95,6 +95,8 @@ interface NotifyApi {
     fun close(id: Long)
     /** Who serves notifications now (its unique bus name; a new one after Plasma restarts), null if nobody. */
     fun server(): String?
+    /** Do Not Disturb is on (KDE's "Inhibited"): popups wait in the history and loopdo_ stays quiet. */
+    fun inhibited(): Boolean = false
 }
 
 /** [NotifyApi] on a real session bus connection. */
@@ -105,6 +107,8 @@ class DbusNotifyApi(private val conn: DBusConnection) : NotifyApi {
         remote.Notify("loopdo_", UInt32(replaces), "loopdo", summary, body, actions, hints, timeoutMs).toLong()
     override fun close(id: Long) = remote.CloseNotification(UInt32(id))
     override fun server(): String? = runCatching { dbus.GetNameOwner(DEST) }.getOrNull()
+    private val props by lazy { conn.getRemoteObject(DEST, "/org/freedesktop/Notifications", org.freedesktop.dbus.interfaces.Properties::class.java) }
+    override fun inhibited(): Boolean = runCatching { props.Get<Any?>(DEST, "Inhibited") == true }.getOrDefault(false)
     companion object { const val DEST = "org.freedesktop.Notifications" }
 }
 
@@ -113,7 +117,7 @@ fun escapeMarkup(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").repla
 
 /**
  * KDE notifications: the reminder's buttons as actions ("key|action|step"), "default" (a click on it opens the app),
- * an inline reply field on the journal nudge, loopdo_'s sound on a new ping, quiet re-posts and night warnings, and
+ * an inline reply field on the journal nudge, loopdo_'s own sound on a new ping (played here), quiet re-posts and night warnings, and
  * KDE's own popup time (then the history). Which KDE id is
  * which reminder is kept in [kv] for the notification server that gave it, so a notification from before a restart
  * of loopdo_ can still be closed, replaced and replied to; ids from another server (Plasma restarted, a new login)
@@ -121,8 +125,10 @@ fun escapeMarkup(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").repla
  */
 class DbusNotifier(
     private val api: NotifyApi, private val kv: FileKeyValue, private val bootId: () -> String = ::currentBootId,
-    /** loopdo_'s own ping sound (owner, 2026-11-19), or null: then the sound theme's "message-new-instant". */
+    /** loopdo_'s own ping sound (owner, 2026-11-19), or null (no sound). */
     private val sound: () -> java.io.File? = { null },
+    /** Plays it: KDE plays no sound for a plain notification here, not even "sound-name" (owner's test, 2026-11-19). */
+    private val play: (java.io.File) -> Unit = ::playSound,
 ) : Poster {
     private data class Entry(val ours: Int, val kde: Long, val key: String)
     private val entries = mutableListOf<Entry>()
@@ -158,13 +164,8 @@ class DbusNotifier(
         }
         val hints = buildMap<String, Variant<*>> {
             put("desktop-entry", Variant("loopdo"))
-            // A new ping rings (KDE plays nothing for an app that names no sound); updates and night warnings don't.
-            if (shown.silentUpdate || shown.channel == CH_DAY_END_NIGHT) {
-                put("suppress-sound", Variant(true))
-            } else {
-                val f = sound()?.takeIf { it.isFile }
-                if (f != null) put("sound-file", Variant(f.absolutePath)) else put("sound-name", Variant("message-new-instant"))
-            }
+            // loopdo_ plays its own sound (below); KDE adds none, so a later Plasma never doubles it.
+            put("suppress-sound", Variant(true))
             if (r.kind == ReminderKind.JOURNAL) put("x-kde-reply-placeholder-text", Variant("a line for today…"))
         }
         val replaces = entries.firstOrNull { it.ours == id }?.kde ?: 0L
@@ -174,6 +175,9 @@ class DbusNotifier(
         entries.removeAll { it.ours == id || it.kde == kdeId }
         entries += Entry(id, kdeId, r.key)
         save()
+        // A new ping rings; updates in place, night warnings and Do Not Disturb stay quiet (the phone's rules).
+        if (!shown.silentUpdate && shown.channel != CH_DAY_END_NIGHT && !runCatching { api.inhibited() }.getOrDefault(false))
+            sound()?.takeIf { it.isFile }?.let { f -> runCatching { play(f) }.onFailure { logW("loopdo_pings", "no sound", it) } }
         return true
     }
 
@@ -219,3 +223,18 @@ fun pingSound(dataDir: java.io.File): java.io.File? = runCatching {
     if (!f.isFile || !f.readBytes().contentEquals(bytes)) { f.parentFile.mkdirs(); f.writeBytes(bytes) }
     f
 }.getOrNull()
+
+/** Plays [f] once in the background (PipeWire's pw-play, else PulseAudio's paplay); never blocks a ping. */
+fun playSound(f: java.io.File) {
+    Thread {
+        for (player in listOf("pw-play", "paplay")) {
+            val ok = runCatching {
+                val p = ProcessBuilder(player, f.absolutePath).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
+                if (!p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) p.destroyForcibly()
+                p.exitValue() == 0
+            }.getOrDefault(false)
+            if (ok) return@Thread
+        }
+        logW("loopdo_pings", "couldn't play the ping sound (no pw-play or paplay)")
+    }.apply { isDaemon = true; name = "loopdo-ping-sound" }.start()
+}
