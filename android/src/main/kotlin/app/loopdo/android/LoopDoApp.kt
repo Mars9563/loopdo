@@ -201,6 +201,10 @@ class AppGraph(context: android.content.Context) {
             trustedNow = { trustedClock.now().instant },
             elapsedNow = { android.os.SystemClock.elapsedRealtime() },
             signedOut = { sync.blocked.value != null || auth.session.value is app.loopdo.client.auth.AuthState.SignedOut },
+            // D7: a laptop in use takes the ring; this phone shows the ping quietly (its local copy, never waits for sync).
+            laptopInUse = {
+                app.loopdo.shared.remind.laptopInUse(app.loopdo.client.notify.ReminderData(sync.db) { weekPingState(it) }.laptopActiveUntil(), trustedClock.now().instant)
+            },
         ) { widgetCommands.handle(it) }
     }
 

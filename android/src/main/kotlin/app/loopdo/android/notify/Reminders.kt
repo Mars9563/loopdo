@@ -13,6 +13,7 @@ import app.loopdo.client.notify.CH_DAY_END
 import app.loopdo.client.notify.CH_DAY_END_NIGHT
 import app.loopdo.client.notify.CH_HABITS
 import app.loopdo.client.notify.CH_JOURNAL
+import app.loopdo.client.notify.CH_LAPTOP
 import app.loopdo.client.notify.CH_STATS
 import app.loopdo.client.notify.CH_TASKS
 import app.loopdo.client.notify.DAY_ENDED
@@ -77,7 +78,7 @@ class ReminderStore(private val prefs: SharedPreferences) : ReminderStorage {
     }
 }
 
-/** The five channels (spec §5.2). Android fixes a channel's sound once created, so the night one is separate. */
+/** The channels (spec §5.2 + D7). Android fixes a channel's sound once created, so the night and laptop ones are separate. */
 fun ensureChannels(context: Context) {
     val nm = context.getSystemService(NotificationManager::class.java)
     listOf(CH_HABITS to "habits", CH_TASKS to "tasks", CH_JOURNAL to "journal", CH_DAY_END to "day end", CH_STATS to "weekly review").forEach { (id, name) ->
@@ -85,6 +86,13 @@ fun ensureChannels(context: Context) {
     }
     nm.createNotificationChannel(
         NotificationChannel(CH_DAY_END_NIGHT, "day end · night (silent)", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            setSound(null, null)
+            enableVibration(false)
+        },
+    )
+    // D7: while the laptop is in use it rings; here the ping waits in the shade with its buttons (no sound, no pop-up).
+    nm.createNotificationChannel(
+        NotificationChannel(CH_LAPTOP, "while the laptop is in use", NotificationManager.IMPORTANCE_LOW).apply {
             setSound(null, null)
             enableVibration(false)
         },
