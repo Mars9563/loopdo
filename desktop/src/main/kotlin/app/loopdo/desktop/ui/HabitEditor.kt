@@ -111,7 +111,11 @@ fun HabitEditor(
         val n = { s: String, what: String -> s.trim().toIntOrNull() ?: throw IllegalArgumentException("$what needs a number.") }
         return checkDraft(HabitDraft(title, kind, if (kind == HabitKind.COUNT) n(target, "the target") else 1, unit.takeIf { kind == HabitKind.COUNT }, if (kind == HabitKind.COUNT) n(step, "the step") else 1, rec, if (rec == Recurrence.WEEKDAYS) days else emptySet(), time))
     }
-    val save = { runCatching { draft() }.onSuccess { onSave(it) { e -> error = e } }.onFailure { error = it.message } }
+    // One save at a time: Enter again (or held) while it runs created the habit twice (ultrareview; the phone's `saving`).
+    var saving by remember { mutableStateOf(false) }
+    val save = {
+        if (!saving) runCatching { draft() }.onSuccess { saving = true; onSave(it) { e -> saving = false; error = e } }.onFailure { error = it.message }
+    }
     Sheet(if (start == null) "~/habits/new" else "~/habits/${d0.title}", onClose) {
         val nameFocus = remember { androidx.compose.ui.focus.FocusRequester() }
         androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { nameFocus.requestFocus() } }

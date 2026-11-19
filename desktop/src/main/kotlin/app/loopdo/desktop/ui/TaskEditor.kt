@@ -99,10 +99,17 @@ fun TaskEditor(
         }
         return TaskDraft(title.trim(), notes.trim().takeIf { it.isNotEmpty() }, due, tm, listId?.let(UUID::fromString), r)
     }
+    // One write at a time per action: Enter again (or held) while it ran made a second task/list/step (ultrareview).
+    var saving by remember { mutableStateOf(false) }
+    var listBusy by remember { mutableStateOf(false) }
+    var stepBusy by remember { mutableStateOf(false) }
     fun save(s: SaveScope) {
+        if (saving) return
         val d = runCatching { draft() }.getOrElse { error = it.message; return }
-        if (detail == null) ui.saveNew(d, onClose) { error = it }
-        else ui.save(detail.id, detail.templateId ?: detail.id.takeIf { detail.isTemplate }, d, s, onClose) { error = it }
+        saving = true
+        val failed = { e: String -> saving = false; error = e }
+        if (detail == null) ui.saveNew(d, onClose, failed)
+        else ui.save(detail.id, detail.templateId ?: detail.id.takeIf { detail.isTemplate }, d, s, onClose, failed)
     }
     Sheet(if (detail == null) "~/tasks/new" else "~/tasks/${detail.title}", onClose) {
         BasicText("title", style = t.label, modifier = Modifier.padding(bottom = 4.dp))
@@ -148,14 +155,18 @@ fun TaskEditor(
             if (newList == null) Choice("+ list", false) { newList = "" }
         }
         newList?.let { nl ->
-            Row(Modifier.padding(top = 6.dp)) { TermField(nl, { newList = it }, onEnter = { if (nl.isNotBlank()) ui.newList(nl.trim(), { newList = null }) { error = it } }) }
+            Row(Modifier.padding(top = 6.dp)) { TermField(nl, { newList = it }, onEnter = {
+                if (nl.isNotBlank() && !listBusy) { listBusy = true; ui.newList(nl.trim(), { listBusy = false; newList = null }) { listBusy = false; error = it } }
+            }) }
             BasicText("enter makes the list; then pick it", style = t.label)
         }
         if (detail != null) {
             BasicText("steps", style = t.label, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
             steps.forEach { s -> ItemRow(if (s.done) "[x]" else "[ ]", androidx.compose.ui.text.AnnotatedString(s.title), s.done, onBox = { ui.toggleStep(s.id) }) {
                 BasicText("[x]", style = t.label, modifier = Modifier.clickable { ui.deleteStep(s.id) }) } }
-            TermField(step, { step = it }, onEnter = { if (step.isNotBlank()) ui.addStep(detail.id, step.trim(), { step = "" }) { error = it } })
+            TermField(step, { step = it }, onEnter = {
+                if (step.isNotBlank() && !stepBusy) { stepBusy = true; ui.addStep(detail.id, step.trim(), { stepBusy = false; step = "" }) { stepBusy = false; error = it } }
+            })
             BasicText("enter adds a step", style = t.label)
         }
         BasicText("note", style = t.label, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
