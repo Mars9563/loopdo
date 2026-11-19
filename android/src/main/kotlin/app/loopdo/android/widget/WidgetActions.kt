@@ -5,15 +5,11 @@ import app.loopdo.client.notify.TapResult
 import app.loopdo.client.notify.WidgetTap
 
 import android.content.Context
-import android.util.Log
 import android.content.BroadcastReceiver
 import android.content.Intent
 import kotlinx.coroutines.launch
 import app.loopdo.android.LoopDoApp
-import app.loopdo.client.today.StaleDayException
-import app.loopdo.client.today.TodayActions
 import java.time.LocalDate
-import java.util.UUID
 
 /** Android identifies a widget PendingIntent by its data, so each item gets its own (final review C1). */
 fun WidgetTap.toUri(): String = "$SCHEME://tap/${kind.path}/$id?date=$date&done=$done" + if (step != 1) "&step=$step" else ""

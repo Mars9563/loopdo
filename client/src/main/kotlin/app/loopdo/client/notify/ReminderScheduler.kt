@@ -1,6 +1,5 @@
 package app.loopdo.client.notify
 
-import app.loopdo.client.log.logW
 import app.loopdo.shared.day.settingsAt
 import app.loopdo.shared.remind.Ping
 import app.loopdo.shared.remind.Reminder
@@ -113,6 +112,15 @@ class ReminderScheduler(
         store.pruneShown(day.minusDays(1))
     }
 
+    /** Everything off ("pings on this laptop: off"): no alarms, no notifications, nothing kept; under the lock, so
+     *  a replan already running can't put them back (final review M1). */
+    suspend fun clearAll() = lock.withLock {
+        store.scheduled().forEach { alarms.cancel(it.key) }
+        alarms.cancel(REPLAN)
+        poster.cancelAll()
+        store.clear()
+    }
+
     /** [p] is another ping of a snoozed item, due before its snooze rings. */
     private fun silenced(p: Reminder, snoozes: List<Reminder>) =
         p.ping != Ping.SNOOZE && snoozes.any { it.ping == Ping.SNOOZE && notificationId(it) == notificationId(p) && p.fireAt < it.fireAt }
@@ -177,4 +185,3 @@ fun parseKey(key: String): Reminder? = runCatching {
     Reminder(key, ReminderKind.valueOf(kind.uppercase()), id.takeIf { it != "-" }, LocalDate.parse(date), Instant.EPOCH, Ping.valueOf(ping.uppercase()))
 }.getOrNull()
 
-/** The five channels (spec §5.2). Android fixes a channel's sound once created, so the night one is separate. */

@@ -3,18 +3,15 @@ package app.loopdo.desktop
 import app.loopdo.client.auth.AuthState
 import app.loopdo.desktop.notify.DbusEvent
 import app.loopdo.desktop.notify.DesktopPings
-import app.loopdo.desktop.notify.runCommand
 import app.loopdo.shared.day.settingsAt
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import java.io.File
 import java.nio.file.Files
 import java.time.temporal.ChronoUnit
 import java.util.UUID
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -29,12 +26,8 @@ class PingsLiveTest {
         withTimeout(20_000) { g.auth.session.first { it is AuthState.SignedIn } }
         withTimeout(60_000) { g.sync.db.currentStatus.asFlow().first { it.hasSynced == true } }
         withTimeout(30_000) { while (g.anchorStore.current() == null) delay(300) }
-        // With a desktop session the notification is real (KDE shows it and gives its id); else a fake gdbus.
-        val realKde = System.getenv("DBUS_SESSION_BUS_ADDRESS") != null && File("/usr/bin/gdbus").exists()
-        val calls = CopyOnWriteArrayList<List<String>>()
-        val outs = CopyOnWriteArrayList<String>()
-        var next = 100
-        val pings = DesktopPings(g, {}, {}, run = { a -> calls += a; (if (realKde) runCommand(a) else "(uint32 ${next++},)").also { outs += it } }, watchDbus = false)
+        val api = RecordingNotifyApi() // real KDE notifications with a desktop session
+        val pings = DesktopPings(g, {}, {}, api = api)
         val now = g.trustedClock.now().instant
         val zone = settingsAt(g.todayData.versionsNow(), now).zone
         val at = now.atZone(zone).plusMinutes(2).truncatedTo(ChronoUnit.MINUTES)
@@ -42,19 +35,17 @@ class PingsLiveTest {
         val task = g.actions.addTask(title, at.toLocalDate(), at.toLocalTime(), null)
         pings.start()
         val notify = withTimeout(240_000) {
-            while (calls.none { c -> c.any { it.contains(title) } }) delay(1_000)
-            calls.first { c -> c.any { it.contains(title) } }
+            while (api.about(title).isEmpty()) delay(1_000)
+            api.about(title).first()
         }
-        val args = notify.drop(notify.indexOf("--method") + 2)
-        val doneAction = Regex("""'([^']*\|done\|\d+)'""").find(args[5])?.groupValues?.get(1)
-        assertTrue(doneAction != null, "a [done] button: ${args[5]}")
-        val at0 = calls.indexOf(notify)
-        withTimeout(15_000) { while (outs.size <= at0) delay(100) } // its output lands just after the call
-        val kdeId = Regex("""uint32 (\d+)""").find(outs[at0])!!.groupValues[1].toInt()
-        if (realKde) assertEquals(pings.notifier.keyFor(kdeId)?.substringBefore(":"), "task", "KDE's id maps back to the reminder")
+        val doneAction = notify.actions.firstOrNull { it.endsWith("|done|1") }
+        assertTrue(doneAction != null, "a [done] button: ${notify.actions}")
+        assertEquals("default", notify.actions.first(), "a click on it opens the app")
+        val kdeId = notify.id
+        assertEquals("task", pings.notifier.keyFor(kdeId)?.substringBefore(":"), "KDE's id maps back to the reminder")
         withTimeout(30_000) { pings.handle(DbusEvent.Action(kdeId, doneAction!!)) } // it once deadlocked on the scheduler's lock
         withTimeout(20_000) { while (g.sync.db.get("SELECT coalesce(completed_on, '') FROM tasks WHERE id = ?", listOf(task.toString())) { it.getString(0)!! } == "") delay(300) }
-        assertTrue(calls.any { it.contains("org.freedesktop.Notifications.CloseNotification") }, "the done reminder goes away")
+        withTimeout(10_000) { while (kdeId !in api.closed) delay(200) } // the done reminder goes away
         withTimeout(60_000) { while (g.sync.db.get("SELECT count(*) FROM ps_crud") { it.getLong(0)!! } > 0) delay(400) }
         assertEquals(1L, g.sync.db.get("SELECT count(*) FROM tasks WHERE id = ? AND completed_on IS NOT NULL", listOf(task.toString())) { it.getLong(0)!! })
         // Review focus 2: [done] again on the stale notification (already done) changes nothing.
@@ -70,8 +61,8 @@ class PingsLiveTest {
         assertTrue(g.reminderKeys.getString("scheduled") != null, "the journal/day-end pings were planned")
         pings.enabled = false
         withTimeout(10_000) { while (g.reminderKeys.getString("scheduled") != null) delay(200) }
-        assertEquals(false, DesktopPings(g, {}, {}, run = { "(uint32 1,)" }, watchDbus = false).enabled, "the switch is kept")
+        assertEquals(false, DesktopPings(g, {}, {}, api = FakeNotifyApi()).enabled, "the switch is kept")
         g.actions.run { runCatching { g.taskActions.deleteTask(task) } }
-        g.sync.db.disconnect(); g.scope.cancel()
+        api.close(); g.sync.db.disconnect(); g.scope.cancel()
     }
 }

@@ -48,10 +48,12 @@ fun main(args: Array<String>) {
         single.send(cmd) // the running loopdo_ shows itself (or quick add, from D3)
         return
     }
+    val zoom = app.loopdo.desktop.ui.UiZoom.at(dir)
     application {
         val graph = remember { if (demo) null else DesktopGraph(dir) }
+        val z = zoom.value
         // D6: the laptop rings the phone's reminders; a reminder's [write] opens quick add, [review] shows the app.
-        val pings = remember { graph?.let { app.loopdo.desktop.notify.DesktopPings(it, onWrite = { quick.value = true }, onReview = { shown.value = true }).also { p -> p.start() } } }
+        val pings = remember { graph?.let { app.loopdo.desktop.notify.DesktopPings(it, onWrite = { quick.value = true }, onOpen = { shown.value = true }).also { p -> p.start() } } }
         var pingsOn by remember { mutableStateOf(pings?.enabled ?: false) }
         // Quick add: its own small window over whatever is open; the main window stays as it is (hidden or not).
         if (quick.value && graph != null) {
@@ -62,14 +64,15 @@ fun main(args: Array<String>) {
             else if (!app.loopdo.desktop.ui.quickAllowed(signedIn, blocked, hasSettings == true)) { shown.value = true; quick.value = false }
             else {
                 val qs = androidx.compose.ui.window.rememberWindowState(
-                    width = 600.dp, height = 150.dp,
+                    width = 600.dp * z, height = 150.dp * z,
                     position = androidx.compose.ui.window.WindowPosition.Aligned(androidx.compose.ui.Alignment.TopCenter),
                 )
-                Window(onCloseRequest = { quick.value = false }, state = qs, title = "loopdo_ quick add", undecorated = true, transparent = true,
+                Window(onCloseRequest = { quick.value = false }, state = qs, title = "loopdo_ quick add", undecorated = true, transparent = true, onPreviewKeyEvent = zoom::handle,
                     alwaysOnTop = true, resizable = false, icon = androidx.compose.ui.res.painterResource("tray.png")) {
                     LaunchedEffect(Unit) { window.toFront(); window.requestFocus() }
                     val vm = remember { graph.popupViewModel() }
-                    LoopDoTheme { app.loopdo.desktop.ui.QuickAdd(graph, vm) { quick.value = false } }
+                    LaunchedEffect(z) { qs.size = androidx.compose.ui.unit.DpSize(600.dp * z, 150.dp * z) }
+                    LoopDoTheme(z) { app.loopdo.desktop.ui.QuickAdd(graph, vm) { quick.value = false } }
                 }
             }
         }
@@ -103,14 +106,21 @@ fun main(args: Array<String>) {
                 }
             },
         )
+        val main = rememberWindowState(width = 1200.dp * z, height = 740.dp * z)
         // Closing the window keeps loopdo_ in the tray (pings and quick add need it running); [quit] really quits.
         Window(
             onCloseRequest = { shown.value = false }, visible = shown.value, title = "loopdo_",
             icon = androidx.compose.ui.res.painterResource("tray.png"),
-            state = rememberWindowState(width = 1200.dp, height = 740.dp),
+            state = main,
+            onPreviewKeyEvent = zoom::handle,
         ) {
-            window.minimumSize = java.awt.Dimension(1000, 640)
-            LoopDoTheme {
+            // The zoom grows the window with its content (the same layout, bigger), and its smallest size with it.
+            var lastZ by remember { mutableStateOf(z) }
+            LaunchedEffect(z) {
+                window.minimumSize = java.awt.Dimension((1000 * z).toInt(), (640 * z).toInt())
+                if (z != lastZ) { main.size = androidx.compose.ui.unit.DpSize(main.size.width * (z / lastZ), main.size.height * (z / lastZ)); lastZ = z }
+            }
+            LoopDoTheme(z) {
                 if (graph == null) DemoApp() else Root(graph) { app.loopdo.desktop.ui.MainApp(graph) }
             }
         }

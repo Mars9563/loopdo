@@ -77,6 +77,7 @@ class ReminderStore(private val prefs: SharedPreferences) : ReminderStorage {
     }
 }
 
+/** The five channels (spec §5.2). Android fixes a channel's sound once created, so the night one is separate. */
 fun ensureChannels(context: Context) {
     val nm = context.getSystemService(NotificationManager::class.java)
     listOf(CH_HABITS to "habits", CH_TASKS to "tasks", CH_JOURNAL to "journal", CH_DAY_END to "day end", CH_STATS to "weekly review").forEach { (id, name) ->

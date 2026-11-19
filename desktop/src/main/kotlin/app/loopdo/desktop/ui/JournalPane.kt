@@ -55,6 +55,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -260,9 +261,10 @@ fun Writer(date: LocalDate, today: LocalDate, now: LocalTime, mood: Int?, ui: Jo
             .dragAndDropTarget(shouldStartDragAndDrop = { it.dragData() is DragData.FilesList }, target = drop)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        Row(Modifier.fillMaxWidth()) {
-            BasicText("write · ${date.format(dayFmt).lowercase(Locale.ENGLISH)}" + if (earlier) " · unsaved from before the day ended" else "", style = t.label.copy(color = if (earlier) Fern.pollen else Fern.lichen))
-            Spacer(Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // In a narrow column the label gives way (one line, …); the faces and [save ↵] never wrap.
+            BasicText("write · ${date.format(dayFmt).lowercase(Locale.ENGLISH)}" + if (earlier) " · unsaved from before the day ended" else "",
+                style = t.label.copy(color = if (earlier) Fern.pollen else Fern.lichen), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             if (!earlier) MOODS.forEachIndexed { i, face ->
                 BasicText(face, style = t.small.copy(color = if (mood == i + 1) Fern.mint else Fern.lichen), modifier = Modifier.padding(start = 6.dp)
                     .then(if (mood == i + 1) Modifier.border(1.dp, Fern.mint, RoundedCornerShape(6.dp)) else Modifier)
@@ -270,17 +272,21 @@ fun Writer(date: LocalDate, today: LocalDate, now: LocalTime, mood: Int?, ui: Jo
             }
         }
         Spacer(Modifier.height(8.dp))
-        Box {
-            if (text.isEmpty()) BasicText(buildAnnotatedString { withStyle(SpanStyle(color = Fern.mint)) { append(if (earlier) "[--:--] " else "[${now.format(hm)}] ") }; append("what's happening?") }, style = t.body.copy(color = Fern.lichen))
-            BasicTextField(text, { text = it; ui.keepDraft(date, it) }, Modifier.fillMaxWidth().typingField().focusRequester(focus).onPreviewKeyEvent {
-                if (it.key == Key.Enter && it.type == KeyEventType.KeyDown && !it.isShiftPressed) { save(); true } else false
-            }, textStyle = t.body, cursorBrush = SolidColor(Fern.mint))
+        // The line's time stays in front of what is typed (it was part of the placeholder and vanished on the first key).
+        Row {
+            BasicText(if (earlier) "[--:--] " else "[${now.format(hm)}] ", style = t.body.copy(color = Fern.mint))
+            Box(Modifier.weight(1f)) {
+                if (text.isEmpty()) BasicText("what's happening?", style = t.body.copy(color = Fern.lichen))
+                BasicTextField(text, { text = it; ui.keepDraft(date, it) }, Modifier.fillMaxWidth().typingField().focusRequester(focus).onPreviewKeyEvent {
+                    if (it.key == Key.Enter && it.type == KeyEventType.KeyDown && !it.isShiftPressed) { save(); true } else false
+                }, textStyle = t.body, cursorBrush = SolidColor(Fern.mint))
+            }
         }
         err?.let { BasicText(it, style = t.small.copy(color = Fern.ember), modifier = Modifier.padding(top = 6.dp)) }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            BasicText("[📷 photo] or drop a file", style = t.small, modifier = Modifier.clickable { pickPhoto()?.let { ui.addPhoto(date, it) } })
-            Spacer(Modifier.weight(1f))
-            BasicText("[save ↵]", style = t.small.copy(color = Fern.mint), modifier = Modifier.clickable { save() })
+            BasicText("[📷 photo] or drop a file", style = t.small, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).clickable { pickPhoto()?.let { ui.addPhoto(date, it) } })
+            BasicText("[save ↵]", style = t.small.copy(color = Fern.mint), softWrap = false, modifier = Modifier.padding(start = 10.dp).clickable { save() })
         }
     }
 }

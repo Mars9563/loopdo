@@ -50,5 +50,13 @@ class LoopDoType(
 
 val LocalType = staticCompositionLocalOf { LoopDoType() }
 
+/** The fern theme; [zoom] scales everything drawn inside (the app's zoom, see UiZoom; 1 in tests and renders). */
 @Composable
-fun LoopDoTheme(content: @Composable () -> Unit) = CompositionLocalProvider(LocalType provides LoopDoType(), content = content)
+fun LoopDoTheme(zoom: Float = 1f, content: @Composable () -> Unit) {
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    CompositionLocalProvider(
+        LocalType provides LoopDoType(),
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density * zoom, d.fontScale),
+        content = content,
+    )
+}

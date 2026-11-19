@@ -3,6 +3,8 @@ package app.loopdo.desktop.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -55,10 +57,12 @@ fun Choice(label: String, on: Boolean, enabled: Boolean = true, onClick: () -> U
 @Composable
 fun Sheet(title: String, onClose: () -> Unit, content: @Composable () -> Unit) {
     val t = LocalType.current
-    Box(Modifier.fillMaxSize().background(Color(0x73050810)).clickable(onClick = onClose, indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() })) {
+    // A click outside closes it, with the mouse only: `clickable` also takes Space/Enter bubbling up from a field
+    // inside as a click, so a typed space closed the sheet (owner, 2026-11-19).
+    Box(Modifier.fillMaxSize().background(Color(0x73050810)).pointerInput(onClose) { detectTapGestures { onClose() } }) {
         Column(
             Modifier.align(Alignment.CenterEnd).width(430.dp).fillMaxHeight().background(Color(0xFC090F18)).dashedLeft()
-                .clickable(enabled = false) {}.onPreviewKeyEvent { if (it.key == Key.Escape && it.type == KeyEventType.KeyDown) { onClose(); true } else false }
+                .pointerInput(Unit) { detectTapGestures { } }.onPreviewKeyEvent { if (it.key == Key.Escape && it.type == KeyEventType.KeyDown) { onClose(); true } else false }
                 .padding(horizontal = 26.dp, vertical = 22.dp).verticalScroll(rememberScrollState()),
         ) {
             Row(Modifier.fillMaxWidth()) {
