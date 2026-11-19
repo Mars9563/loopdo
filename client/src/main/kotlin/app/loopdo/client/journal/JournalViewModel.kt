@@ -69,7 +69,8 @@ class JournalViewModel(
 ) : ViewModel() {
 
     fun draftFor(date: LocalDate): String = drafts?.line(date)?.first.orEmpty()
-    fun keepDraft(date: LocalDate, text: String) { drafts?.keep(date, text, now(), earlierDay = false) }
+    /** An [earlierDay]'s draft (the laptop's writer reopening it) keeps the time it was last edited on its own day. */
+    fun keepDraft(date: LocalDate, text: String, earlierDay: Boolean = false) { drafts?.keep(date, text, now(), earlierDay) }
 
     /** The time log, rebuilt on every change and at the day end (the ticker). */
     val state: StateFlow<JournalModel?> = rows.flatMapLatest { r ->
@@ -110,10 +111,16 @@ class JournalViewModel(
     /** A line save in flight: a double tap on [save ↵] saves once (M6 minor). */
     private var savingLine = false
 
-    fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) {
+    /**
+     * Saves [input] on [date]. An [earlierDay]'s unsaved draft goes onto its own day stamped when it was last edited
+     * there (EPOCH when unknown: stamped just before that day's end), like the pop-up's saveLine; without that time
+     * a draft two or more days old was refused and the laptop's writer stuck on it (ultrareview, 2026-11-19).
+     */
+    fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit, earlierDay: Boolean = false) {
         if (savingLine) return
         savingLine = true
-        run({ savingLine = false; onError(it) }, { savingLine = false; drafts?.clear(date); onSaved() }) { actions.addLines(date, input) }
+        val at = if (earlierDay) drafts?.line(date)?.second ?: Instant.EPOCH else null
+        run({ savingLine = false; onError(it) }, { savingLine = false; drafts?.clear(date); onSaved() }) { actions.addLines(date, input, at) }
     }
     fun editLine(date: LocalDate, lineId: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit) = run(onError, onSaved) { actions.editLine(date, lineId, new) }
     fun deleteLine(date: LocalDate, lineId: String) = run { actions.deleteLine(date, lineId) }

@@ -41,11 +41,13 @@ class D3FixesTest {
         val drafts = mutableMapOf<LocalDate, String>()
         override val draftVersion = MutableStateFlow(0L)
         val saved = mutableListOf<Pair<LocalDate, String>>()
+        val earlierFlags = mutableListOf<Boolean>()
         override fun draftFor(date: LocalDate) = drafts[date].orEmpty()
         override fun draftDates() = drafts.filterValues { it.isNotEmpty() }.keys
-        override fun keepDraft(date: LocalDate, text: String) { drafts[date] = text; draftVersion.value++ }
+        override fun keepDraft(date: LocalDate, text: String, earlierDay: Boolean) { earlierFlags += earlierDay; drafts[date] = text; draftVersion.value++ }
         fun external(date: LocalDate, text: String) = keepDraft(date, text) // what quick add does
-        override fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) {
+        override fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit, earlierDay: Boolean) {
+            earlierFlags += earlierDay
             refuse?.let { onError(it); return }
             saved += date to input; drafts.remove(date); draftVersion.value++; onSaved()
         }
@@ -88,6 +90,19 @@ class D3FixesTest {
             onNodeWithText("late thought").assertExists()
             onNodeWithText("unsaved from before the day ended", substring = true).assertExists()
         }
+    }
+
+    @Test
+    fun `the writer on an earlier day's draft keeps and saves it as that day's (not stuck, not restamped)`() = runComposeUiTest {
+        val ui = FakeUi()
+        val friday = day.minusDays(4)
+        ui.drafts[friday] = "late friday thought"
+        setContent { LoopDoTheme { Writer(writerDate(day, ui), day, LocalTime.NOON, null, ui, { null }) } }
+        onNode(hasSetTextAction()).performTextInput(".")
+        onNode(hasSetTextAction()).performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+        assertEquals(listOf(friday to "late friday thought."), ui.saved)
+        assertTrue(ui.earlierFlags.isNotEmpty() && ui.earlierFlags.all { it }, "kept and saved as an earlier day's: ${ui.earlierFlags}")
     }
 
     @Test

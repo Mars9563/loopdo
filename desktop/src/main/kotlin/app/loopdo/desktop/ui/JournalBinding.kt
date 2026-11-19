@@ -16,8 +16,9 @@ class JournalBinding(
     override val draftVersion = store.version
     override fun draftFor(date: LocalDate) = vm.draftFor(date)
     override fun draftDates(): Set<LocalDate> = lines.dates().filter { lines.line(it).first.isNotEmpty() }.toSet()
-    override fun keepDraft(date: LocalDate, text: String) = vm.keepDraft(date, text)
-    override fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) = vm.addLines(date, input, onSaved, onError)
+    override fun keepDraft(date: LocalDate, text: String, earlierDay: Boolean) = vm.keepDraft(date, text, earlierDay)
+    override fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit, earlierDay: Boolean) =
+        vm.addLines(date, input, onSaved, onError, earlierDay)
     override fun editLine(date: LocalDate, lineId: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit) { vm.editLine(date, lineId, new, onSaved, onError) }
     override fun deleteLine(date: LocalDate, lineId: String) { vm.deleteLine(date, lineId) }
     override fun setMood(date: LocalDate, mood: Int?) { vm.setMood(date, mood) }

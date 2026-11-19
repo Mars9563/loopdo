@@ -28,8 +28,8 @@ class JournalPaneRenderTest {
         override val draftVersion = kotlinx.coroutines.flow.MutableStateFlow(0L)
         override fun draftDates(): Set<LocalDate> = emptySet()
         override fun draftFor(date: LocalDate) = ""
-        override fun keepDraft(date: LocalDate, text: String) {}
-        override fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit) {}
+        override fun keepDraft(date: LocalDate, text: String, earlierDay: Boolean) {}
+        override fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit, earlierDay: Boolean) {}
         override fun editLine(date: LocalDate, lineId: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit) {}
         override fun deleteLine(date: LocalDate, lineId: String) {}
         override fun setMood(date: LocalDate, mood: Int?) {}

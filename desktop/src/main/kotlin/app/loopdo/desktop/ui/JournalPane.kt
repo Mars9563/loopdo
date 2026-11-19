@@ -55,6 +55,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -81,8 +83,9 @@ interface JournalUi {
     fun draftFor(date: LocalDate): String
     /** Days with unsent text. */
     fun draftDates(): Set<LocalDate>
-    fun keepDraft(date: LocalDate, text: String)
-    fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit)
+    /** [earlierDay]: the writer is on an unsaved draft from before the day ended (it keeps its own day and time). */
+    fun keepDraft(date: LocalDate, text: String, earlierDay: Boolean = false)
+    fun addLines(date: LocalDate, input: String, onSaved: () -> Unit, onError: (String) -> Unit, earlierDay: Boolean = false)
     fun editLine(date: LocalDate, lineId: String, new: String, onSaved: () -> Unit, onError: (String) -> Unit)
     fun deleteLine(date: LocalDate, lineId: String)
     fun setMood(date: LocalDate, mood: Int?)
@@ -235,13 +238,15 @@ fun MoodCalendar(month: YearMonth, moods: Map<LocalDate, Int>, today: LocalDate,
 @Composable
 fun Writer(date: LocalDate, today: LocalDate, now: LocalTime, mood: Int?, ui: JournalUi, pickPhoto: () -> File?, focus: FocusRequester = remember { FocusRequester() }) {
     val t = LocalType.current
-    var text by remember(date) { mutableStateOf(ui.draftFor(date)) }
+    // The cursor goes after a kept draft (it opened at the start, so new words went in front; the phone's M9 fix).
+    var field by remember(date) { mutableStateOf(ui.draftFor(date).let { TextFieldValue(it, TextRange(it.length)) }) }
+    fun setText(v: String) { field = TextFieldValue(v, TextRange(v.length)) }
     // The store is shared with quick add: follow its changes (our own writes read back equal, so they change nothing).
-    LaunchedEffect(date) { ui.draftVersion.collect { val stored = ui.draftFor(date); if (stored != text) text = stored } }
+    LaunchedEffect(date) { ui.draftVersion.collect { val stored = ui.draftFor(date); if (stored != field.text) setText(stored) } }
     val earlier = date != today
     var err by remember { mutableStateOf<String?>(null) }
     var dropping by remember { mutableStateOf(false) }
-    val save = { if (text.isNotBlank()) ui.addLines(date, text, { text = ""; err = null }, { err = it }) }
+    val save = { if (field.text.isNotBlank()) ui.addLines(date, field.text, { setText(""); err = null }, { err = it }, earlier) }
     val drop = remember {
         object : DragAndDropTarget {
             override fun onEntered(event: DragAndDropEvent) { dropping = true }
@@ -276,8 +281,8 @@ fun Writer(date: LocalDate, today: LocalDate, now: LocalTime, mood: Int?, ui: Jo
         Row {
             BasicText(if (earlier) "[--:--] " else "[${now.format(hm)}] ", style = t.body.copy(color = Fern.mint))
             Box(Modifier.weight(1f)) {
-                if (text.isEmpty()) BasicText("what's happening?", style = t.body.copy(color = Fern.lichen))
-                BasicTextField(text, { text = it; ui.keepDraft(date, it) }, Modifier.fillMaxWidth().typingField().focusRequester(focus).onPreviewKeyEvent {
+                if (field.text.isEmpty()) BasicText("what's happening?", style = t.body.copy(color = Fern.lichen))
+                BasicTextField(field, { val changed = it.text != field.text; field = it; if (changed) ui.keepDraft(date, it.text, earlier) }, Modifier.fillMaxWidth().typingField().focusRequester(focus).onPreviewKeyEvent {
                     if (it.key == Key.Enter && it.type == KeyEventType.KeyDown && !it.isShiftPressed) { save(); true } else false
                 }, textStyle = t.body, cursorBrush = SolidColor(Fern.mint))
             }
