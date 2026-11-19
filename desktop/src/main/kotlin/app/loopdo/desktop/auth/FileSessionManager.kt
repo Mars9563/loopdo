@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.PosixFilePermissions
 
 /**
  * The laptop keeps its Supabase session in the data folder (mode 600), so deleting the folder signs out and the
@@ -15,10 +16,14 @@ class FileSessionManager(private val file: File) : SessionManager {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     override suspend fun saveSession(session: UserSession) {
-        file.parentFile?.mkdirs()
+        // The tokens are never readable by other users, not even for a moment: the folder is owner-only and the file is
+        // created rw------- before anything is written (it was chmod-ed after the write; ultrareview).
+        file.parentFile?.let { d -> d.mkdirs(); runCatching { Files.setPosixFilePermissions(d.toPath(), PosixFilePermissions.fromString("rwx------")) } }
         val tmp = File(file.path + ".tmp")
+        tmp.delete()
+        runCatching { Files.createFile(tmp.toPath(), PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"))) }
+            .onFailure { tmp.createNewFile() } // a filesystem without POSIX permissions
         tmp.writeText(json.encodeToString(UserSession.serializer(), session))
-        runCatching { Files.setPosixFilePermissions(tmp.toPath(), java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")) }
         Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 

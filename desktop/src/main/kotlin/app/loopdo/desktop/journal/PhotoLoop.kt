@@ -25,11 +25,19 @@ class PhotoLoop(
     init {
         scope.launch {
             var wait = every
+            var backingOff = false
             while (true) {
                 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
                 select { kicks.onReceive { }; onTimeout(wait) { } }
                 runCatching { run() }.onFailure { logI("loopdo_photos", "upload later: ${it.message}") }
-                wait = if (runCatching { pending() }.getOrDefault(0L) > 0) (if (wait >= every) firstRetry else minOf(wait * 2, every)) else every
+                // Still waiting: 30 s, then doubling, then every [every] (it fell back to 30 s at the cap; ultrareview).
+                val waiting = runCatching { pending() }.getOrDefault(0L) > 0
+                wait = when {
+                    !waiting -> every
+                    !backingOff -> firstRetry
+                    else -> minOf(wait * 2, every)
+                }
+                backingOff = waiting
             }
         }
     }
