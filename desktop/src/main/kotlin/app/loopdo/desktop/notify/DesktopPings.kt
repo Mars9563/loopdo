@@ -96,6 +96,8 @@ class DesktopPings(
         g.scope.launch { g.auth.session.drop(1).collect { refresh() } }
         g.scope.launch { g.sync.blocked.drop(1).collect { refresh() } }
         if (!watchDbus) return
+        // The gdbus helpers would outlive the app (quit, or the session's TERM) and pile up on every restart.
+        Runtime.getRuntime().addShutdownHook(Thread { ProcessHandle.current().descendants().forEach { it.destroy() } })
         monitor(listOf("gdbus", "monitor", "--session", "--dest", "org.freedesktop.Notifications", "--object-path", "/org/freedesktop/Notifications"))
         monitor(listOf("gdbus", "monitor", "--system", "--dest", "org.freedesktop.login1", "--object-path", "/org/freedesktop/login1"))
     }

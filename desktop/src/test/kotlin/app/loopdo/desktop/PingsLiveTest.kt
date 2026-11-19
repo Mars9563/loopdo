@@ -3,12 +3,14 @@ package app.loopdo.desktop
 import app.loopdo.client.auth.AuthState
 import app.loopdo.desktop.notify.DbusEvent
 import app.loopdo.desktop.notify.DesktopPings
+import app.loopdo.desktop.notify.runCommand
 import app.loopdo.shared.day.settingsAt
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import java.io.File
 import java.nio.file.Files
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -27,9 +29,12 @@ class PingsLiveTest {
         withTimeout(20_000) { g.auth.session.first { it is AuthState.SignedIn } }
         withTimeout(60_000) { g.sync.db.currentStatus.asFlow().first { it.hasSynced == true } }
         withTimeout(30_000) { while (g.anchorStore.current() == null) delay(300) }
+        // With a desktop session the notification is real (KDE shows it and gives its id); else a fake gdbus.
+        val realKde = System.getenv("DBUS_SESSION_BUS_ADDRESS") != null && File("/usr/bin/gdbus").exists()
         val calls = CopyOnWriteArrayList<List<String>>()
+        val outs = CopyOnWriteArrayList<String>()
         var next = 100
-        val pings = DesktopPings(g, {}, {}, run = { a -> calls += a; "(uint32 ${next++},)" }, watchDbus = false)
+        val pings = DesktopPings(g, {}, {}, run = { a -> calls += a; (if (realKde) runCommand(a) else "(uint32 ${next++},)").also { outs += it } }, watchDbus = false)
         val now = g.trustedClock.now().instant
         val zone = settingsAt(g.todayData.versionsNow(), now).zone
         val at = now.atZone(zone).plusMinutes(2).truncatedTo(ChronoUnit.MINUTES)
@@ -43,7 +48,10 @@ class PingsLiveTest {
         val args = notify.drop(notify.indexOf("--method") + 2)
         val doneAction = Regex("""'([^']*\|done\|\d+)'""").find(args[5])?.groupValues?.get(1)
         assertTrue(doneAction != null, "a [done] button: ${args[5]}")
-        val kdeId = next - 1
+        val at0 = calls.indexOf(notify)
+        withTimeout(15_000) { while (outs.size <= at0) delay(100) } // its output lands just after the call
+        val kdeId = Regex("""uint32 (\d+)""").find(outs[at0])!!.groupValues[1].toInt()
+        if (realKde) assertEquals(pings.notifier.keyFor(kdeId)?.substringBefore(":"), "task", "KDE's id maps back to the reminder")
         withTimeout(30_000) { pings.handle(DbusEvent.Action(kdeId, doneAction!!)) } // it once deadlocked on the scheduler's lock
         withTimeout(20_000) { while (g.sync.db.get("SELECT coalesce(completed_on, '') FROM tasks WHERE id = ?", listOf(task.toString())) { it.getString(0)!! } == "") delay(300) }
         assertTrue(calls.any { it.contains("org.freedesktop.Notifications.CloseNotification") }, "the done reminder goes away")
