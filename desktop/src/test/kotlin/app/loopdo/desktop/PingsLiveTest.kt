@@ -57,6 +57,20 @@ class PingsLiveTest {
         assertTrue(calls.any { it.contains("org.freedesktop.Notifications.CloseNotification") }, "the done reminder goes away")
         withTimeout(60_000) { while (g.sync.db.get("SELECT count(*) FROM ps_crud") { it.getLong(0)!! } > 0) delay(400) }
         assertEquals(1L, g.sync.db.get("SELECT count(*) FROM tasks WHERE id = ? AND completed_on IS NOT NULL", listOf(task.toString())) { it.getLong(0)!! })
+        // Review focus 2: [done] again on the stale notification (already done) changes nothing.
+        // (updated_at is the server's and may still sync down, so the check is the exact completion time + no upload.)
+        // Postgres keeps microseconds, so the synced-down copy is compared to the millisecond.
+        suspend fun completedAt() = g.sync.db.get("SELECT completed_at FROM tasks WHERE id = ?", listOf(task.toString())) { java.time.Instant.parse(it.getString(0)!!).truncatedTo(ChronoUnit.MILLIS) }
+        val stamp = completedAt()
+        withTimeout(30_000) { pings.handle(DbusEvent.Action(kdeId, doneAction)) }
+        delay(1_500)
+        assertEquals(stamp, completedAt(), "no second completion")
+        assertEquals(0L, g.sync.db.get("SELECT count(*) FROM ps_crud") { it.getLong(0)!! }, "nothing new to upload")
+        // Review focus 4: pings off → nothing planned any more.
+        assertTrue(g.reminderKeys.getString("scheduled") != null, "the journal/day-end pings were planned")
+        pings.enabled = false
+        withTimeout(10_000) { while (g.reminderKeys.getString("scheduled") != null) delay(200) }
+        assertEquals(false, DesktopPings(g, {}, {}, run = { "(uint32 1,)" }, watchDbus = false).enabled, "the switch is kept")
         g.actions.run { runCatching { g.taskActions.deleteTask(task) } }
         g.sync.db.disconnect(); g.scope.cancel()
     }
