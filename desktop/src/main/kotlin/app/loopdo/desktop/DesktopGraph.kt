@@ -107,6 +107,34 @@ class DesktopGraph(val dataDir: File) {
     /** Laptop reminder state (D6 reads it): opening the review on a Sunday marks that Sunday as reviewed (phone parity). */
     val reminderKeys = app.loopdo.desktop.store.FileKeyValue(File(dataDir, "reminders.json"))
 
+    /** The pings (set by Main once made): ~/settings switches them, and hands them back on sign-out. */
+    @Volatile var pings: app.loopdo.desktop.notify.DesktopPings? = null
+
+    /** "start at login" (~/settings). */
+    val autostart = app.loopdo.desktop.shell.Autostart()
+
+    /** Signing out: pings back to the phone first (D7), then sign out; nothing waiting to upload is touched. */
+    suspend fun signOut() { runCatching { pings?.handBack() }; auth.signOut() }
+
+    /** ~/settings: the phone's shared view model (name and reminders are the synced profile row). */
+    fun settingsViewModel() = app.loopdo.client.settings.SettingsViewModel(
+        profile = sync.db.watch("SELECT display_name, settings, is_admin, delete_requested_at, wipe_claimed_at FROM profiles LIMIT 1") {
+            app.loopdo.client.settings.ProfileRow(
+                it.getString(0).orEmpty(), it.getString(1), (it.getLong(2) ?: 0L) != 0L,
+                it.getString(3)?.let { s -> app.loopdo.client.today.parseInstant(s) }, it.getString(4)?.let { s -> app.loopdo.client.today.parseInstant(s) },
+            )
+        }.map { it.firstOrNull() },
+        versions = todayData.versionsFlow(),
+        waiting = app.loopdo.client.settings.DataSafety(sync.db, app.loopdo.desktop.store.FileKeyValue(File(dataDir, "data.json"))) { trustedClock.now().instant }.waiting(),
+        db = sync.db,
+        daySettings = app.loopdo.client.onboarding.KtorSettingsApi(http, token),
+        account = app.loopdo.client.settings.KtorAccountApi(http, token),
+        // Export and account deletion stay on the phone (locked ~/settings: "on the phone").
+        export = { throw IllegalStateException("export from the phone.") },
+        now = { trustedClock.now().instant },
+        version = VERSION,
+    )
+
     /** The laptop's light pin lock (owner, 2026-11-19; off by default). */
     val pinLock = app.loopdo.desktop.lock.PinLock(app.loopdo.desktop.store.FileKeyValue(File(dataDir, "lock.json")))
 
@@ -131,3 +159,6 @@ class DesktopGraph(val dataDir: File) {
 
     fun todayViewModel() = TodayViewModel(todayData.rows(), actions, sync.notices) { trustedClock.now().instant }
 }
+
+/** The laptop app's version (shown in ~/settings). */
+const val VERSION = "1.0.0"

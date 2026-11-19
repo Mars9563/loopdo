@@ -76,9 +76,13 @@ class DesktopPings(
         signedOut = { g.sync.blocked.value != null || g.auth.session.value is AuthState.SignedOut },
     ) { commands.handle(it) }
 
+    private val _on = kotlinx.coroutines.flow.MutableStateFlow(keys.getLong(OFF) == null)
+    /** The switch as a flow: the tray and ~/settings show the same thing. */
+    val on: kotlinx.coroutines.flow.StateFlow<Boolean> = _on
+
     var enabled: Boolean
         get() = keys.getLong(OFF) == null
-        set(on) { if (on) keys.remove(OFF) else keys.putLong(OFF, 1L); g.scope.launch { refresh() }; presence?.poke() }
+        set(on) { if (on) keys.remove(OFF) else keys.putLong(OFF, 1L); _on.value = on; g.scope.launch { refresh() }; presence?.poke() }
 
     /**
      * D7: this laptop's "in use" signal, only with a real desktop session (tests with a fake notification server

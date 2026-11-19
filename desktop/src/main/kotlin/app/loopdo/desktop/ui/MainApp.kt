@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import io.github.jan.supabase.auth.auth
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -136,7 +137,8 @@ fun MainApp(g: DesktopGraph) {
                     StatsPane(st, lw.first, lw.second, statsAct)
                 } ?: BasicText("loading stats…", style = LocalType.current.small)
                 Place.JOURNAL -> jm?.let { JournalPane(it, journalUi, ::pickPhotoFile) } ?: BasicText("loading the journal…", style = LocalType.current.small)
-                else -> BasicText("${place.path} arrives in a later step (M10 D8).", style = LocalType.current.small)
+                Place.SETTINGS -> SettingsHost(g)
+                else -> Unit
             }
         }
         val editing = habitEditor
@@ -273,3 +275,29 @@ private fun OnThisDay(j: app.loopdo.client.journal.JournalModel) {
 /** Quick add opens only when the main app would show its screens (D3 review): signed in, not blocked on another
  *  account's unsent changes, and with day settings (else "today" can't be worked out). Otherwise the main window shows. */
 fun quickAllowed(signedIn: Boolean, blocked: String?, hasSettings: Boolean): Boolean = signedIn && blocked == null && hasSettings
+
+/** ~/settings with this laptop's state: the shared view model + pings, autostart, the pin lock and sign-out. */
+@Composable
+private fun SettingsHost(g: DesktopGraph) {
+    val vm = remember { g.settingsViewModel() }
+    val ui by vm.state.collectAsState()
+    val pingsOn = g.pings?.on?.collectAsState()?.value ?: false
+    var autostartOn by remember { mutableStateOf(g.autostart.on) }
+    var pinOn by remember { mutableStateOf(g.pinLock.isSet) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val email = remember { runCatching { g.supabase.auth.currentUserOrNull()?.email }.getOrNull() ?: "this account" }
+    val act = remember {
+        object : SettingsActions {
+            override fun rename(name: String) { vm.setName(name) }
+            override fun setPrefs(p: app.loopdo.shared.remind.ReminderPrefs) { vm.setPrefs(p) }
+            override fun setPings(on: Boolean) { g.pings?.enabled = on }
+            override fun setAutostart(on: Boolean) { runCatching { g.autostart.set(on) }; autostartOn = g.autostart.on }
+            override fun setPin(pin: String) { g.pinLock.set(pin); pinOn = true }
+            override fun checkPin(pin: String) = g.pinLock.check(pin)
+            override fun clearPin() { g.pinLock.clear(); pinOn = false }
+            override fun signOut() { scope.launch { g.signOut() } }
+        }
+    }
+    ui?.let { SettingsPane(it, LaptopSettings(pingsOn, autostartOn, pinOn, email), act) }
+        ?: BasicText("loading settings…", style = LocalType.current.small)
+}

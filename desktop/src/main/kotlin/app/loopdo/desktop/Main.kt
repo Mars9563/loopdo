@@ -54,7 +54,8 @@ fun main(args: Array<String>) {
         val z = zoom.value
         // D6: the laptop rings the phone's reminders; a reminder's [write] opens quick add, [review] shows the app.
         val pings = remember { graph?.let { app.loopdo.desktop.notify.DesktopPings(it, onWrite = { quick.value = true }, onOpen = { shown.value = true }).also { p -> p.start() } } }
-        var pingsOn by remember { mutableStateOf(pings?.enabled ?: false) }
+        remember(pings) { graph?.pings = pings }
+        val pingsOn = pings?.on?.collectAsState()?.value ?: false
         // Quick add: its own small window over whatever is open; the main window stays as it is (hidden or not).
         if (quick.value && graph != null) {
             val signedIn = graph.auth.session.collectAsState().value is AuthState.SignedIn
@@ -89,7 +90,7 @@ fun main(args: Array<String>) {
         val entries = buildList {
             add(TrayEntry.Action("[open]") { shown.value = true })
             if (graph != null) add(TrayEntry.Action("[quick add]") { quick.value = true })
-            if (pings != null) add(TrayEntry.Action(if (pingsOn) "[pings on this laptop: on]" else "[pings on this laptop: off]") { pingsOn = !pingsOn; pings.enabled = pingsOn })
+            if (pings != null) add(TrayEntry.Action(if (pingsOn) "[pings on this laptop: on]" else "[pings on this laptop: off]") { pings.enabled = !pingsOn })
             add(TrayEntry.Separator)
             add(TrayEntry.Action("[quit]", quit))
         }
@@ -124,7 +125,7 @@ fun main(args: Array<String>) {
             LoopDoTheme(z) {
                 // Every time the window is shown (start, tray, a ping, the menu entry): the pin lock checks the hour.
                 LaunchedEffect(shown.value) { if (shown.value) graph?.pinLock?.windowOpened() }
-                if (graph == null) DemoApp() else Root(graph, signOut = { pings?.handBack(); graph.auth.signOut() }) { app.loopdo.desktop.ui.MainApp(graph) }
+                if (graph == null) DemoApp() else Root(graph, signOut = { graph.signOut() }) { app.loopdo.desktop.ui.MainApp(graph) }
             }
         }
     }
