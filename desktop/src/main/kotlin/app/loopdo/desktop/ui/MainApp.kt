@@ -286,6 +286,7 @@ private fun SettingsHost(g: DesktopGraph) {
     var pinOn by remember { mutableStateOf(g.pinLock.isSet) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val email = remember { runCatching { g.supabase.auth.currentUserOrNull()?.email }.getOrNull() ?: "this account" }
+    var line by remember { mutableStateOf<String?>(null) }
     val act = remember {
         object : SettingsActions {
             override fun rename(name: String) { vm.setName(name) }
@@ -295,9 +296,12 @@ private fun SettingsHost(g: DesktopGraph) {
             override fun setPin(pin: String) { g.pinLock.set(pin); pinOn = true }
             override fun checkPin(pin: String) = g.pinLock.check(pin)
             override fun clearPin() { g.pinLock.clear(); pinOn = false }
-            override fun signOut() { scope.launch { g.signOut() } }
+            override fun signOut() { scope.launch { g.signOut().onFailure { line = "signing out needs the internet. nothing changed; try again when you're online." } } }
         }
     }
-    ui?.let { SettingsPane(it, LaptopSettings(pingsOn, autostartOn, pinOn, email), act) }
-        ?: BasicText("loading settings…", style = LocalType.current.small)
+    androidx.compose.foundation.layout.Column {
+        line?.let { BasicText(it, style = LocalType.current.small.copy(color = Fern.ember), modifier = Modifier.padding(bottom = 8.dp)) }
+        ui?.let { SettingsPane(it, LaptopSettings(pingsOn, autostartOn, pinOn, email), act) }
+            ?: BasicText("loading settings…", style = LocalType.current.small)
+    }
 }

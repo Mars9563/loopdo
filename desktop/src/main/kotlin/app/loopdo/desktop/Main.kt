@@ -152,7 +152,7 @@ fun App() {
 
 /** Start-up states: sign in → (another account's changes waiting) → restoring your data… → setup on the phone → the app. */
 @Composable
-fun Root(g: DesktopGraph, signOut: suspend () -> Unit = { g.auth.signOut() }, signedInApp: @Composable () -> Unit) {
+fun Root(g: DesktopGraph, signOut: suspend () -> Result<Unit> = { g.auth.signOut() }, signedInApp: @Composable () -> Unit) {
     val session by g.auth.session.collectAsState()
     val blocked by g.sync.blocked.collectAsState()
     val status by remember { g.sync.db.currentStatus.asFlow() }.collectAsState(g.sync.db.currentStatus)
@@ -164,7 +164,7 @@ fun Root(g: DesktopGraph, signOut: suspend () -> Unit = { g.auth.signOut() }, si
         session is AuthState.SignedOut -> SignInScreen(signIn = { e, p -> g.auth.signIn(e, p) }, google = { g.auth.signInWithGoogleBrowser() })
         blocked != null -> BlockedScreen(blocked!!) { scope.launch { signOut() } }
         // ~/locked (owner): "forgot?" signs out and removes the pin; signing in again with the password opens it.
-        locked -> app.loopdo.desktop.ui.LockedScreen(g.pinLock) { scope.launch { signOut(); g.pinLock.clear() } }
+        locked -> app.loopdo.desktop.ui.LockedScreen(g.pinLock) { signOut().isSuccess }
         status.hasSynced != true && !hasSettings -> CenterLine("restoring your data…")
         !hasSettings -> CenterLine("finish setting up loopdo_ on your phone first (day end + time zone).")
         else -> signedInApp()

@@ -32,7 +32,7 @@ class LockedScreenTest {
     @Test
     fun `typing the 4 right digits opens it, wrong ones clear`() = runComposeUiTest {
         val l = locked()
-        setContent { LoopDoTheme { LockedScreen(l) {} } }
+        setContent { LoopDoTheme { LockedScreen(l) { true } } }
         onNode(hasSetTextAction()).performTextInput("1111")
         waitForIdle()
         assertTrue(l.needed.value)
@@ -46,9 +46,30 @@ class LockedScreenTest {
     @Test
     fun `forgot signs out`() = runComposeUiTest {
         var forgot = 0
-        setContent { LoopDoTheme { LockedScreen(locked()) { forgot++ } } }
+        setContent { LoopDoTheme { LockedScreen(locked()) { forgot++; true } } }
         onNodeWithText("[forgot? sign in again]").performClick()
         waitForIdle()
         assertEquals(1, forgot)
+    }
+
+    @Test
+    fun `forgot while offline keeps the lock and says why`() = runComposeUiTest {
+        val l = locked()
+        var calls = 0
+        setContent { LoopDoTheme { LockedScreen(l, onForgot = { calls++; false }) } }
+        onNodeWithText("[forgot? sign in again]").performClick()
+        waitForIdle()
+        assertEquals(1, calls)
+        assertTrue(l.isSet && l.needed.value, "a failed sign-out never removes the pin (that would open the app)")
+        onNodeWithText("signing out needs the internet. try again when you're online.").assertExists()
+    }
+
+    @Test
+    fun `forgot that signed out removes the pin`() = runComposeUiTest {
+        val l = locked()
+        setContent { LoopDoTheme { LockedScreen(l, onForgot = { true }) } }
+        onNodeWithText("[forgot? sign in again]").performClick()
+        waitForIdle()
+        assertFalse(l.isSet)
     }
 }

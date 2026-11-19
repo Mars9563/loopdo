@@ -127,7 +127,7 @@ class DesktopGraph(val dataDir: File) {
     val autostart = app.loopdo.desktop.shell.Autostart()
 
     /** Signing out: pings back to the phone first (D7), then sign out; nothing waiting to upload is touched. */
-    suspend fun signOut() { runCatching { pings?.handBack() }; auth.signOut() }
+    suspend fun signOut(): Result<Unit> { runCatching { pings?.handBack() }; return auth.signOut() }
 
     /** ~/settings: the phone's shared view model (name and reminders are the synced profile row). */
     fun settingsViewModel() = app.loopdo.client.settings.SettingsViewModel(

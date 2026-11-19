@@ -55,12 +55,20 @@ import java.time.Instant
  * after the last unlock. The 4th digit opens it (no enter); a wrong pin clears; 5 wrong tries wait 30 s.
  */
 @Composable
-fun LockedScreen(lock: PinLock, onForgot: () -> Unit) {
+fun LockedScreen(lock: PinLock, onForgot: suspend () -> Boolean) {
     val t = LocalType.current
     var digits by remember { mutableStateOf("") }
     var line by remember { mutableStateOf<String?>(null) }
     var waitUntil by remember { mutableStateOf<Instant?>(null) }
     val focus = remember { FocusRequester() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // "forgot?": the pin goes only once the sign-out really happened (offline it fails; removing it then would open
+    // the app without the password).
+    val forgot: () -> Unit = {
+        scope.launch {
+            if (onForgot()) lock.clear() else line = "signing out needs the internet. try again when you're online."
+        }
+    }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     // The wait counts down on screen, then the field works again.
     LaunchedEffect(waitUntil) {
@@ -106,7 +114,7 @@ fun LockedScreen(lock: PinLock, onForgot: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             BasicText("type the 4 digits · it opens on the 4th\npings, the tray and quick add keep working while locked", style = t.label.copy(lineHeight = t.label.fontSize * 1.7))
             Spacer(Modifier.height(18.dp))
-            BasicText("[forgot? sign in again]", style = t.small.copy(color = Fern.lichen), modifier = Modifier.clickable(onClick = onForgot))
+            BasicText("[forgot? sign in again]", style = t.small.copy(color = Fern.lichen), modifier = Modifier.clickable(onClick = forgot))
         }
     }
 }
