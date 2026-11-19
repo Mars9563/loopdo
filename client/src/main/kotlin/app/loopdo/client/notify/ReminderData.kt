@@ -67,6 +67,11 @@ class ReminderData(
 
     suspend fun versions() = TodayData(db).versionsNow()
 
+    /** D7: every laptop's active_until (unreadable values are skipped: they can't silence anything). */
+    suspend fun laptopActiveUntil(): List<Instant> =
+        db.getAll("SELECT active_until FROM device_presence") { it.getString(0).orEmpty() }
+            .mapNotNull { v -> runCatching { java.time.OffsetDateTime.parse(v).toInstant() }.getOrNull() }
+
     /** The planner's input at [now]: habits, today's and tomorrow's done habits, timed tasks, timed series, journal days. */
     suspend fun input(now: Instant): ReminderInput {
         val versions = TodayData(db).versionsNow()

@@ -18,6 +18,12 @@ const val CH_DAY_END = "day end"
 const val CH_STATS = "stats"
 /** The day-end warning between 23:00 and 07:00: shown without sound (owner 2026-11-18). */
 const val CH_DAY_END_NIGHT = "day end · night"
+/** D7: every ping while a laptop is in use: in the shade with its buttons, no sound, no vibration, no pop-up. */
+const val CH_LAPTOP = "laptop in use"
+
+/** D7: the phone's ping goes quiet while a laptop is in use (the night warning already is). */
+fun routeForLaptop(shown: Shown, laptopInUse: Boolean): Shown =
+    if (laptopInUse && shown.channel != CH_DAY_END_NIGHT) shown.copy(channel = CH_LAPTOP) else shown
 
 /** What the database says right now about a reminder's item. */
 sealed interface ItemState {

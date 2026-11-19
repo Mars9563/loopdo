@@ -70,6 +70,8 @@ class ReminderScheduler(
     private val signedOut: suspend () -> Boolean = { true },
     /** A button's habit/task change, through the widget's commands (same rules, trusted clock, time proof). */
     private val tap: suspend (WidgetTap) -> TapResult = { TapResult.FAILED },
+    /** D7, the phone: a laptop is in use right now, so pings go to the quiet channel. The laptop never asks (false). */
+    private val laptopInUse: suspend () -> Boolean = { false },
 ) {
     private val lock = Mutex()
 
@@ -161,7 +163,7 @@ class ReminderScheduler(
 
     private suspend fun show(r: Reminder, day: LocalDate?, now: Instant) {
         val quiet = isQuietHours(now, settingsAt(data.versions(), now).zone)
-        val shown = decide(r, data.state(r), day, quiet)
+        val shown = decide(r, data.state(r), day, quiet)?.let { routeForLaptop(it, runCatching { laptopInUse() }.getOrDefault(false)) }
         if (shown == null) {
             poster.cancel(notificationId(r)) // an earlier ping of a now-done item
             return

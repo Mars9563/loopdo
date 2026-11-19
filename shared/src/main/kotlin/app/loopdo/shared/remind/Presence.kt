@@ -8,3 +8,9 @@ import java.util.UUID
 
 /** A laptop's presence row id: the same on the laptop and the server. */
 fun presenceId(user: UUID, deviceId: UUID): UUID = uuidV5(user, "presence:$deviceId")
+
+/**
+ * Whether a laptop is in use right now: any presence row whose active_until is after [now] (the phone's trusted
+ * clock). A stale row (a laptop that crashed or went offline) stops counting by itself within 5 min.
+ */
+fun laptopInUse(activeUntil: List<java.time.Instant>, now: java.time.Instant): Boolean = activeUntil.any { it > now }

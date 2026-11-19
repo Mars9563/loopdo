@@ -44,6 +44,8 @@ object LoopDoSchema {
         // M8: the weekly focus (1–2 promises a week; removed = deleted_at). evidence proves the day it was set.
         Table("weekly_focus", t("user_id", "week_start", "kind", "item_id", "title", "deadline", "deleted_at", "evidence") + i("goal", "sort_order") + stamps),
         Table("journal_photos", t("user_id", "entry_id", "r2_key", "added_at") + i("width", "height", "bytes", "sort_order") + stamps),
+        // D7: a laptop's "in use" signal (one row per laptop; the phone reads active_until at ping time).
+        Table("device_presence", t("user_id", "device_id", "active_until") + stamps),
         // Local-only: never uploaded.
         Table.localOnly("drafts", t("kind", "payload", "reason", "created_at")),
         Table.localOnly("upload_state", t("first_failure_at") + i("tx_id")),
