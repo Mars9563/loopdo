@@ -83,8 +83,9 @@ class DesktopPings(
     /** Repeating tasks' new copies first (like the phone's redraw), then the reminders again. Never throws. */
     suspend fun refresh() {
         runCatching {
-            if (!enabled) { scheduler.clearAll(); return }
+            // Repeating tasks' copies don't depend on pings: with pings off they were never made here (ultrareview).
             today()?.let { d -> runCatching { g.taskActions.ensureInstances(d) }.onFailure { logW("loopdo_tasks", "creating repeating tasks failed", it) } }
+            if (!enabled) { scheduler.clearAll(); return }
             scheduler.replan()
         }.onFailure { logW("loopdo_pings", "replan failed", it) }
     }
@@ -92,6 +93,8 @@ class DesktopPings(
     @OptIn(FlowPreview::class)
     fun start() {
         g.scope.launch { refresh() }
+        // Opening the Sunday review clears its ping at once, like the phone's replan after the mark (ultrareview).
+        g.onReviewOpened = { g.scope.launch { refresh() } }
         // One failure must not end a collector: replans would stop for the rest of the session (final review M2).
         fun <T> Flow<T>.replanOnEach() = g.scope.launch { runCatching { collect { refresh() } }.onFailure { logW("loopdo_pings", "a replan trigger stopped", it) } }
         merge(

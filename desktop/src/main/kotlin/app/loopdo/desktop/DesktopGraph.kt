@@ -105,8 +105,11 @@ class DesktopGraph(val dataDir: File) {
     /** Laptop reminder state (D6 reads it): opening the review on a Sunday marks that Sunday as reviewed (phone parity). */
     val reminderKeys = app.loopdo.desktop.store.FileKeyValue(File(dataDir, "reminders.json"))
 
+    /** Set by the pings (D6): the review was just opened, so its Sunday ping can go away. */
+    @Volatile var onReviewOpened: () -> Unit = {}
+
     fun statsViewModel() = app.loopdo.client.stats.StatsViewModel(app.loopdo.client.stats.StatsData(sync.db).rows(), focusActions, now = { trustedClock.now().instant }) { today ->
-        app.loopdo.client.stats.sundayToSilence(today)?.let { reminderKeys.putLong("reviewed:$it", 1L) }
+        app.loopdo.client.stats.sundayToSilence(today)?.let { reminderKeys.putLong("reviewed:$it", 1L); onReviewOpened() }
     }
 
     /** This week's promises, checked ("last week you said" on ~/stats), from the phone's buildReview for this week. */
