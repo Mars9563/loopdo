@@ -1,5 +1,7 @@
 package app.loopdo.android.widget
 
+import app.loopdo.client.notify.WidgetCommands
+
 import app.loopdo.client.notify.TapKind
 import app.loopdo.client.notify.TapResult
 import app.loopdo.client.notify.WidgetTap

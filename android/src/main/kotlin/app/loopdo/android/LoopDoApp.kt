@@ -184,7 +184,7 @@ class AppGraph(context: android.content.Context) {
     ) { widgetSnapshot() }
 
     val widgetCommands by lazy {
-        app.loopdo.android.widget.WidgetCommands(
+        app.loopdo.client.notify.WidgetCommands(
             actions,
             readyOn = { (widgetSnapshot() as? app.loopdo.android.widget.WidgetState.Ready)?.model?.date },
         ) { redrawWidget() }
@@ -232,18 +232,8 @@ class AppGraph(context: android.content.Context) {
     fun tasksViewModel() = app.loopdo.client.tasks.TasksViewModel(app.loopdo.client.tasks.TaskData(sync.db), taskActions)
 
     /** M8: the Sunday ping's content: that week's numbers and its focus so far. */
-    private suspend fun weekPingState(sunday: java.time.LocalDate): app.loopdo.client.notify.ItemState {
-        val rows = app.loopdo.client.stats.StatsData(sync.db).rows().first()
-        val start = app.loopdo.shared.stats.weekStart(sunday)
-        val w = app.loopdo.shared.stats.weekReview(rows.input, start, sunday)
-        val focus = rows.focus.filter { it.weekStart == start }.map { f ->
-            when (val r = app.loopdo.shared.stats.focusResult(f, rows.input, sunday)) {
-                is app.loopdo.shared.stats.FocusResult.Habit -> "${f.title} ${r.done}/${r.goal}"
-                is app.loopdo.shared.stats.FocusResult.Task -> f.title + if (r.completedOn != null) " ✓" else ""
-            }
-        }
-        return app.loopdo.client.notify.ItemState.Week(w.number, w.done, w.total, focus, reviewOpenedOn(sunday))
-    }
+    private suspend fun weekPingState(sunday: java.time.LocalDate): app.loopdo.client.notify.ItemState =
+        app.loopdo.client.notify.weekPingState(app.loopdo.client.stats.StatsData(sync.db).rows().first(), sunday, reviewOpenedOn(sunday))
 
     /** M8: the weekly focus (Sun/Mon only, at most 2; the server checks the same). */
     val focusActions by lazy {

@@ -48,6 +48,9 @@ fun main(args: Array<String>) {
     }
     application {
         val graph = remember { if (demo) null else DesktopGraph(dir) }
+        // D6: the laptop rings the phone's reminders; a reminder's [write] opens quick add, [review] shows the app.
+        val pings = remember { graph?.let { app.loopdo.desktop.notify.DesktopPings(it, onWrite = { quick.value = true }, onReview = { shown.value = true }).also { p -> p.start() } } }
+        var pingsOn by remember { mutableStateOf(pings?.enabled ?: false) }
         // Quick add: its own small window over whatever is open; the main window stays as it is (hidden or not).
         if (quick.value && graph != null) {
             val signedIn = graph.auth.session.collectAsState().value is AuthState.SignedIn
@@ -80,6 +83,7 @@ fun main(args: Array<String>) {
             menu = {
                 Item("[open]", onClick = { shown.value = true })
                 if (graph != null) Item("[quick add]", onClick = { quick.value = true })
+                if (pings != null) Item(if (pingsOn) "[pings on this laptop: on]" else "[pings on this laptop: off]", onClick = { pingsOn = !pingsOn; pings.enabled = pingsOn })
                 Separator()
                 Item("[quit]", onClick = quit)
             },
