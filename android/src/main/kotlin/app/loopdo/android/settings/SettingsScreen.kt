@@ -48,6 +48,8 @@ class SettingsHost(
     val lockOn: Boolean, val onToggleLock: () -> Unit,
     val notificationsOff: Boolean, val onAllowNotifications: () -> Unit,
     val onSignOut: () -> Unit, val onExport: () -> Unit,
+    /** Owner, 2026-11-19: "Unrestricted" battery (background sync, alarms on time); [allow] reopens Android's dialog. */
+    val batteryUnrestricted: Boolean = true, val onAllowBattery: () -> Unit = {},
 )
 
 /** Locked settings-v1, screens A/B (and D, the delete confirmation, from [delete account]). */
@@ -111,6 +113,10 @@ fun SettingsScreen(vm: SettingsViewModel, host: SettingsHost, onClose: () -> Uni
             Label("app")
             Item("app lock") { Toggle(host.lockOn) { host.onToggleLock() } }
             if (host.notificationsOff) Item("notifications off") { Bracket("allow", primary = true, onClick = host.onAllowNotifications) }
+            Item("battery") {
+                Text(app.loopdo.android.notify.batteryLine(host.batteryUnrestricted), style = LoopDoType.small)
+                if (!host.batteryUnrestricted) Bracket("allow", primary = true, onClick = host.onAllowBattery)
+            }
 
             ui.admin?.let { a ->
                 Label("admin", right = "only you see this")

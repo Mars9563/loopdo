@@ -6,6 +6,8 @@
     <!-- M7 reminders: notifications (asked once) and exact alarms (granted at install; loopdo_ is sideloaded, not on Play). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Owner, 2026-11-19: ask once for "Unrestricted" battery (background sync for D7, alarms never delayed). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".LoopDoApp"

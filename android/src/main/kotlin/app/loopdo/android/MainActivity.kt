@@ -126,6 +126,18 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         return true
     }
 
+    /** Asks once ever for "Unrestricted" battery (owner, 2026-11-19); later only the [⚙] row offers it. */
+    fun askBatteryOnce(otherAskShowing: Boolean): Boolean {
+        val prefs = getSharedPreferences("reminders-ui", MODE_PRIVATE)
+        if (!app.loopdo.android.notify.shouldAskBattery(batteryUnrestricted(), prefs.getBoolean("battery_asked", false), otherAskShowing)) return false
+        prefs.edit().putBoolean("battery_asked", true).apply()
+        runCatching { startActivity(app.loopdo.android.notify.batteryAskIntent(this)) }
+        return true
+    }
+
+    fun batteryUnrestricted(): Boolean = app.loopdo.android.notify.batteryUnrestricted(this)
+    fun openBatteryAsk() { runCatching { startActivity(app.loopdo.android.notify.batteryAskIntent(this)) } }
+
     fun notificationsAllowed(): Boolean =
         checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED &&
             androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
@@ -244,8 +256,16 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
         notificationsOff = !activity.notificationsAllowed()
         onPauseOrDispose { }
     }
+    var batteryUnrestricted by remember { mutableStateOf(activity.batteryUnrestricted()) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        batteryUnrestricted = activity.batteryUnrestricted()
+        onPauseOrDispose { }
+    }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        if (activity.askNotificationsOnce()) todayVm.showMessage("loopdo_ reminds you of habits, tasks and the journal.")
+        val asked = activity.askNotificationsOnce()
+        if (asked) todayVm.showMessage("loopdo_ reminds you of habits, tasks and the journal.")
+        // Owner, 2026-11-19: then (on a later open, never on top of that one) "Unrestricted" battery, once.
+        if (activity.askBatteryOnce(otherAskShowing = asked)) todayVm.showMessage("so reminders and the laptop's handover work with the screen off.")
     }
     val exportNow = {
         activity.pickExportFile(java.time.LocalDate.now()) { uri ->
@@ -273,6 +293,7 @@ private fun SignedInApp(graph: AppGraph, link: Link?, activity: MainActivity) {
                     app.loopdo.android.settings.SettingsHost(
                         lockOn = lockOn, onToggleLock = toggleLock,
                         notificationsOff = notificationsOff, onAllowNotifications = { activity.openNotificationSettings() },
+                        batteryUnrestricted = batteryUnrestricted, onAllowBattery = { activity.openBatteryAsk() },
                         onSignOut = signOut,
                         onExport = exportNow,
                     ),
