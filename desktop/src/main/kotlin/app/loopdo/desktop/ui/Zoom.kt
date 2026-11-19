@@ -24,7 +24,8 @@ class UiZoom(private val kv: FileKeyValue, private val auto: Float = autoZoom())
     fun set(z: Float) {
         val v = ((z * 20).roundToInt() / 20f).coerceIn(MIN, MAX) // 5% steps
         state.floatValue = v
-        if (v == auto) kv.remove(KEY) else kv.putString(KEY, v.toString())
+        // A full or read-only disk only loses the remembered zoom, never the key press (ultrareview).
+        runCatching { if (v == auto) kv.remove(KEY) else kv.putString(KEY, v.toString()) }
     }
 
     /** Ctrl + = (or +) bigger, Ctrl + - smaller, Ctrl + 0 back to the screen's default. True if it was one. */

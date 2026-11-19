@@ -45,7 +45,10 @@ class DesktopGraph(val dataDir: File) {
     val evidence = EvidenceFactory(clocks, anchorStore)
     private val http = HttpClient(OkHttp) { install(HttpTimeout) { requestTimeoutMillis = 15_000 } }
     private val token: suspend () -> String? = { auth.freshToken() }
-    val sync = DesktopSync(dataDir, auth, scope, AnchorRefresher(KtorTimeApi(http, token), anchorStore, clocks), { trustedClock.now().instant }, http = http)
+    /** Unsaved journal text (before sync: an account switch sets the previous account's aside). */
+    val popupDrafts = app.loopdo.desktop.store.FilePopupDrafts(File(dataDir, "drafts.json"))
+    val sync = DesktopSync(dataDir, auth, scope, AnchorRefresher(KtorTimeApi(http, token), anchorStore, clocks), { trustedClock.now().instant }, http = http,
+        onAccountSwitch = { from, to -> popupDrafts.switchAccount(from, to) })
     val todayData = TodayData(sync.db)
     private val userId = { (auth.session.value as? AuthState.SignedIn)?.userId }
     val journalActions = JournalActions(
@@ -85,7 +88,6 @@ class DesktopGraph(val dataDir: File) {
     /** Where the laptop keeps photos it compressed itself (and downloads, by id). */
     val photoDir = File(dataDir, "photos")
     /** ONE store for unsaved text (the writer and quick add share it, like the phone's app and widget pop-up). */
-    val popupDrafts = app.loopdo.desktop.store.FilePopupDrafts(File(dataDir, "drafts.json"))
     val drafts = app.loopdo.client.journal.LineDrafts(popupDrafts)
 
     fun popupViewModel() = app.loopdo.client.popup.PopupViewModel(actions, popupDrafts) {}

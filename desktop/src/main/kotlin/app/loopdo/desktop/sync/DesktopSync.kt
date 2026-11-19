@@ -51,6 +51,8 @@ class DesktopSync(
     now: () -> Instant = Instant::now,
     val db: PowerSyncDatabase = openDatabase(dataDir),
     http: HttpClient = HttpClient(OkHttp) { install(HttpTimeout) { requestTimeoutMillis = 15_000 } },
+    /** Another account takes over this laptop (its database is being cleared): set the previous one's local text aside. */
+    private val onAccountSwitch: (from: String, to: String) -> Unit = { _, _ -> },
 ) {
     private val keys = FileKeyValue(File(dataDir, "sync.json"))
     val notices = SetAsideNotices()
@@ -75,7 +77,10 @@ class DesktopSync(
                                     blockedState.value = SWITCH_REFUSED
                                     return@collect
                                 }
-                                SwitchAction.CLEAR_THEN_CONNECT -> db.disconnectAndClear()
+                                SwitchAction.CLEAR_THEN_CONNECT -> {
+                                    db.disconnectAndClear()
+                                    if (last != null) runCatching { onAccountSwitch(last, user) }.onFailure { logW(TAG, "setting the last account's drafts aside failed", it) }
+                                }
                                 SwitchAction.CONNECT -> Unit
                             }
                             blockedState.value = null
