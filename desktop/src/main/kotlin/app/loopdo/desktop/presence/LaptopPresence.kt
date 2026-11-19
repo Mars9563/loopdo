@@ -49,6 +49,9 @@ class LaptopPresence(
     tickMs: Long = 30_000,
 ) {
     private val lock = Mutex()
+    private val _inUse = kotlinx.coroutines.flow.MutableStateFlow(false)
+    /** What the phone hears right now: this laptop's last word reaches into the future (the tray's status line). */
+    val inUse: kotlinx.coroutines.flow.StateFlow<Boolean> = _inUse
     @Volatile private var written: Instant? = null
     @Volatile private var asleep = false
     @Volatile private var stopped = false
@@ -60,6 +63,7 @@ class LaptopPresence(
         nextActiveUntil(inUse, now(), written)?.let { at ->
             runCatching { if (write(at)) written = at }.onFailure { logW("loopdo_presence", "couldn't write presence", it) }
         }
+        _inUse.value = written?.let { it > now() } ?: false
     }
 
     /** Something changed (pings switched, signed in/out): look again now. */

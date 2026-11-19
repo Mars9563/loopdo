@@ -121,6 +121,9 @@ class DesktopPings(
     /** Holds the laptop's sleep for a moment, so "now" can upload first (released on PrepareForSleep, taken on wake). */
     private val sleepLock = presence?.let { app.loopdo.desktop.presence.SleepInhibitor().also { it.take() } }
 
+    /** The tray's status line: this laptop is taking the pings (null: no desktop session, nothing said). */
+    val inUse: kotlinx.coroutines.flow.StateFlow<Boolean>? get() = presence?.inUse
+
     /** Before a sign-out: the phone rings again from now (D7), written while the account is still signed in. */
     suspend fun handBack() { presence?.handBack() }
 

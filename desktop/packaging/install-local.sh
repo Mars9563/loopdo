@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Builds loopdo_ for this laptop and installs it in your home folder (no root):
-#   ~/.local/opt/loopdo/loopdo.jar, ~/.local/bin/loopdo, the menu entry, and (with --autostart) start at login.
-# Needs Java 21+ on the PATH (Arch: jre-openjdk). Usage: desktop/packaging/install-local.sh [--autostart] [--no-build]
+#   ~/.local/opt/loopdo/loopdo.jar, ~/.local/bin/loopdo, the menu entry, and start at login (as ~/settings shows it).
+# Needs Java 21+ on the PATH (Arch: jre-openjdk). Usage: desktop/packaging/install-local.sh [--no-autostart] [--no-build]
+# Re-running it keeps your choice: start at login is only added on the first install, or with --autostart.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; root="$(cd "$here/../.." && pwd)"
-autostart=false; build=true
-for a in "$@"; do case "$a" in --autostart) autostart=true ;; --no-build) build=false ;; esac; done
+first=false; [ -f "$HOME/.local/opt/loopdo/loopdo.jar" ] || first=true
+autostart=$first; build=true
+for a in "$@"; do case "$a" in --autostart) autostart=true ;; --no-autostart) autostart=false ;; --no-build) build=false ;; esac; done
 if $build; then (cd "$root" && JAVA_HOME="${LOOPDO_BUILD_JAVA_HOME:-/opt/android-studio/jbr}" ./gradlew -q :desktop:packageUberJarForCurrentOS); fi
 jar=$(ls "$root"/desktop/build/compose/jars/loopdo-linux-x64-*.jar | sort -V | tail -1)
 opt="$HOME/.local/opt/loopdo"; bin="$HOME/.local/bin"; apps="$HOME/.local/share/applications"; icons="$HOME/.local/share/icons/hicolor/256x256/apps"

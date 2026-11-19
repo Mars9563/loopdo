@@ -56,6 +56,7 @@ fun main(args: Array<String>) {
         val pings = remember { graph?.let { app.loopdo.desktop.notify.DesktopPings(it, onWrite = { quick.value = true }, onOpen = { shown.value = true }).also { p -> p.start() } } }
         remember(pings) { graph?.pings = pings }
         val pingsOn = pings?.on?.collectAsState()?.value ?: false
+        val inUse = pings?.inUse?.collectAsState()?.value ?: false
         // Quick add: its own small window over whatever is open; the main window stays as it is (hidden or not).
         if (quick.value && graph != null) {
             val signedIn = graph.auth.session.collectAsState().value is AuthState.SignedIn
@@ -91,6 +92,11 @@ fun main(args: Array<String>) {
             add(TrayEntry.Action("[open]") { shown.value = true })
             if (graph != null) add(TrayEntry.Action("[quick add]") { quick.value = true })
             if (pings != null) add(TrayEntry.Action(if (pingsOn) "[pings on this laptop: on]" else "[pings on this laptop: off]") { pings.enabled = !pingsOn })
+            // The locked tray's status line: who rings right now.
+            if (pings != null && graph != null) {
+                add(TrayEntry.Separator)
+                add(TrayEntry.Info(when { !pingsOn -> "pings off · phone rings"; inUse -> "in use · phone quiet"; else -> "not in use · phone rings" }))
+            }
             add(TrayEntry.Separator)
             add(TrayEntry.Action("[quit]", quit))
         }
@@ -103,6 +109,7 @@ fun main(args: Array<String>) {
                 entries.forEach { e ->
                     when (e) {
                         is TrayEntry.Action -> Item(e.label, onClick = e.onClick)
+                        is TrayEntry.Info -> Item(e.label, enabled = false, onClick = {})
                         TrayEntry.Separator -> Separator()
                     }
                 }

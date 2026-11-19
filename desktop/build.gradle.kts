@@ -46,7 +46,7 @@ compose.desktop {
         mainClass = "app.loopdo.desktop.MainKt"
         nativeDistributions {
             packageName = "loopdo"
-            packageVersion = "0.10.0"
+            packageVersion = "1.0.0" // keep in step with DesktopGraph.VERSION
             description = "loopdo_: to-dos, habits and a daily journal"
             linux { iconFile.set(project.file("packaging/loopdo.png")) }
         }

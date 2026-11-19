@@ -50,4 +50,17 @@ class KdeTrayTest {
             assertTrue(Regex("""^\(uint32 (\d+)""").find(after)!!.groupValues[1].toInt() > before && after.contains("[pings on this laptop: off]"), after)
         }
     }
+
+    @Test
+    fun `a status line is shown but can't be clicked`() {
+        var clicked = false
+        val m = TrayMenu(onEvent = { it.run() })
+        m.set(listOf(TrayEntry.Action("[open]") { clicked = true }, TrayEntry.Info("in use · phone quiet")))
+        val node = m.GetLayout(0, -1, emptyList()).layout
+        val info = node.children[1].value as app.loopdo.desktop.shell.MenuNode
+        assertEquals("in use · phone quiet", info.props["label"]?.value)
+        assertEquals(false, info.props["enabled"]?.value)
+        m.Event(2, "clicked", org.freedesktop.dbus.types.Variant(0), org.freedesktop.dbus.types.UInt32(0))
+        assertTrue(!clicked)
+    }
 }

@@ -30,6 +30,8 @@ import javax.swing.SwingUtilities
 sealed interface TrayEntry {
     data class Action(val label: String, val onClick: () -> Unit) : TrayEntry
     data object Separator : TrayEntry
+    /** A status line (shown, never clicked): "in use · phone quiet". */
+    data class Info(val label: String) : TrayEntry
 }
 
 @DBusInterfaceName("org.kde.StatusNotifierItem")
@@ -91,13 +93,14 @@ class TrayMenu(private val onEvent: (Runnable) -> Unit = { SwingUtilities.invoke
         entries = new; revision++
         return true
     }
-    private fun labels(es: List<TrayEntry>) = es.map { (it as? TrayEntry.Action)?.label ?: "-" }
+    private fun labels(es: List<TrayEntry>) = es.map { when (it) { is TrayEntry.Action -> it.label; is TrayEntry.Info -> "i:" + it.label; TrayEntry.Separator -> "-" } }
 
     private fun propsOf(id: Int): Map<String, Variant<*>> =
         if (id == 0) mapOf("children-display" to Variant("submenu"))
         else when (val e = entries.getOrNull(id - 1)) {
             is TrayEntry.Action -> mapOf("label" to Variant(e.label), "enabled" to Variant(true), "visible" to Variant(true))
             TrayEntry.Separator -> mapOf("type" to Variant("separator"), "visible" to Variant(true))
+            is TrayEntry.Info -> mapOf("label" to Variant(e.label), "enabled" to Variant(false), "visible" to Variant(true))
             null -> emptyMap()
         }
 
