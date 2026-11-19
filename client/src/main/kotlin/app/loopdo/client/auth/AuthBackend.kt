@@ -28,6 +28,8 @@ interface AuthBackend {
     suspend fun sendPasswordReset(email: String)
     suspend fun resetPasswordWithCode(email: String, code: String, newPassword: String)
     suspend fun signInWithGoogleIdToken(idToken: String, rawNonce: String)
+    /** The laptop (D8): Google in the system browser, back through a local callback. Throws if nothing came back. */
+    suspend fun signInWithGoogleBrowser(): Unit = throw UnsupportedOperationException("google in the browser is the laptop's")
     suspend fun signOut()
     /** Refreshes the session now; returns the new access token (null if there is no session). */
     suspend fun refreshSession(): String?

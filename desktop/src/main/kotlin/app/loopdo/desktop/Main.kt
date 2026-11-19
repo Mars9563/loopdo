@@ -161,7 +161,7 @@ fun Root(g: DesktopGraph, signOut: suspend () -> Unit = { g.auth.signOut() }, si
     val locked by g.pinLock.needed.collectAsState()
     when {
         session is AuthState.Loading -> CenterLine("loopdo_")
-        session is AuthState.SignedOut -> SignInScreen { e, p -> g.auth.signIn(e, p) }
+        session is AuthState.SignedOut -> SignInScreen(signIn = { e, p -> g.auth.signIn(e, p) }, google = { g.auth.signInWithGoogleBrowser() })
         blocked != null -> BlockedScreen(blocked!!) { scope.launch { signOut() } }
         // ~/locked (owner): "forgot?" signs out and removes the pin; signing in again with the password opens it.
         locked -> app.loopdo.desktop.ui.LockedScreen(g.pinLock) { scope.launch { signOut(); g.pinLock.clear() } }

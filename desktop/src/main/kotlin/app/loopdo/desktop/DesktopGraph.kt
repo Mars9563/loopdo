@@ -36,7 +36,20 @@ import java.io.File
 class DesktopGraph(val dataDir: File) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> logE("loopdo", "background job failed", e) })
     val supabase = createSupabaseClient(AppConfig.supabaseUrl, AppConfig.publishableKey) {
-        install(Auth) { sessionManager = FileSessionManager(File(dataDir, "session.json")) }
+        install(Auth) {
+            sessionManager = FileSessionManager(File(dataDir, "session.json"))
+            // D8: Google through the browser. A fixed port, so Supabase can allow exactly this redirect; the code
+            // flow (PKCE), so tokens never travel in a URL; xdg-open, which works on KDE where AWT's browse may not.
+            flowType = io.github.jan.supabase.auth.FlowType.PKCE
+            httpCallbackConfig {
+                httpPort = GOOGLE_CALLBACK_PORT
+                timeout = kotlin.time.Duration.parse("3m")
+                htmlTitle = "loopdo_"
+                redirectHtml = GOOGLE_DONE_PAGE
+            }
+            @OptIn(io.github.jan.supabase.annotations.SupabaseExperimental::class)
+            urlLauncher = io.github.jan.supabase.auth.UrlLauncher { _, url -> ProcessBuilder("xdg-open", url).start() }
+        }
     }
     val auth = AuthRepository(SupabaseAuthBackend(supabase, scope), scope)
     val clocks = LinuxDeviceClocks()
@@ -162,3 +175,11 @@ class DesktopGraph(val dataDir: File) {
 
 /** The laptop app's version (shown in ~/settings). */
 const val VERSION = "1.0.0"
+
+// Google sign-in's local callback; Supabase → Authentication → Redirect URLs must allow http://localhost:36584 (and below).
+const val GOOGLE_CALLBACK_PORT = 36584
+
+/** The browser tab after Google, in loopdo_'s words. */
+val GOOGLE_DONE_PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>loopdo_</title></head>
+<body style="background:#050a10;color:#d4eee2;font:15px/1.7 monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div><div style="font-size:24px">loopdo<span style="color:#8fe3b8">_</span></div><div>signed in. you can close this tab and go back to loopdo_.</div></div></body></html>"""

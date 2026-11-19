@@ -55,15 +55,24 @@ fun TermField(value: String, onChange: (String) -> Unit, modifier: Modifier = Mo
 
 /** First start only: the same account as the phone (locked desktop-screens-v1 "Sign-in"). */
 @Composable
-fun SignInScreen(signIn: suspend (String, String) -> Result<Unit>) {
+fun SignInScreen(signIn: suspend (String, String) -> Result<Unit>, google: (suspend () -> Result<Unit>)? = null) {
     val t = LocalType.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    var waiting by remember { mutableStateOf(false) }
+    // One at a time: a Google attempt waits for the browser; the form stays usable once it ends either way.
+    val goGoogle = {
+        if (google != null && !busy && !waiting) scope.launch {
+            waiting = true; error = null
+            google().onFailure { error = it.message ?: "that didn't work. try again." }
+            waiting = false
+        }
+    }
     val go = {
-        if (!busy && email.isNotBlank() && password.isNotEmpty()) scope.launch {
+        if (!busy && !waiting && email.isNotBlank() && password.isNotEmpty()) scope.launch {
             busy = true; error = null
             signIn(email, password).onFailure { error = it.message ?: "that didn't work. try again." }
             busy = false
@@ -86,7 +95,8 @@ fun SignInScreen(signIn: suspend (String, String) -> Result<Unit>) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 BasicText(if (busy) "[signing in…]" else "[sign in ↵]", style = t.body.copy(color = Fern.mint), modifier = Modifier.clickable { go() })
                 Spacer(Modifier.weight(1f))
-                BasicText("[google ↗] comes later", style = t.small.copy(color = Fern.moss))
+                if (google != null) BasicText(if (waiting) "finish in your browser…" else "[google ↗] opens your browser",
+                    style = t.small.copy(color = if (waiting) Fern.lichen else Fern.mint), modifier = Modifier.clickable { goGoogle() })
             }
             error?.let { BasicText(it.lowercase(), style = t.small.copy(color = Fern.ember), modifier = Modifier.padding(top = 10.dp)) }
             Spacer(Modifier.height(14.dp))

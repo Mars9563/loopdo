@@ -43,6 +43,7 @@ class AuthRepository(
     suspend fun resetWithCode(email: String, code: String, newPassword: String) =
         attempt { backend.resetPasswordWithCode(email.trim(), code.trim(), newPassword) }
     suspend fun signInWithGoogle(idToken: String, rawNonce: String) = attempt { backend.signInWithGoogleIdToken(idToken, rawNonce) }
+    suspend fun signInWithGoogleBrowser() = attempt { backend.signInWithGoogleBrowser() }
     /**
      * The access token to send, refreshed first if it expires within a minute. With supabase-kt's
      * lifecycle hook off, a night in deep sleep can leave an expired token that the library still

@@ -65,6 +65,12 @@ class SupabaseAuthBackend(supabase: SupabaseClient, scope: CoroutineScope) : Aut
         auth.signInWith(IDToken) { this.idToken = idToken; provider = Google; nonce = rawNonce }
     }
 
+    override suspend fun signInWithGoogleBrowser() = call {
+        // Returns when the browser came back, or when the callback server timed out (then there's no session).
+        auth.signInWith(Google)
+        if (auth.currentSessionOrNull() == null) throw IllegalStateException("nothing came back from the browser. try again.")
+    }
+
     override suspend fun signOut() = call { auth.signOut() }
 
     override suspend fun refreshSession(): String? = call {
