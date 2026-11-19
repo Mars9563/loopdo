@@ -37,14 +37,14 @@ class LaptopPresenceTest {
     }
 
     @Test
-    fun `in use writes five minutes ahead and refreshes every three`() = runTest {
+    fun `in use writes two minutes ahead and refreshes every minute`() = runTest {
         val r = Rig(this)
         advanceTimeBy(30_001); runCurrent()
-        assertEquals(listOf(t0.plusMillis(30_000).plusSeconds(300)), r.writes)
-        advanceTimeBy(2 * min); runCurrent()
-        assertEquals(1, r.writes.size, "4 of 5 minutes still ahead: nothing to write")
-        advanceTimeBy(min); runCurrent()
-        assertEquals(2, r.writes.size, "refreshed once under 2 minutes are left")
+        assertEquals(listOf(t0.plusMillis(30_000).plusSeconds(120)), r.writes, "owner: a closed lid hands over within 2 min")
+        advanceTimeBy(30_000); runCurrent()
+        assertEquals(1, r.writes.size, "90 s of 120 still ahead: nothing to write")
+        advanceTimeBy(30_000); runCurrent()
+        assertEquals(2, r.writes.size, "refreshed once a minute or less is left")
     }
 
     @Test
@@ -86,21 +86,20 @@ class LaptopPresenceTest {
         assertEquals(t0.plusMillis(30_001), r.writes.last())
         r.p.woke(); advanceTimeBy(1); runCurrent()
         val back = r.writes.size
-        assertTrue(r.writes.last() > t0.plusMillis(30_001).plusSeconds(200), "awake again: in use")
+        assertTrue(r.writes.last() > t0.plusMillis(30_001).plusSeconds(100), "awake again: in use")
         r.p.stop()
         assertEquals(back + 1, r.writes.size); assertTrue(r.writes.last() < t0.plusSeconds(60), "quit: now")
     }
 
     @Test
     fun `nextActiveUntil decides what to write`() {
-        assertEquals(t0.plusSeconds(300), nextActiveUntil(inUse = true, now = t0, written = null))
-        assertNull(nextActiveUntil(true, t0, t0.plusSeconds(240)), "4 min left")
-        assertEquals(t0.plusSeconds(300), nextActiveUntil(true, t0, t0.plusSeconds(60)), "1 min left")
-        assertEquals(t0, nextActiveUntil(false, t0, t0.plusSeconds(200)), "stopped: now")
+        assertEquals(t0.plusSeconds(120), nextActiveUntil(inUse = true, now = t0, written = null))
+        assertNull(nextActiveUntil(true, t0, t0.plusSeconds(90)), "1.5 min left")
+        assertEquals(t0.plusSeconds(120), nextActiveUntil(true, t0, t0.plusSeconds(60)), "1 min left")
+        assertEquals(t0, nextActiveUntil(false, t0, t0.plusSeconds(100)), "stopped: now")
         assertNull(nextActiveUntil(false, t0, t0.minusSeconds(10)), "already over")
         assertNull(nextActiveUntil(false, t0, null), "never said anything")
     }
-
     @Test
     fun `going to sleep writes now and waits for the upload before the laptop may sleep`() = runTest {
         val r = Rig(this)

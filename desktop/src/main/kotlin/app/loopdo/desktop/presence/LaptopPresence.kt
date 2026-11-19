@@ -18,12 +18,14 @@ import java.time.Instant
 // pings on, awake and the screen unlocked (Plasma on Wayland gives apps no idle time; KDE's own auto-lock after 5 min
 // without input stands in for it — owner's OK, 2026-11-19).
 
-private val AHEAD: Duration = Duration.ofMinutes(5)
-private val REFRESH_WHEN_LEFT: Duration = Duration.ofMinutes(2)
+// Owner, 2026-11-19 (manual test): a closed lid drops Wi-Fi before the laptop can say "now" (NetworkManager is
+// faster), so the phone waits for this to run out: 2 min ahead, refreshed when 1 min is left (about every minute).
+private val AHEAD: Duration = Duration.ofMinutes(2)
+private val REFRESH_WHEN_LEFT: Duration = Duration.ofMinutes(1)
 
 /**
- * What to write next, or null for nothing: in use → [now] + 5 min whenever 2 min or less of the last one are left
- * (so about every 3 min); not in use → [now] once, if the last one still reaches into the future.
+ * What to write next, or null for nothing: in use → [now] + 2 min whenever 1 min or less of the last one is left
+ * (so about every minute); not in use → [now] once, if the last one still reaches into the future.
  */
 fun nextActiveUntil(inUse: Boolean, now: Instant, written: Instant?): Instant? = when {
     inUse && (written == null || Duration.between(now, written) <= REFRESH_WHEN_LEFT) -> now.plus(AHEAD)
