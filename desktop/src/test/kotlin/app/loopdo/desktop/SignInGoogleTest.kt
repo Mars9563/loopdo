@@ -42,4 +42,22 @@ class SignInGoogleTest {
         onNodeWithText("nothing came back from the browser. try again.").assertExists()
         onNodeWithText("[google ↗]", substring = true).assertExists()
     }
+
+    @Test
+    fun `cancel stops waiting for the browser and the form works again`() = runComposeUiTest {
+        var cancelled = false
+        setContent {
+            LoopDoTheme {
+                SignInScreen(signIn = { _, _ -> Result.success(Unit) }, google = {
+                    try { kotlinx.coroutines.awaitCancellation() } finally { cancelled = true }
+                })
+            }
+        }
+        onNodeWithText("[google ↗]", substring = true).performClick()
+        waitForIdle()
+        onNodeWithText("[cancel]").performClick()
+        waitForIdle()
+        assertEquals(true, cancelled, "the browser wait is stopped (supabase-kt stops its callback server)")
+        onNodeWithText("[google ↗]", substring = true).assertExists()
+    }
 }

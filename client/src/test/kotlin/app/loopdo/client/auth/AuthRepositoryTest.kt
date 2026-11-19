@@ -52,6 +52,16 @@ private class FakeBackend(initial: BackendStatus = BackendStatus.SignedOut) : Au
         password = newPassword; signedIn()
     }
     override suspend fun signInWithGoogleIdToken(idToken: String, rawNonce: String) { online(); signedIn() }
+    /** The laptop's browser flow: abandoned (tab closed, cancelled on Google, 3-min timeout) or a surprise error. */
+    var google: String = "ok"
+    override suspend fun signInWithGoogleBrowser() {
+        online()
+        when (google) {
+            "abandoned" -> throw BrowserAbandoned()
+            "surprise" -> throw IllegalStateException("ktor said no")
+            else -> signedIn()
+        }
+    }
     override suspend fun signOut() { online(); status.value = BackendStatus.SignedOut }
     var refreshes = 0
     var refreshedToken = "refreshed-token"
@@ -194,5 +204,14 @@ class AuthRepositoryTest {
         b.offline = true // the server answers 401 → the upload retries later; nothing is lost
         assertEquals(token, AuthRepository(b, backgroundScope) { now }.freshToken())
     }
-}
 
+    @Test
+    fun googleInTheBrowserAbandonedIsAPlainLineNeverAThrow() = runTest(UnconfinedTestDispatcher()) {
+        val b = FakeBackend().apply { google = "abandoned" }
+        assertEquals("nothing came back from the browser. try again.", repo(b, this).signInWithGoogleBrowser().exceptionOrNull()?.message)
+        b.google = "surprise"
+        assertEquals("google didn't finish. try again, or use your email and password.", repo(b, this).signInWithGoogleBrowser().exceptionOrNull()?.message)
+        b.google = "ok"
+        assertTrue(repo(b, this).signInWithGoogleBrowser().isSuccess)
+    }
+}

@@ -34,3 +34,6 @@ interface AuthBackend {
     /** Refreshes the session now; returns the new access token (null if there is no session). */
     suspend fun refreshSession(): String?
 }
+
+/** The laptop's Google sign-in ended with no session (tab closed, cancelled on Google, the 3-min wait ran out). */
+class BrowserAbandoned : Exception("nothing came back from the browser. try again.")

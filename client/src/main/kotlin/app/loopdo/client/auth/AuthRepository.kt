@@ -43,7 +43,20 @@ class AuthRepository(
     suspend fun resetWithCode(email: String, code: String, newPassword: String) =
         attempt { backend.resetPasswordWithCode(email.trim(), code.trim(), newPassword) }
     suspend fun signInWithGoogle(idToken: String, rawNonce: String) = attempt { backend.signInWithGoogleIdToken(idToken, rawNonce) }
-    suspend fun signInWithGoogleBrowser() = attempt { backend.signInWithGoogleBrowser() }
+    /**
+     * The laptop's Google sign-in. Every way it can end is a Result (final review C1: a throw escaped into the
+     * window's composition); a deliberate cancel ([cancel] on the screen) still cancels.
+     */
+    suspend fun signInWithGoogleBrowser(): Result<Unit> = try {
+        attempt { backend.signInWithGoogleBrowser() }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: BrowserAbandoned) {
+        Result.failure(AuthProblem(e.message!!))
+    } catch (e: Exception) {
+        app.loopdo.client.log.logW("loopdo_auth", "google in the browser failed", e)
+        Result.failure(AuthProblem("google didn't finish. try again, or use your email and password."))
+    }
     /**
      * The access token to send, refreshed first if it expires within a minute. With supabase-kt's
      * lifecycle hook off, a night in deep sleep can leave an expired token that the library still

@@ -63,12 +63,14 @@ fun SignInScreen(signIn: suspend (String, String) -> Result<Unit>, google: (susp
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     var waiting by remember { mutableStateOf(false) }
-    // One at a time: a Google attempt waits for the browser; the form stays usable once it ends either way.
+    var googleJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // One at a time: a Google attempt waits for the browser; however it ends (even cancelled) the form works again.
     val goGoogle = {
-        if (google != null && !busy && !waiting) scope.launch {
+        if (google != null && !busy && !waiting) googleJob = scope.launch {
             waiting = true; error = null
-            google().onFailure { error = it.message ?: "that didn't work. try again." }
-            waiting = false
+            try {
+                google().onFailure { error = it.message ?: "that didn't work. try again." }
+            } finally { waiting = false }
         }
     }
     val go = {
@@ -97,6 +99,8 @@ fun SignInScreen(signIn: suspend (String, String) -> Result<Unit>, google: (susp
                 Spacer(Modifier.weight(1f))
                 if (google != null) BasicText(if (waiting) "finish in your browser…" else "[google ↗] opens your browser",
                     style = t.small.copy(color = if (waiting) Fern.lichen else Fern.mint), modifier = Modifier.clickable { goGoogle() })
+                // Stops the wait (supabase-kt stops its callback server), so email sign-in works at once (review I3).
+                if (waiting) BasicText("[cancel]", style = t.small.copy(color = Fern.lichen), modifier = Modifier.padding(start = 10.dp).clickable { googleJob?.cancel() })
             }
             error?.let { BasicText(it.lowercase(), style = t.small.copy(color = Fern.ember), modifier = Modifier.padding(top = 10.dp)) }
             Spacer(Modifier.height(14.dp))
