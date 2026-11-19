@@ -78,7 +78,30 @@ class DesktopPings(
 
     var enabled: Boolean
         get() = keys.getLong(OFF) == null
-        set(on) { if (on) keys.remove(OFF) else keys.putLong(OFF, 1L); g.scope.launch { refresh() } }
+        set(on) { if (on) keys.remove(OFF) else keys.putLong(OFF, 1L); g.scope.launch { refresh() }; presence?.poke() }
+
+    /**
+     * D7: this laptop's "in use" signal, only with a real desktop session (tests with a fake notification server
+     * never write presence). Its device id is made once and kept in dataDir/presence.json.
+     */
+    private val presence: app.loopdo.desktop.presence.LaptopPresence? = session?.let { conn ->
+        val kv = app.loopdo.desktop.store.FileKeyValue(java.io.File(g.dataDir, "presence.json"))
+        val device = kv.getString("device_id")?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
+            ?: java.util.UUID.randomUUID().also { kv.putString("device_id", it.toString()) }
+        val actions = app.loopdo.client.presence.PresenceActions(g.sync.db, { (g.auth.session.value as? AuthState.SignedIn)?.userId }, device)
+        val screen = runCatching { conn.getRemoteObject("org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", app.loopdo.desktop.presence.ScreenSaver::class.java) }.getOrNull()
+        app.loopdo.desktop.presence.LaptopPresence(
+            g.scope,
+            write = { at -> actions.setActiveUntil(at) },
+            now = { g.trustedClock.now().instant },
+            // No screensaver to ask: treat as locked, so the phone keeps ringing (never silent by mistake).
+            locked = { screen?.GetActive() ?: true },
+            active = { enabled && g.auth.session.value is AuthState.SignedIn && g.sync.blocked.value == null },
+        )
+    }
+
+    /** Quitting: the phone rings again from now (before the database closes). */
+    suspend fun stopPresence() { presence?.stop() }
 
     /** Repeating tasks' new copies first (like the phone's redraw), then the reminders again. Never throws. */
     suspend fun refresh() {
@@ -103,6 +126,8 @@ class DesktopPings(
         ).debounce(500).replanOnEach()
         g.auth.session.drop(1).replanOnEach()
         g.sync.blocked.drop(1).replanOnEach()
+        g.scope.launch { g.auth.session.collect { presence?.poke() } }
+        g.scope.launch { g.sync.blocked.collect { presence?.poke() } }
         session?.let(::listen)
     }
 
@@ -114,10 +139,14 @@ class DesktopPings(
             conn.addSigHandler(Notifications.NotificationReplied::class.java) { s -> on(DbusEvent.Reply(s.id.toLong(), s.text)) }
             conn.addSigHandler(Notifications.NotificationClosed::class.java) { s -> on(DbusEvent.Closed(s.id.toLong())) }
             conn.addSigHandler(DBus.NameOwnerChanged::class.java) { s -> if (s.name == DbusNotifyApi.DEST) on(DbusEvent.ServerChanged) }
+            // D7: locking hands the pings back to the phone at once (and unlocking takes them again).
+            conn.addSigHandler(app.loopdo.desktop.presence.ScreenSaver.ActiveChanged::class.java) { s -> presence?.lockChanged(s.active) }
         }.onFailure { logW("loopdo_pings", "can't follow KDE's notifications", it) }
         runCatching {
             val system = DBusConnectionBuilder.forSystemBus().withShared(false).build()
-            system.addSigHandler(Login1Manager.PrepareForSleep::class.java) { s -> if (!s.start) on(DbusEvent.Resumed) }
+            system.addSigHandler(Login1Manager.PrepareForSleep::class.java) { s ->
+                if (s.start) presence?.sleeping() else { presence?.woke(); on(DbusEvent.Resumed) }
+            }
         }.onFailure { logW("loopdo_pings", "can't follow suspend (the 15 s timer check still catches up)", it) }
     }
 
