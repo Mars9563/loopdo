@@ -23,6 +23,8 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.kotlinx.coroutines.swing)
+    implementation(libs.dbus.java.core)
+    implementation(libs.dbus.java.unixsocket)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit4)

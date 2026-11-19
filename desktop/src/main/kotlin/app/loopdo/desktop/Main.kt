@@ -26,6 +26,8 @@ import app.loopdo.client.auth.AuthState
 import app.loopdo.client.onboarding.hasDaySettings
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import app.loopdo.desktop.shell.TrayEntry
 import java.io.File
 import androidx.compose.ui.window.Tray
 import app.loopdo.desktop.shell.Command
@@ -71,21 +73,34 @@ fun main(args: Array<String>) {
                 }
             }
         }
+        // KDE's own tray (Java's gets no clicks on Plasma 6 + Wayland); Compose's Tray only where there is none.
+        val kdeTray = remember { app.loopdo.desktop.shell.KdeTray.start(app.loopdo.desktop.shell.KdeTray.loadIcon(), "loopdo_", onActivate = { shown.value = true }) }
         val quit = {
             // The database closes first; only then is the lock released for a next launch (D2 review).
             graph?.sync?.db?.let { db -> kotlinx.coroutines.runBlocking { runCatching { db.close() } } }
+            kdeTray?.close()
             single.close(); exitApplication()
         }
-        Tray(
+        // The locked tray menu, once for both trays.
+        val entries = buildList {
+            add(TrayEntry.Action("[open]") { shown.value = true })
+            if (graph != null) add(TrayEntry.Action("[quick add]") { quick.value = true })
+            if (pings != null) add(TrayEntry.Action(if (pingsOn) "[pings on this laptop: on]" else "[pings on this laptop: off]") { pingsOn = !pingsOn; pings.enabled = pingsOn })
+            add(TrayEntry.Separator)
+            add(TrayEntry.Action("[quit]", quit))
+        }
+        if (kdeTray != null) SideEffect { kdeTray.setMenu(entries) }
+        else Tray(
             icon = androidx.compose.ui.res.painterResource("tray.png"),
             tooltip = "loopdo_",
             onAction = { shown.value = true },
             menu = {
-                Item("[open]", onClick = { shown.value = true })
-                if (graph != null) Item("[quick add]", onClick = { quick.value = true })
-                if (pings != null) Item(if (pingsOn) "[pings on this laptop: on]" else "[pings on this laptop: off]", onClick = { pingsOn = !pingsOn; pings.enabled = pingsOn })
-                Separator()
-                Item("[quit]", onClick = quit)
+                entries.forEach { e ->
+                    when (e) {
+                        is TrayEntry.Action -> Item(e.label, onClick = e.onClick)
+                        TrayEntry.Separator -> Separator()
+                    }
+                }
             },
         )
         // Closing the window keeps loopdo_ in the tray (pings and quick add need it running); [quit] really quits.
