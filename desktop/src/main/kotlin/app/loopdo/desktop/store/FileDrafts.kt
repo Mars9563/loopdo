@@ -2,6 +2,8 @@ package app.loopdo.desktop.store
 
 import app.loopdo.client.log.logW
 import app.loopdo.client.popup.PopupDrafts
+import app.loopdo.client.sync.accountTag
+import app.loopdo.client.sync.switchDrafts
 import java.io.File
 
 /** Unsaved journal text (the phone's PopupDrafts), in the data folder so closing the window never loses it. */
@@ -19,19 +21,9 @@ class FilePopupDrafts(file: File) : PopupDrafts {
     }
     override fun keys(): Set<String> = kv.keys()
 
-    /**
-     * Another account signs in on this laptop (the database is being cleared for it): the unsaved text of [from] is
-     * set aside in its own file, never shown to or saved under [to]; [to]'s own text set aside earlier comes back.
-     * Copied first, removed after, so a crash in between leaves a copy, never nothing (ultrareview).
-     */
+    /** Another account takes over this laptop: [from]'s unsaved text moves to drafts.<from>.json, [to]'s comes back. */
     fun switchAccount(from: String, to: String) {
-        val aside = { user: String -> FileKeyValue(File(dir, "drafts.${user.filter { it.isLetterOrDigit() || it == '-' }}.json")) }
-        val mine = kv.keys().associateWith { kv.getString(it) }.filterValues { !it.isNullOrEmpty() }
-        if (mine.isNotEmpty()) { val a = aside(from); mine.forEach { (k, v) -> a.putString(k, v!!) } }
-        kv.keys().forEach { kv.remove(it) }
-        val theirs = aside(to)
-        theirs.keys().forEach { k -> theirs.getString(k)?.let { kv.putString(k, it) } }
-        theirs.keys().forEach { theirs.remove(it) }
+        switchDrafts(this, { u -> FilePopupDrafts(File(dir, "drafts.${accountTag(u)}.json")) }, from, to)
         _version.value++
     }
 }
