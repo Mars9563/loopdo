@@ -107,6 +107,9 @@ class DesktopGraph(val dataDir: File) {
     /** Laptop reminder state (D6 reads it): opening the review on a Sunday marks that Sunday as reviewed (phone parity). */
     val reminderKeys = app.loopdo.desktop.store.FileKeyValue(File(dataDir, "reminders.json"))
 
+    /** The laptop's light pin lock (owner, 2026-11-19; off by default). */
+    val pinLock = app.loopdo.desktop.lock.PinLock(app.loopdo.desktop.store.FileKeyValue(File(dataDir, "lock.json")))
+
     /** Set by the pings (D6): the review was just opened, so its Sunday ping can go away. */
     @Volatile var onReviewOpened: () -> Unit = {}
 

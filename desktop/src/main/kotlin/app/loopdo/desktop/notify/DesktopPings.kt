@@ -117,6 +117,9 @@ class DesktopPings(
     /** Holds the laptop's sleep for a moment, so "now" can upload first (released on PrepareForSleep, taken on wake). */
     private val sleepLock = presence?.let { app.loopdo.desktop.presence.SleepInhibitor().also { it.take() } }
 
+    /** Before a sign-out: the phone rings again from now (D7), written while the account is still signed in. */
+    suspend fun handBack() { presence?.handBack() }
+
     /** Quitting: the phone rings again from now, uploaded before the database closes; the sleep lock goes too. */
     suspend fun stopPresence() { presence?.stop(); sleepLock?.release() }
 

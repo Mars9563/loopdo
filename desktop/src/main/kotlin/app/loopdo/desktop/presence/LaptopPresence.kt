@@ -69,6 +69,9 @@ class LaptopPresence(
     suspend fun goingToSleep() { asleep = true; check(); runCatching { flush() } }
     fun woke() { asleep = false; poke() }
 
+    /** About to sign out: "now" (and its upload) while the account is still signed in; after that nothing is written. */
+    suspend fun handBack() { stopped = true; check(); runCatching { flush() }; stopped = false }
+
     /** Quitting: the phone rings again from now, uploaded before the database closes. */
     suspend fun stop() { stopped = true; check(); runCatching { flush() } }
 }

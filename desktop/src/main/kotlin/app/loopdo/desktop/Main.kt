@@ -122,7 +122,9 @@ fun main(args: Array<String>) {
                 if (z != lastZ) { main.size = androidx.compose.ui.unit.DpSize(main.size.width * (z / lastZ), main.size.height * (z / lastZ)); lastZ = z }
             }
             LoopDoTheme(z) {
-                if (graph == null) DemoApp() else Root(graph) { app.loopdo.desktop.ui.MainApp(graph) }
+                // Every time the window is shown (start, tray, a ping, the menu entry): the pin lock checks the hour.
+                LaunchedEffect(shown.value) { if (shown.value) graph?.pinLock?.windowOpened() }
+                if (graph == null) DemoApp() else Root(graph, signOut = { pings?.handBack(); graph.auth.signOut() }) { app.loopdo.desktop.ui.MainApp(graph) }
             }
         }
     }
@@ -149,16 +151,19 @@ fun App() {
 
 /** Start-up states: sign in → (another account's changes waiting) → restoring your data… → setup on the phone → the app. */
 @Composable
-fun Root(g: DesktopGraph, signedInApp: @Composable () -> Unit) {
+fun Root(g: DesktopGraph, signOut: suspend () -> Unit = { g.auth.signOut() }, signedInApp: @Composable () -> Unit) {
     val session by g.auth.session.collectAsState()
     val blocked by g.sync.blocked.collectAsState()
     val status by remember { g.sync.db.currentStatus.asFlow() }.collectAsState(g.sync.db.currentStatus)
     val hasSettings by remember { g.sync.db.hasDaySettings() }.collectAsState(false)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val locked by g.pinLock.needed.collectAsState()
     when {
         session is AuthState.Loading -> CenterLine("loopdo_")
         session is AuthState.SignedOut -> SignInScreen { e, p -> g.auth.signIn(e, p) }
-        blocked != null -> BlockedScreen(blocked!!) { scope.launch { g.auth.signOut() } }
+        blocked != null -> BlockedScreen(blocked!!) { scope.launch { signOut() } }
+        // ~/locked (owner): "forgot?" signs out and removes the pin; signing in again with the password opens it.
+        locked -> app.loopdo.desktop.ui.LockedScreen(g.pinLock) { scope.launch { signOut(); g.pinLock.clear() } }
         status.hasSynced != true && !hasSettings -> CenterLine("restoring your data…")
         !hasSettings -> CenterLine("finish setting up loopdo_ on your phone first (day end + time zone).")
         else -> signedInApp()
