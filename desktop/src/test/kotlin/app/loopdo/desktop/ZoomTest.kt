@@ -12,7 +12,7 @@ class ZoomTest {
     @Test
     fun `the default follows the screen's height`() {
         assertEquals(1f, zoomFor(1080.0))
-        assertEquals(1.5f, zoomFor(1440.0), "the owner's 2560×1440 laptop at KDE 100%")
+        assertEquals(1.4f, zoomFor(1440.0), "the owner's 2560×1440 laptop at KDE 100%: their sweet spot")
         assertEquals(1f, zoomFor(960.0), "the same panel at KDE 150% is already scaled")
         assertEquals(2f, zoomFor(2160.0))
     }

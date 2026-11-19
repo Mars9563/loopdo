@@ -42,7 +42,7 @@ class UiZoom(private val kv: FileKeyValue, private val auto: Float = autoZoom())
     companion object {
         const val MIN = 0.75f
         const val MAX = 3f
-        const val STEP = 0.125f
+        const val STEP = 0.1f
         private const val KEY = "zoom"
         fun at(dataDir: File) = UiZoom(FileKeyValue(File(dataDir, "ui.json")))
     }
@@ -50,7 +50,7 @@ class UiZoom(private val kv: FileKeyValue, private val auto: Float = autoZoom())
 
 /**
  * The default for this screen: its height in logical pixels (after KDE's own scaling, which Java already applies)
- * → 1440 and up 150%, 2000 and up 200%, else 100%.
+ * → 1440 and up 140% (the owner's sweet spot), 2000 and up 200%, else 100%.
  */
 fun autoZoom(): Float = runCatching {
     if (GraphicsEnvironment.isHeadless()) return 1f
@@ -61,6 +61,6 @@ fun autoZoom(): Float = runCatching {
 
 fun zoomFor(logicalHeight: Double): Float = when {
     logicalHeight >= 2000 -> 2f
-    logicalHeight >= 1400 -> 1.5f
+    logicalHeight >= 1400 -> 1.4f // the owner's sweet spot on 1440p (2026-11-19)
     else -> 1f
 }
