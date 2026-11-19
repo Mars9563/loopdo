@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import app.loopdo.desktop.lock.PinLock
@@ -116,5 +117,21 @@ fun LockedScreen(lock: PinLock, onForgot: suspend () -> Boolean) {
             Spacer(Modifier.height(18.dp))
             BasicText("[forgot? sign in again]", style = t.small.copy(color = Fern.lichen), modifier = Modifier.clickable(onClick = forgot))
         }
+    }
+}
+
+/**
+ * The lock covers the app instead of replacing it (D8 review I2): the app stays composed underneath — an open
+ * editor keeps its text, nothing is rebuilt or leaked — but it is invisible, gets no clicks and no keys while locked.
+ */
+@Composable
+fun LockLayer(locked: Boolean, lockScreen: @Composable () -> Unit, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().onPreviewKeyEvent { locked }.then(if (locked) Modifier.alpha(0f) else Modifier)) { content() }
+        if (locked) Box(
+            Modifier.fillMaxSize().pointerInput(Unit) {
+                awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+            },
+        ) { lockScreen() }
     }
 }

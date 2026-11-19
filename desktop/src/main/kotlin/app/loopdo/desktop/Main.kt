@@ -170,11 +170,11 @@ fun Root(g: DesktopGraph, signOut: suspend () -> Result<Unit> = { g.auth.signOut
         session is AuthState.Loading -> CenterLine("loopdo_")
         session is AuthState.SignedOut -> SignInScreen(signIn = { e, p -> g.auth.signIn(e, p) }, google = { g.auth.signInWithGoogleBrowser() })
         blocked != null -> BlockedScreen(blocked!!) { scope.launch { signOut() } }
-        // ~/locked (owner): "forgot?" signs out and removes the pin; signing in again with the password opens it.
-        locked -> app.loopdo.desktop.ui.LockedScreen(g.pinLock) { signOut().isSuccess }
         status.hasSynced != true && !hasSettings -> CenterLine("restoring your data…")
         !hasSettings -> CenterLine("finish setting up loopdo_ on your phone first (day end + time zone).")
-        else -> signedInApp()
+        // ~/locked (owner) covers the app, which stays alive underneath (review I2). "forgot?" signs out and removes
+        // the pin only once the sign-out really happened.
+        else -> app.loopdo.desktop.ui.LockLayer(locked, lockScreen = { app.loopdo.desktop.ui.LockedScreen(g.pinLock) { signOut().isSuccess } }) { signedInApp() }
     }
 }
 
