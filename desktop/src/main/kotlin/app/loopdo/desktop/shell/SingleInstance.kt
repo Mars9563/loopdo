@@ -34,8 +34,11 @@ class SingleInstance(private val socket: File, private val lockFile: File = File
         socket.parentFile?.mkdirs()
         val ch = try {
             ServerSocketChannel.open(StandardProtocolFamily.UNIX).apply { bind(UnixDomainSocketAddress.of(socket.toPath())) }
-        } catch (e: java.io.IOException) {
-            close(); return false
+        } catch (e: Exception) {
+            // No socket (a path past the ~108-byte limit, a filesystem without sockets): we still hold the lock, so
+            // run without it; returning false here looked like "another copy is running" and nothing ever opened.
+            logW("loopdo_shell", "no command socket at $socket; later launches can't hand over their command", e)
+            return true
         }
         server = ch
         Thread({

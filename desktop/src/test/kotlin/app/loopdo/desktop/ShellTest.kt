@@ -36,4 +36,17 @@ class ShellTest {
         first.close()
         assertTrue(SingleInstance(sock).tryServe { }, "after the first quits, a new one can serve (stale socket file removed)")
     }
+
+    @Test
+    fun `when the socket can't be made, loopdo_ still starts and keeps the folder to itself`() {
+        // A Unix socket path is limited to ~108 bytes: a deep data folder can't hold one (ultrareview).
+        var deep = Files.createTempDirectory("loopdo-deep").toFile()
+        while (deep.path.length < 120) deep = File(deep, "a-rather-long-folder-name")
+        deep.mkdirs()
+        val first = SingleInstance(File(deep, "loopdo.sock"), File(deep, "loopdo.lock"))
+        assertTrue(first.tryServe { }, "runs (without the socket) instead of looking like a second copy and exiting")
+        val second = SingleInstance(File(deep, "loopdo.sock"), File(deep, "loopdo.lock"))
+        assertEquals(false, second.tryServe { }, "the lock still keeps a second copy off the database")
+        first.close()
+    }
 }
